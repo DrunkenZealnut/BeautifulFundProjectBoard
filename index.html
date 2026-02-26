@@ -533,6 +533,216 @@
             font-size: 13px;
         }
 
+        /* 로그인 페이지 스타일 */
+        .login-overlay {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #134E42 0%, #1B6B5A 50%, #2D8B73 100%);
+            padding: 20px;
+        }
+
+        .login-card {
+            background: white;
+            border-radius: 16px;
+            padding: 48px 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .login-card h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #134E42;
+            margin: 0 0 8px 0;
+            text-align: center;
+        }
+
+        .login-card .login-subtitle {
+            font-size: 14px;
+            color: #6B6560;
+            text-align: center;
+            margin: 0 0 32px 0;
+        }
+
+        .login-card .form-group {
+            margin-bottom: 20px;
+        }
+
+        .login-card .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4A5568;
+            margin-bottom: 6px;
+        }
+
+        .login-card .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.2s;
+        }
+
+        .login-card .form-group input:focus {
+            outline: none;
+            border-color: #1B6B5A;
+            box-shadow: 0 0 0 3px rgba(27, 107, 90, 0.1);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #1B6B5A 0%, #134E42 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 8px;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(27, 107, 90, 0.3);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .login-error {
+            background: #FFF5F5;
+            border: 1px solid #FEB2B2;
+            color: #C53030;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        /* 관리자 페이지 스타일 */
+        .admin-section {
+            margin-bottom: 32px;
+        }
+
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        .user-table th,
+        .user-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #E2E8F0;
+            font-size: 14px;
+        }
+
+        .user-table th {
+            background: #F7FAFC;
+            font-weight: 600;
+            color: #4A5568;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .user-table tr:hover td {
+            background: #F7FAFC;
+        }
+
+        .user-table .role-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .role-admin { background: #FED7D7; color: #9B2C2C; }
+        .role-staff { background: #BEE3F8; color: #2A4365; }
+        .role-participant { background: #C6F6D5; color: #22543D; }
+        .role-viewer { background: #E2E8F0; color: #4A5568; }
+
+        .status-active { color: #22543D; }
+        .status-inactive { color: #C53030; }
+
+        .btn-danger {
+            background: #FEB2B2;
+            color: #9B2C2C;
+            border: none;
+        }
+
+        .btn-danger:hover {
+            background: #FC8181;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .admin-form-card {
+            background: #F7FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .admin-form-card h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2D3748;
+            margin: 0 0 16px 0;
+        }
+
+        .admin-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .header-user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+        }
+
+        .header-user-info .user-name {
+            font-weight: 500;
+        }
+
+        .header-user-info .user-role {
+            opacity: 0.8;
+            font-size: 12px;
+        }
+
+        .logout-btn {
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 16px;
@@ -571,6 +781,33 @@
 
             .tab-navigation {
                 padding: 12px;
+            }
+
+            .header .container {
+                flex-direction: column;
+                gap: 12px;
+                text-align: center;
+            }
+
+            .header-user-info {
+                justify-content: center;
+            }
+
+            .login-card {
+                padding: 32px 24px;
+            }
+
+            .user-table {
+                font-size: 13px;
+            }
+
+            .user-table th,
+            .user-table td {
+                padding: 8px 10px;
+            }
+
+            .admin-actions {
+                flex-direction: column;
             }
         }
     </style>
@@ -889,7 +1126,121 @@
             }
         };
 
+        // 로그인 컴포넌트
+        function LoginPage({ onLogin }) {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [loginError, setLoginError] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setLoginError('');
+                setIsLoading(true);
+
+                try {
+                    // users 테이블에서 username으로 조회
+                    const { data: users, error } = await supabase
+                        .from('users')
+                        .select('*')
+                        .eq('username', username)
+                        .eq('is_active', true)
+                        .limit(1);
+
+                    if (error) throw error;
+
+                    if (!users || users.length === 0) {
+                        setLoginError('아이디 또는 비밀번호가 올바르지 않습니다.');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const user = users[0];
+
+                    // 비밀번호 확인 (평문 비교 - 내부 관리 시스템용)
+                    if (user.password_hash !== password) {
+                        setLoginError('아이디 또는 비밀번호가 올바르지 않습니다.');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    // 로그인 성공 - localStorage에 세션 저장
+                    const sessionData = {
+                        id: user.id,
+                        username: user.username,
+                        name: user.name,
+                        role: user.role,
+                        email: user.email,
+                        organization: user.organization,
+                        position: user.position
+                    };
+                    localStorage.setItem('bf_user_session', JSON.stringify(sessionData));
+                    onLogin(sessionData);
+                } catch (err) {
+                    console.error('Login error:', err);
+                    setLoginError('로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            return (
+                <div className="login-overlay">
+                    <div className="login-card">
+                        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '8px' }}>🌱</div>
+                        </div>
+                        <h1>아름다운재단 사업관리시스템</h1>
+                        <p className="login-subtitle">2026 공익단체 인큐베이팅 지원사업</p>
+
+                        {loginError && (
+                            <div className="login-error">{loginError}</div>
+                        )}
+
+                        <form onSubmit={handleLogin}>
+                            <div className="form-group">
+                                <label>아이디</label>
+                                <input
+                                    type="text"
+                                    value={username}
+                                    onChange={e => setUsername(e.target.value)}
+                                    placeholder="아이디를 입력하세요"
+                                    required
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>비밀번호</label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    placeholder="비밀번호를 입력하세요"
+                                    required
+                                />
+                            </div>
+                            <button type="submit" className="login-btn" disabled={isLoading}>
+                                {isLoading ? '로그인 중...' : '로그인'}
+                            </button>
+                        </form>
+
+                        <p style={{ textAlign: 'center', fontSize: '12px', color: '#A0AEC0', marginTop: '24px', marginBottom: 0 }}>
+                            청년노동자인권센터 • 아름다운재단
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
         function ProjectManagementSystem() {
+            // 인증 상태
+            const [currentUser, setCurrentUser] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('bf_user_session');
+                    return saved ? JSON.parse(saved) : null;
+                } catch { return null; }
+            });
+
             const [currentPage, setCurrentPage] = useState("dashboard");
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
@@ -2518,6 +2869,428 @@
                 );
             };
 
+            // 로그아웃
+            const handleLogout = () => {
+                localStorage.removeItem('bf_user_session');
+                setCurrentUser(null);
+                setCurrentPage('dashboard');
+            };
+
+            // 관리자 페이지 상태
+            const [adminUsers, setAdminUsers] = useState([]);
+            const [adminLoading, setAdminLoading] = useState(false);
+            const [adminError, setAdminError] = useState('');
+            const [adminSuccess, setAdminSuccess] = useState('');
+            const [showUserForm, setShowUserForm] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+            const [userForm, setUserForm] = useState({
+                username: '', name: '', email: '', password: '',
+                role: 'staff', phone: '', organization: '청년노동자인권센터', position: ''
+            });
+
+            const resetUserForm = () => {
+                setUserForm({
+                    username: '', name: '', email: '', password: '',
+                    role: 'staff', phone: '', organization: '청년노동자인권센터', position: ''
+                });
+                setEditingUser(null);
+                setShowUserForm(false);
+            };
+
+            // 사용자 목록 로딩
+            const loadAdminUsers = async () => {
+                setAdminLoading(true);
+                try {
+                    const { data: users, error } = await supabase
+                        .from('users')
+                        .select('*')
+                        .order('created_at', { ascending: true });
+
+                    if (error) throw error;
+                    setAdminUsers(users || []);
+                } catch (err) {
+                    console.error('Error loading users:', err);
+                    setAdminError('사용자 목록을 불러오는 중 오류가 발생했습니다.');
+                } finally {
+                    setAdminLoading(false);
+                }
+            };
+
+            // 사용자 추가
+            const handleAddUser = async (e) => {
+                e.preventDefault();
+                setAdminError('');
+                setAdminSuccess('');
+
+                if (!userForm.username || !userForm.name || !userForm.password) {
+                    setAdminError('아이디, 이름, 비밀번호는 필수 입력 항목입니다.');
+                    return;
+                }
+
+                try {
+                    const { data, error } = await supabase
+                        .from('users')
+                        .insert([{
+                            username: userForm.username,
+                            name: userForm.name,
+                            email: userForm.email || `${userForm.username}@younglabor.org`,
+                            password_hash: userForm.password,
+                            role: userForm.role,
+                            phone: userForm.phone,
+                            organization: userForm.organization,
+                            position: userForm.position,
+                            is_active: true
+                        }])
+                        .select();
+
+                    if (error) {
+                        if (error.message.includes('duplicate') || error.message.includes('unique')) {
+                            setAdminError('이미 존재하는 아이디 또는 이메일입니다.');
+                        } else {
+                            throw error;
+                        }
+                        return;
+                    }
+
+                    setAdminSuccess(`'${userForm.name}' 사용자가 추가되었습니다.`);
+                    resetUserForm();
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error adding user:', err);
+                    setAdminError('사용자 추가 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 사용자 수정
+            const handleUpdateUser = async (e) => {
+                e.preventDefault();
+                setAdminError('');
+                setAdminSuccess('');
+
+                if (!editingUser) return;
+
+                try {
+                    const updateData = {
+                        name: userForm.name,
+                        email: userForm.email,
+                        role: userForm.role,
+                        phone: userForm.phone,
+                        organization: userForm.organization,
+                        position: userForm.position,
+                        updated_at: new Date().toISOString()
+                    };
+
+                    // 비밀번호가 입력된 경우에만 변경
+                    if (userForm.password) {
+                        updateData.password_hash = userForm.password;
+                    }
+
+                    const { error } = await supabase
+                        .from('users')
+                        .update(updateData)
+                        .eq('id', editingUser.id);
+
+                    if (error) throw error;
+
+                    setAdminSuccess(`'${userForm.name}' 사용자 정보가 수정되었습니다.`);
+
+                    // 현재 로그인 사용자 정보가 변경된 경우 세션 업데이트
+                    if (currentUser && currentUser.id === editingUser.id) {
+                        const updatedSession = {
+                            ...currentUser,
+                            name: userForm.name,
+                            email: userForm.email,
+                            role: userForm.role,
+                            organization: userForm.organization,
+                            position: userForm.position
+                        };
+                        localStorage.setItem('bf_user_session', JSON.stringify(updatedSession));
+                        setCurrentUser(updatedSession);
+                    }
+
+                    resetUserForm();
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error updating user:', err);
+                    setAdminError('사용자 수정 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 사용자 삭제 (비활성화)
+            const handleDeleteUser = async (user) => {
+                if (user.id === currentUser?.id) {
+                    setAdminError('현재 로그인된 계정은 삭제할 수 없습니다.');
+                    return;
+                }
+
+                if (!confirm(`'${user.name}' (${user.username}) 사용자를 삭제하시겠습니까?\n삭제된 사용자는 로그인할 수 없습니다.`)) {
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from('users')
+                        .update({ is_active: false, updated_at: new Date().toISOString() })
+                        .eq('id', user.id);
+
+                    if (error) throw error;
+
+                    setAdminSuccess(`'${user.name}' 사용자가 삭제(비활성화)되었습니다.`);
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error deleting user:', err);
+                    setAdminError('사용자 삭제 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 사용자 활성화 복원
+            const handleRestoreUser = async (user) => {
+                try {
+                    const { error } = await supabase
+                        .from('users')
+                        .update({ is_active: true, updated_at: new Date().toISOString() })
+                        .eq('id', user.id);
+
+                    if (error) throw error;
+
+                    setAdminSuccess(`'${user.name}' 사용자가 복원되었습니다.`);
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error restoring user:', err);
+                    setAdminError('사용자 복원 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 수정 모드로 전환
+            const startEditUser = (user) => {
+                setEditingUser(user);
+                setUserForm({
+                    username: user.username,
+                    name: user.name,
+                    email: user.email || '',
+                    password: '',
+                    role: user.role,
+                    phone: user.phone || '',
+                    organization: user.organization || '',
+                    position: user.position || ''
+                });
+                setShowUserForm(true);
+                setAdminError('');
+                setAdminSuccess('');
+            };
+
+            const roleLabels = {
+                admin: '관리자',
+                staff: '직원',
+                participant: '참여자',
+                viewer: '열람자'
+            };
+
+            // 관리자 페이지 렌더링
+            const renderAdmin = () => {
+                // 관리자 페이지 진입 시 사용자 목록 로딩
+                if (adminUsers.length === 0 && !adminLoading) {
+                    loadAdminUsers();
+                }
+
+                return (
+                    <div>
+                        <h1 className="section-title">⚙️ 관리자</h1>
+                        <p className="section-subtitle">사용자 계정을 관리합니다. 아이디 추가, 수정, 삭제가 가능합니다.</p>
+
+                        {adminError && <div className="error-message">{adminError}</div>}
+                        {adminSuccess && <div className="success-message">{adminSuccess}</div>}
+
+                        {/* 사용자 추가/수정 폼 */}
+                        <div style={{ marginBottom: '24px' }}>
+                            {!showUserForm ? (
+                                <button className="btn btn-primary" onClick={() => { setShowUserForm(true); setEditingUser(null); setUserForm({ username: '', name: '', email: '', password: '', role: 'staff', phone: '', organization: '청년노동자인권센터', position: '' }); }}>
+                                    + 새 사용자 추가
+                                </button>
+                            ) : (
+                                <div className="admin-form-card">
+                                    <h3>{editingUser ? `✏️ '${editingUser.name}' 정보 수정` : '➕ 새 사용자 추가'}</h3>
+                                    <form onSubmit={editingUser ? handleUpdateUser : handleAddUser}>
+                                        <div className="form-grid">
+                                            <div className="form-group">
+                                                <label>아이디 *</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.username}
+                                                    onChange={e => setUserForm({...userForm, username: e.target.value})}
+                                                    placeholder="영문 아이디"
+                                                    required
+                                                    disabled={!!editingUser}
+                                                    style={editingUser ? { background: '#EDF2F7', cursor: 'not-allowed' } : {}}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>이름 *</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.name}
+                                                    onChange={e => setUserForm({...userForm, name: e.target.value})}
+                                                    placeholder="사용자 이름"
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>{editingUser ? '새 비밀번호 (변경시에만)' : '비밀번호 *'}</label>
+                                                <input
+                                                    type="password"
+                                                    value={userForm.password}
+                                                    onChange={e => setUserForm({...userForm, password: e.target.value})}
+                                                    placeholder={editingUser ? '변경하지 않으려면 비워두세요' : '비밀번호 입력'}
+                                                    required={!editingUser}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>역할</label>
+                                                <select
+                                                    value={userForm.role}
+                                                    onChange={e => setUserForm({...userForm, role: e.target.value})}
+                                                >
+                                                    <option value="admin">관리자</option>
+                                                    <option value="staff">직원</option>
+                                                    <option value="participant">참여자</option>
+                                                    <option value="viewer">열람자</option>
+                                                </select>
+                                            </div>
+                                            <div className="form-group">
+                                                <label>이메일</label>
+                                                <input
+                                                    type="email"
+                                                    value={userForm.email}
+                                                    onChange={e => setUserForm({...userForm, email: e.target.value})}
+                                                    placeholder="email@example.com"
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>전화번호</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.phone}
+                                                    onChange={e => setUserForm({...userForm, phone: e.target.value})}
+                                                    placeholder="010-0000-0000"
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>소속</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.organization}
+                                                    onChange={e => setUserForm({...userForm, organization: e.target.value})}
+                                                    placeholder="소속 단체명"
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>직위</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.position}
+                                                    onChange={e => setUserForm({...userForm, position: e.target.value})}
+                                                    placeholder="직위/직책"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                                            <button type="submit" className="btn btn-primary">
+                                                {editingUser ? '수정 저장' : '사용자 추가'}
+                                            </button>
+                                            <button type="button" className="btn btn-secondary" onClick={resetUserForm}>
+                                                취소
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 사용자 목록 */}
+                        {adminLoading ? (
+                            <div className="loading">
+                                <div className="loading-spinner"></div>
+                                <div>사용자 목록을 불러오고 있습니다...</div>
+                            </div>
+                        ) : (
+                            <div style={{ overflowX: 'auto' }}>
+                                <table className="user-table">
+                                    <thead>
+                                        <tr>
+                                            <th>아이디</th>
+                                            <th>이름</th>
+                                            <th>역할</th>
+                                            <th>이메일</th>
+                                            <th>소속</th>
+                                            <th>상태</th>
+                                            <th>관리</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {adminUsers.map(user => (
+                                            <tr key={user.id}>
+                                                <td style={{ fontWeight: '500' }}>{user.username}</td>
+                                                <td>{user.name}</td>
+                                                <td>
+                                                    <span className={`role-badge role-${user.role}`}>
+                                                        {roleLabels[user.role] || user.role}
+                                                    </span>
+                                                </td>
+                                                <td style={{ color: '#6B6560', fontSize: '13px' }}>{user.email}</td>
+                                                <td style={{ color: '#6B6560', fontSize: '13px' }}>{user.organization || '-'}</td>
+                                                <td>
+                                                    {user.is_active ? (
+                                                        <span className="status-active" style={{ fontSize: '13px' }}>● 활성</span>
+                                                    ) : (
+                                                        <span className="status-inactive" style={{ fontSize: '13px' }}>● 비활성</span>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <div className="admin-actions">
+                                                        <button
+                                                            className="btn btn-secondary btn-sm"
+                                                            onClick={() => startEditUser(user)}
+                                                        >
+                                                            수정
+                                                        </button>
+                                                        {user.is_active ? (
+                                                            <button
+                                                                className="btn btn-danger btn-sm"
+                                                                onClick={() => handleDeleteUser(user)}
+                                                            >
+                                                                삭제
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                className="btn btn-secondary btn-sm"
+                                                                onClick={() => handleRestoreUser(user)}
+                                                                style={{ color: '#22543D' }}
+                                                            >
+                                                                복원
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {adminUsers.length === 0 && (
+                                            <tr>
+                                                <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#A0AEC0' }}>
+                                                    등록된 사용자가 없습니다.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                                <div style={{ marginTop: '16px', fontSize: '13px', color: '#A0AEC0' }}>
+                                    총 {adminUsers.length}명 (활성: {adminUsers.filter(u => u.is_active).length}명, 비활성: {adminUsers.filter(u => !u.is_active).length}명)
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
             const renderContent = () => {
                 if (loading) {
                     return (
@@ -2550,21 +3323,38 @@
                     case "schedule": return renderSchedule();
                     case "gallery": return renderGallery();
                     case "board": return renderBoard();
+                    case "admin": return renderAdmin();
                     default: return renderDashboard();
                 }
             };
+
+            // 로그인 안 된 경우 로그인 페이지 표시
+            if (!currentUser) {
+                return <LoginPage onLogin={setCurrentUser} />;
+            }
 
             return (
                 <div>
                     {/* Header */}
                     <div className="header">
-                        <div className="container">
-                            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
-                                아름다운재단 2026 공익단체 인큐베이팅 지원사업
-                            </h1>
-                            <p style={{ margin: '8px 0 0 0', fontSize: '15px', opacity: 0.9 }}>
-                                청년노동자인권센터 • 총 예산 7천만원 • Supabase 연동
-                            </p>
+                        <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
+                                    아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                                </h1>
+                                <p style={{ margin: '8px 0 0 0', fontSize: '15px', opacity: 0.9 }}>
+                                    청년노동자인권센터 • 총 예산 7천만원
+                                </p>
+                            </div>
+                            <div className="header-user-info">
+                                <div style={{ textAlign: 'right' }}>
+                                    <div className="user-name">{currentUser.name}</div>
+                                    <div className="user-role">{roleLabels[currentUser.role] || currentUser.role}</div>
+                                </div>
+                                <button className="logout-btn" onClick={handleLogout}>
+                                    로그아웃
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -2580,7 +3370,8 @@
                                 },
                                 { id: 'schedule', label: '📅 일정관리', description: '사업 일정 및 참여자 관리' },
                                 { id: 'gallery', label: '📸 갤러리', description: '현장 사진 및 결과물' },
-                                { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' }
+                                { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' },
+                                ...(currentUser.role === 'admin' ? [{ id: 'admin', label: '⚙️ 관리자', description: '사용자 및 시스템 관리' }] : [])
                             ].map(nav => (
                                 <button
                                     key={nav.id}

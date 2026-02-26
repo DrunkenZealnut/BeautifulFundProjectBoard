@@ -33,6 +33,8 @@ No package.json, no npm install, no linting, no test runner configured.
 
 Execute `supabase-schema-safe.sql` in Supabase SQL Editor. This creates all 11 tables, indexes, RLS policies, and sample data.
 
+Then execute `supabase-migration-auth.sql` to add users table RLS policies and set the default admin password (`admin/admin1234`).
+
 ## Architecture
 
 ### Single-file SPA pattern
@@ -49,6 +51,13 @@ Navigation is state-driven (no URL routing) via `currentPage` state:
 - `schedule` → 일정 관리 (events, participant tracking)
 - `gallery` → 갤러리 (categorized image management)
 - `board` → 게시판 (notice, materials, FAQ, Q&A, report)
+- `admin` → 관리자 (user management, admin-only)
+
+### Authentication
+- Login required on page load, checks `users` table (username + password_hash)
+- Session stored in `localStorage` (`bf_user_session`)
+- Admin page visible only to users with `role = 'admin'`
+- Default admin account: `admin` / `admin1234`
 
 ### File variants
 
