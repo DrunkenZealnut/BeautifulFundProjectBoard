@@ -1241,7 +1241,7 @@
                     if (!saved) return null;
                     const session = JSON.parse(saved);
                     // 세션 만료 확인
-                    if (session.expiresAt && Date.now() > session.expiresAt) {
+                    if (!session.expiresAt || Date.now() > session.expiresAt) {
                         localStorage.removeItem('bf_user_session');
                         return null;
                     }
@@ -3333,7 +3333,7 @@
                     case "schedule": return renderSchedule();
                     case "gallery": return renderGallery();
                     case "board": return renderBoard();
-                    case "admin": return renderAdmin();
+                    case "admin": return currentUser?.role === 'admin' ? renderAdmin() : renderDashboard();
                     default: return renderDashboard();
                 }
             };
