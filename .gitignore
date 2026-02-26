@@ -1,0 +1,21 @@
+# Environment & Secrets
+.env
+.env.*
+*.local
+
+# Supabase
+supabase-storage-setup.sql
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if added later)
+node_modules/

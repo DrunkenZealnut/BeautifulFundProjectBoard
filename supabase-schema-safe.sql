@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS public.galleries (
 -- 자료실 및 게시판
 CREATE TABLE IF NOT EXISTS public.boards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    board_type TEXT CHECK (board_type IN ('notice', 'materials', 'faq', 'qna', 'report')) NOT NULL,
+    board_type TEXT CHECK (board_type IN ('notice', 'materials', 'report', 'free')) NOT NULL,
     title VARCHAR(300) NOT NULL,
     content TEXT NOT NULL,
     category VARCHAR(100),
@@ -263,6 +263,14 @@ BEGIN
     -- UPDATE 정책도 추가
     DROP POLICY IF EXISTS "Public update access for budget executions" ON public.budget_executions;
     CREATE POLICY "Public update access for budget executions" ON public.budget_executions
+        FOR UPDATE USING (true) WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Public update access for boards" ON public.boards;
+    CREATE POLICY "Public update access for boards" ON public.boards
+        FOR UPDATE USING (true) WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Public update access for galleries" ON public.galleries;
+    CREATE POLICY "Public update access for galleries" ON public.galleries
         FOR UPDATE USING (true) WITH CHECK (true);
 END
 $$;

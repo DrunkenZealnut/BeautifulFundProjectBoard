@@ -330,6 +330,11 @@
             color: #0C5460;
         }
 
+        .badge-free {
+            background: #E8E0F0;
+            color: #5B21B6;
+        }
+
         /* 고급 예산관리 탭 스타일 */
         .tab-navigation {
             display: flex;
@@ -810,6 +815,727 @@
                 flex-direction: column;
             }
         }
+
+        /* ===== Board Template Styles ===== */
+        .board-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .board-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .board-search {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .board-search input {
+            padding: 10px 14px;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 240px;
+        }
+
+        .board-search input:focus {
+            outline: none;
+            border-color: #1B6B5A;
+            box-shadow: 0 0 0 3px rgba(27, 107, 90, 0.1);
+        }
+
+        .board-category-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .board-category-tab {
+            padding: 8px 16px;
+            border: 1px solid #E9ECEF;
+            border-radius: 20px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            color: #6B6560;
+            transition: all 0.2s;
+        }
+
+        .board-category-tab:hover {
+            border-color: #1B6B5A;
+            color: #1B6B5A;
+        }
+
+        .board-category-tab.active {
+            background: #1B6B5A;
+            color: white;
+            border-color: #1B6B5A;
+        }
+
+        .board-list-item {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #F0EDEA;
+            transition: background 0.15s;
+            cursor: pointer;
+        }
+
+        .board-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .board-list-item:hover {
+            background: #F8F9FA;
+        }
+
+        .board-list-item.pinned {
+            background: #F0FFF4;
+            border-left: 3px solid #1B6B5A;
+        }
+
+        .board-list-number {
+            width: 40px;
+            text-align: center;
+            font-size: 13px;
+            color: #9C9690;
+            flex-shrink: 0;
+        }
+
+        .board-list-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .board-list-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: #2D2D2D;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .board-list-title span.title-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .board-list-info {
+            font-size: 12px;
+            color: #9C9690;
+            display: flex;
+            gap: 12px;
+        }
+
+        .board-list-meta {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-shrink: 0;
+            margin-left: 16px;
+        }
+
+        .board-list-meta span {
+            font-size: 12px;
+            color: #9C9690;
+            white-space: nowrap;
+        }
+
+        .board-pagination {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #F0EDEA;
+        }
+
+        .board-pagination button {
+            width: 36px;
+            height: 36px;
+            border: 1px solid #E9ECEF;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            color: #6B6560;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .board-pagination button:hover {
+            border-color: #1B6B5A;
+            color: #1B6B5A;
+        }
+
+        .board-pagination button.active {
+            background: #1B6B5A;
+            color: white;
+            border-color: #1B6B5A;
+        }
+
+        /* Board Detail View */
+        .board-detail {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .board-detail-header {
+            border-bottom: 2px solid #134E42;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        .board-detail-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #2D2D2D;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
+        .board-detail-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 13px;
+            color: #9C9690;
+            flex-wrap: wrap;
+        }
+
+        .board-detail-body {
+            font-size: 15px;
+            line-height: 1.8;
+            color: #2D2D2D;
+            min-height: 200px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .board-detail-footer {
+            margin-top: 32px;
+            padding-top: 16px;
+            border-top: 1px solid #EBE8E1;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Board Write Form */
+        .board-write-form {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .board-write-form .form-group {
+            margin-bottom: 20px;
+        }
+
+        .board-write-form textarea {
+            min-height: 300px;
+            resize: vertical;
+            line-height: 1.7;
+        }
+
+        /* Link Preview */
+        .link-preview-container {
+            margin-top: 12px;
+        }
+
+        .link-preview-card {
+            display: flex;
+            border: 1px solid #E9ECEF;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #FAFAFA;
+            transition: box-shadow 0.2s;
+            max-width: 560px;
+        }
+
+        .link-preview-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .link-preview-image {
+            width: 160px;
+            min-height: 120px;
+            background: linear-gradient(135deg, #E2E8F0, #CBD5E0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .link-preview-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .link-preview-info {
+            padding: 12px 16px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .link-preview-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2D2D2D;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .link-preview-desc {
+            font-size: 12px;
+            color: #6B6560;
+            margin-bottom: 6px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .link-preview-url {
+            font-size: 11px;
+            color: #9C9690;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .link-preview-loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: #F8F9FA;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #6B6560;
+        }
+
+        .link-preview-remove {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Gallery Grid */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .gallery-card {
+            background: white;
+            border: 1px solid #EBE8E1;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .gallery-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+        }
+
+        .gallery-card-image {
+            height: 200px;
+            background: linear-gradient(135deg, #134E42 0%, #1B6B5A 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gallery-card-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .gallery-card-body {
+            padding: 16px;
+        }
+
+        .gallery-card-category {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            background: #E8F5F0;
+            color: #1B6B5A;
+            margin-bottom: 8px;
+        }
+
+        .gallery-card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #2D2D2D;
+            margin-bottom: 6px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .gallery-card-meta {
+            font-size: 12px;
+            color: #9C9690;
+            display: flex;
+            gap: 12px;
+        }
+
+        /* Gallery Detail */
+        .gallery-detail-image {
+            width: 100%;
+            max-height: 500px;
+            background: #F0EDEA;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .gallery-detail-image img {
+            max-width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+        }
+
+        /* Empty State */
+        .board-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #9C9690;
+        }
+
+        .board-empty-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .board-empty-text {
+            font-size: 15px;
+        }
+
+        /* Rich Text Editor */
+        .rich-editor-toolbar {
+            display: flex;
+            gap: 4px;
+            padding: 8px 12px;
+            background: #F8F9FA;
+            border: 1px solid #D1D5DB;
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .rich-editor-toolbar .toolbar-separator {
+            width: 1px;
+            height: 24px;
+            background: #D1D5DB;
+            margin: 0 4px;
+        }
+
+        .rich-editor-toolbar button {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4A5568;
+            transition: all 0.15s;
+        }
+
+        .rich-editor-toolbar button:hover {
+            background: #E2E8F0;
+            color: #1B6B5A;
+        }
+
+        .rich-editor-toolbar button.active {
+            background: #1B6B5A;
+            color: white;
+        }
+
+        .rich-editor-toolbar select {
+            padding: 4px 8px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
+            cursor: pointer;
+            color: #4A5568;
+        }
+
+        .rich-editor-body {
+            min-height: 300px;
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 16px;
+            border: 1px solid #D1D5DB;
+            border-radius: 0 0 8px 8px;
+            font-size: 15px;
+            line-height: 1.7;
+            color: #2D2D2D;
+            outline: none;
+            background: white;
+        }
+
+        .rich-editor-body:focus {
+            border-color: #1B6B5A;
+            box-shadow: 0 0 0 3px rgba(27, 107, 90, 0.1);
+        }
+
+        .rich-editor-body:empty::before {
+            content: attr(data-placeholder);
+            color: #9C9690;
+            pointer-events: none;
+        }
+
+        .rich-editor-body h1 { font-size: 24px; font-weight: 700; margin: 16px 0 8px; }
+        .rich-editor-body h2 { font-size: 20px; font-weight: 700; margin: 14px 0 6px; }
+        .rich-editor-body h3 { font-size: 17px; font-weight: 600; margin: 12px 0 4px; }
+        .rich-editor-body blockquote {
+            border-left: 3px solid #1B6B5A;
+            padding: 8px 16px;
+            margin: 12px 0;
+            background: #F8F9FA;
+            color: #4A5568;
+        }
+        .rich-editor-body ul, .rich-editor-body ol { padding-left: 24px; margin: 8px 0; }
+        .rich-editor-body a { color: #1B6B5A; text-decoration: underline; }
+
+        /* File Attachment */
+        .file-upload-area {
+            border: 2px dashed #D1D5DB;
+            border-radius: 10px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #FAFAFA;
+        }
+
+        .file-upload-area:hover {
+            border-color: #1B6B5A;
+            background: #F0FFF4;
+        }
+
+        .file-upload-area.dragging {
+            border-color: #1B6B5A;
+            background: #E8F5F0;
+        }
+
+        .file-upload-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .file-upload-text {
+            font-size: 14px;
+            color: #6B6560;
+            margin-bottom: 4px;
+        }
+
+        .file-upload-hint {
+            font-size: 12px;
+            color: #9C9690;
+        }
+
+        .file-list {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            background: #F8F9FA;
+            border: 1px solid #E9ECEF;
+            border-radius: 8px;
+        }
+
+        .file-item-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .file-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .file-item-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #2D2D2D;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-item-size {
+            font-size: 12px;
+            color: #9C9690;
+        }
+
+        .file-item-remove {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 50%;
+            background: #FEE2E2;
+            color: #DC2626;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s;
+        }
+
+        .file-item-remove:hover {
+            background: #FECACA;
+        }
+
+        .file-item-progress {
+            width: 100%;
+            height: 4px;
+            background: #E9ECEF;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .file-item-progress-bar {
+            height: 100%;
+            background: #1B6B5A;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        .file-error {
+            font-size: 12px;
+            color: #DC2626;
+            margin-top: 4px;
+        }
+
+        /* Attachment display in detail view */
+        .attachment-list {
+            margin-top: 16px;
+            padding: 16px;
+            background: #F8F9FA;
+            border-radius: 10px;
+        }
+
+        .attachment-list-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #4A5568;
+            margin-bottom: 10px;
+        }
+
+        .attachment-download {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: white;
+            border: 1px solid #E9ECEF;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #2D2D2D;
+            text-decoration: none;
+            margin: 0 8px 8px 0;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+
+        .attachment-download:hover {
+            border-color: #1B6B5A;
+            color: #1B6B5A;
+            background: #F0FFF4;
+        }
+
+        @media (max-width: 768px) {
+            .board-search input {
+                width: 160px;
+            }
+
+            .board-list-meta {
+                display: none;
+            }
+
+            .board-list-number {
+                display: none;
+            }
+
+            .link-preview-card {
+                flex-direction: column;
+            }
+
+            .link-preview-image {
+                width: 100%;
+                height: 160px;
+            }
+
+            .gallery-grid {
+                grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            }
+
+            .rich-editor-toolbar button {
+                width: 28px;
+                height: 28px;
+                font-size: 12px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1261,6 +1987,42 @@
                 stats: {}
             });
 
+            // 게시판 공통 상태
+            const [boardView, setBoardView] = useState('list'); // list | detail | write
+            const [boardCategory, setBoardCategory] = useState('all');
+            const [boardSearchQuery, setBoardSearchQuery] = useState('');
+            const [boardCurrentPage, setBoardCurrentPage] = useState(1);
+            const [selectedPost, setSelectedPost] = useState(null);
+            const [boardWriteData, setBoardWriteData] = useState({
+                title: '', content: '', board_type: 'notice', category: '', is_pinned: false
+            });
+
+            // 갤러리 상태
+            const [galleryView, setGalleryView] = useState('list'); // list | detail | write
+            const [galleryCategory, setGalleryCategory] = useState('all');
+            const [gallerySearchQuery, setGallerySearchQuery] = useState('');
+            const [galleryCurrentPage, setGalleryCurrentPage] = useState(1);
+            const [selectedGalleryItem, setSelectedGalleryItem] = useState(null);
+            const [galleryWriteData, setGalleryWriteData] = useState({
+                title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: ''
+            });
+
+            // 링크 미리보기 상태
+            const [linkPreviews, setLinkPreviews] = useState([]);
+            const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
+            const boardWriteDebounceRef = useRef(null);
+
+            // 첨부파일 상태
+            const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+            const MAX_FILE_COUNT = 5;
+            const [boardAttachments, setBoardAttachments] = useState([]);
+            const [galleryAttachments, setGalleryAttachments] = useState([]);
+            const [detailAttachments, setDetailAttachments] = useState([]);
+            const boardFileInputRef = useRef(null);
+            const galleryFileInputRef = useRef(null);
+            const boardEditorRef = useRef(null);
+            const galleryEditorRef = useRef(null);
+
             // 회계가이드 상태
             const [guideTab, setGuideTab] = useState('principles');
             const [selectedAccount, setSelectedAccount] = useState(null);
@@ -1457,8 +2219,7 @@
                     const { data: galleries, error } = await supabase
                         .from('galleries')
                         .select('*')
-                        .order('created_at', { ascending: false })
-                        .limit(10);
+                        .order('created_at', { ascending: false });
 
                     if (error) throw error;
                     return galleries || [];
@@ -1474,8 +2235,7 @@
                         .from('boards')
                         .select('*, author:users(name)')
                         .eq('status', 'published')
-                        .order('created_at', { ascending: false })
-                        .limit(10);
+                        .order('created_at', { ascending: false });
 
                     if (error) throw error;
                     return boards || [];
@@ -1632,23 +2392,39 @@
                             <div className="card-header">
                                 <h2 className="card-title">📋 최근 게시글</h2>
                             </div>
-                            {data.boards.slice(0, 5).map(board => (
-                                <div key={board.id} className="item-card">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <div>
-                                            <div className="item-title">{board.title}</div>
-                                            <div className="item-meta">
-                                                ✍️ {board.author?.name || '관리자'} •
-                                                📅 {new Date(board.created_at).toLocaleDateString()} •
-                                                👁️ {board.view_count || 0}회
+                            {data.boards.slice(0, 5).map(board => {
+                                const typeInfo = BOARD_TYPE_MAP[board.board_type] || { label: board.board_type, badge: 'badge-info', icon: '📄' };
+                                return (
+                                    <div
+                                        key={board.id}
+                                        className="item-card"
+                                        onClick={() => {
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).then(() => {});
+                                            setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
+                                            setBoardView('detail');
+                                            setCurrentPage('board');
+                                            loadAttachments('board', board.id).then(setDetailAttachments);
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div className="item-title">{board.title}</div>
+                                                <div className="item-meta">
+                                                    ✍️ {board.author?.name || '관리자'} •
+                                                    📅 {new Date(board.created_at).toLocaleDateString()} •
+                                                    👁️ {board.view_count || 0}회
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '4px', marginLeft: '8px', flexShrink: 0 }}>
+                                                {board.is_pinned && (
+                                                    <span className="badge badge-warning">📌</span>
+                                                )}
+                                                <span className={`badge ${typeInfo.badge}`}>{typeInfo.label}</span>
                                             </div>
                                         </div>
-                                        {board.is_pinned && (
-                                            <span className="badge badge-info">공지</span>
-                                        )}
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                             {data.boards.length === 0 && (
                                 <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
                                     등록된 게시글이 없습니다.
@@ -1720,108 +2496,1193 @@
                 </div>
             );
 
-            const renderGallery = () => (
-                <div>
-                    <h1 className="section-title">📸 갤러리</h1>
-                    <p className="section-subtitle">사업 현장 사진과 결과물을 관리합니다.</p>
+            // ===== 게시판 템플릿 공통 유틸리티 =====
 
-                    <div className="grid-3">
-                        {data.galleries.map(item => (
-                            <div key={item.id} style={{
-                                background: 'white',
-                                border: '1px solid #EBE8E1',
-                                borderRadius: '12px',
-                                overflow: 'hidden',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                            }}>
-                                <div style={{
-                                    height: '200px',
-                                    background: 'linear-gradient(135deg, #134E42 0%, #1B6B5A 100%)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'white',
-                                    fontSize: '14px'
-                                }}>
-                                    📷 이미지 미리보기
+            const BOARD_TYPE_MAP = {
+                notice: { label: '공지', badge: 'badge-warning', icon: '📢' },
+                materials: { label: '자료', badge: 'badge-success', icon: '📁' },
+                report: { label: '보고서', badge: 'badge-info', icon: '📊' },
+                free: { label: '자유', badge: 'badge-free', icon: '💬' }
+            };
+
+            const GALLERY_CATEGORY_MAP = {
+                '현장사진': { icon: '📷', color: '#1B6B5A' },
+                '결과물': { icon: '🎯', color: '#D97706' },
+                '교육자료': { icon: '📚', color: '#7C3AED' },
+                '캠페인': { icon: '📣', color: '#DC2626' },
+                '행사': { icon: '🎉', color: '#2563EB' },
+                '기타': { icon: '📌', color: '#6B7280' }
+            };
+
+            const ITEMS_PER_PAGE = 10;
+
+            // 링크 미리보기 추출 - 텍스트에서 URL을 감지
+            const extractUrls = (text) => {
+                const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
+                return [...new Set(text.match(urlRegex) || [])];
+            };
+
+            // 링크 미리보기 데이터 가져오기 (CORS proxy 없이 기본 정보 표시)
+            const fetchLinkPreview = async (url) => {
+                try {
+                    setLinkPreviewLoading(true);
+                    // extract domain and path for display
+                    const urlObj = new URL(url);
+                    const domain = urlObj.hostname.replace('www.', '');
+                    const preview = {
+                        url: url,
+                        title: domain + (urlObj.pathname !== '/' ? urlObj.pathname : ''),
+                        description: url,
+                        domain: domain,
+                        image: null
+                    };
+
+                    // Try fetching via a simple proxy for og tags
+                    try {
+                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                        const response = await fetch(proxyUrl, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+
+                        if (response.ok) {
+                            const html = await response.text();
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(html, 'text/html');
+
+                            const ogTitle = doc.querySelector('meta[property="og:title"]')?.content;
+                            const ogDesc = doc.querySelector('meta[property="og:description"]')?.content;
+                            const ogImage = doc.querySelector('meta[property="og:image"]')?.content;
+                            const metaDesc = doc.querySelector('meta[name="description"]')?.content;
+                            const titleTag = doc.querySelector('title')?.textContent;
+
+                            if (ogTitle || titleTag) preview.title = ogTitle || titleTag;
+                            if (ogDesc || metaDesc) preview.description = ogDesc || metaDesc;
+                            if (ogImage) {
+                                // Handle relative image URLs
+                                preview.image = ogImage.startsWith('http') ? ogImage : new URL(ogImage, url).href;
+                            }
+                        }
+                    } catch (fetchErr) {
+                        // Fetch failed, use basic preview with domain info
+                        console.log('Link preview fetch skipped:', fetchErr.message);
+                    }
+
+                    return preview;
+                } catch (err) {
+                    return { url, title: url, description: '', domain: '', image: null };
+                } finally {
+                    setLinkPreviewLoading(false);
+                }
+            };
+
+            // 글 내용 변경 시 링크 미리보기 업데이트
+            const handleContentChangeWithPreview = async (content) => {
+                setBoardWriteData(prev => ({ ...prev, content }));
+                const urls = extractUrls(content);
+                const existingUrls = linkPreviews.map(p => p.url);
+                const newUrls = urls.filter(u => !existingUrls.includes(u));
+
+                // Remove previews for deleted URLs
+                setLinkPreviews(prev => prev.filter(p => urls.includes(p.url)));
+
+                // Fetch new previews
+                for (const url of newUrls.slice(0, 3)) { // max 3 previews
+                    const preview = await fetchLinkPreview(url);
+                    setLinkPreviews(prev => {
+                        if (prev.find(p => p.url === preview.url)) return prev;
+                        return [...prev, preview];
+                    });
+                }
+            };
+
+            // 링크 미리보기 카드 컴포넌트
+            const LinkPreviewCard = ({ key, preview, onRemove }) => (
+                <div key={key} style={{ position: 'relative', marginBottom: '8px' }}>
+                    <a href={preview.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                        <div className="link-preview-card">
+                            <div className="link-preview-image">
+                                {preview.image ? (
+                                    <img src={preview.image} alt="" onError={(e) => { e.target.style.display = 'none'; }} />
+                                ) : (
+                                    <span style={{ fontSize: '32px', opacity: 0.5 }}>🔗</span>
+                                )}
+                            </div>
+                            <div className="link-preview-info">
+                                <div className="link-preview-title">{preview.title}</div>
+                                {preview.description && (
+                                    <div className="link-preview-desc">{preview.description}</div>
+                                )}
+                                <div className="link-preview-url">{preview.domain || preview.url}</div>
+                            </div>
+                        </div>
+                    </a>
+                    {onRemove && (
+                        <button
+                            className="link-preview-remove"
+                            onClick={(e) => { e.preventDefault(); onRemove(preview.url); }}
+                            title="미리보기 제거"
+                        >×</button>
+                    )}
+                </div>
+            );
+
+            // ===== 게시판 템플릿: 공통 목록 헤더 =====
+            const BoardTemplateHeader = ({ title, subtitle, icon, onWrite, view, onBack, categories, activeCategory, onCategoryChange, searchQuery, onSearchChange }) => (
+                <div>
+                    {view !== 'list' ? (
+                        <div style={{ marginBottom: '16px' }}>
+                            <button className="btn btn-secondary" onClick={onBack}>
+                                ← 목록으로
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="board-header">
+                                <div>
+                                    <h1 className="section-title">{icon} {title}</h1>
+                                    <p className="section-subtitle">{subtitle}</p>
                                 </div>
-                                <div style={{ padding: '16px' }}>
-                                    <div className="item-title">{item.title}</div>
-                                    {item.description && (
-                                        <div style={{ fontSize: '14px', color: '#6B6560', marginBottom: '8px' }}>
-                                            {item.description}
-                                        </div>
-                                    )}
-                                    <div className="item-meta">
-                                        🏷️ {item.category} {item.subcategory && `> ${item.subcategory}`}<br/>
-                                        📅 {item.taken_date || new Date(item.created_at).toLocaleDateString()}<br/>
-                                        📍 {item.location || '미지정'}<br/>
-                                        📷 {item.photographer || '관리자'}
+                                <div className="board-toolbar">
+                                    <div className="board-search">
+                                        <input
+                                            type="text"
+                                            placeholder="검색어를 입력하세요"
+                                            value={searchQuery}
+                                            onChange={(e) => onSearchChange(e.target.value)}
+                                        />
                                     </div>
+                                    <button className="btn btn-primary" onClick={onWrite}>
+                                        ✏️ 글쓰기
+                                    </button>
                                 </div>
                             </div>
+                            {categories && categories.length > 0 && (
+                                <div className="board-category-tabs">
+                                    <button
+                                        className={`board-category-tab ${activeCategory === 'all' ? 'active' : ''}`}
+                                        onClick={() => onCategoryChange('all')}
+                                    >전체</button>
+                                    {categories.map(cat => (
+                                        <button
+                                            key={cat.key}
+                                            className={`board-category-tab ${activeCategory === cat.key ? 'active' : ''}`}
+                                            onClick={() => onCategoryChange(cat.key)}
+                                        >{cat.icon} {cat.label}</button>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            );
+
+            // ===== 게시판 템플릿: 페이지네이션 =====
+            const BoardPagination = ({ totalItems, currentPage, onPageChange }) => {
+                const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+                if (totalPages <= 1) return null;
+
+                const pages = [];
+                const startPage = Math.max(1, currentPage - 2);
+                const endPage = Math.min(totalPages, startPage + 4);
+
+                return (
+                    <div className="board-pagination">
+                        <button
+                            onClick={() => onPageChange(1)}
+                            disabled={currentPage === 1}
+                        >«</button>
+                        <button
+                            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                            disabled={currentPage === 1}
+                        >‹</button>
+                        {Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map(page => (
+                            <button
+                                key={page}
+                                className={currentPage === page ? 'active' : ''}
+                                onClick={() => onPageChange(page)}
+                            >{page}</button>
                         ))}
+                        <button
+                            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                            disabled={currentPage === totalPages}
+                        >›</button>
+                        <button
+                            onClick={() => onPageChange(totalPages)}
+                            disabled={currentPage === totalPages}
+                        >»</button>
+                    </div>
+                );
+            };
+
+            // ===== 첨부파일 유틸리티 =====
+            const formatFileSize = (bytes) => {
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            };
+
+            const getFileIcon = (type) => {
+                if (type.startsWith('image/')) return '🖼️';
+                if (type.startsWith('video/')) return '🎬';
+                if (type.includes('pdf')) return '📄';
+                if (type.includes('word') || type.includes('document')) return '📝';
+                if (type.includes('sheet') || type.includes('excel')) return '📊';
+                if (type.includes('presentation') || type.includes('powerpoint')) return '📑';
+                if (type.includes('zip') || type.includes('compressed')) return '🗜️';
+                return '📎';
+            };
+
+            const validateFiles = (newFiles, existingFiles) => {
+                const errors = [];
+                const validFiles = [];
+                const totalCount = existingFiles.length;
+
+                for (const file of newFiles) {
+                    if (totalCount + validFiles.length >= MAX_FILE_COUNT) {
+                        errors.push(`최대 ${MAX_FILE_COUNT}개까지 첨부할 수 있습니다.`);
+                        break;
+                    }
+                    if (file.size > MAX_FILE_SIZE) {
+                        errors.push(`"${file.name}" - 파일 크기가 10MB를 초과합니다. (${formatFileSize(file.size)})`);
+                        continue;
+                    }
+                    if (existingFiles.some(f => f.name === file.name && f.size === file.size)) {
+                        errors.push(`"${file.name}" - 이미 첨부된 파일입니다.`);
+                        continue;
+                    }
+                    validFiles.push(file);
+                }
+                return { validFiles, errors };
+            };
+
+            const handleFileSelect = (files, attachments, setAttachments) => {
+                const { validFiles, errors } = validateFiles(files, attachments);
+                if (errors.length > 0) {
+                    alert(errors.join('\n'));
+                }
+                if (validFiles.length > 0) {
+                    setAttachments(prev => [...prev, ...validFiles]);
+                }
+            };
+
+            const handleFileDrop = (e, attachments, setAttachments) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('dragging');
+                const files = Array.from(e.dataTransfer.files);
+                handleFileSelect(files, attachments, setAttachments);
+            };
+
+            // ===== 리치 텍스트 에디터 =====
+            const execEditorCommand = (command, value) => {
+                document.execCommand(command, false, value || null);
+            };
+
+            const getEditorContent = (editorRef) => {
+                return editorRef.current ? editorRef.current.innerHTML : '';
+            };
+
+            const getEditorText = (editorRef) => {
+                return editorRef.current ? editorRef.current.innerText : '';
+            };
+
+            const RichEditorToolbar = ({ editorRef }) => (
+                <div className="rich-editor-toolbar">
+                    <select
+                        defaultValue=""
+                        onChange={(e) => { if (e.target.value) { execEditorCommand('formatBlock', e.target.value); e.target.value = ''; } }}
+                    >
+                        <option value="" disabled>스타일</option>
+                        <option value="p">본문</option>
+                        <option value="h1">제목 1</option>
+                        <option value="h2">제목 2</option>
+                        <option value="h3">제목 3</option>
+                        <option value="blockquote">인용</option>
+                    </select>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('bold')} title="굵게 (Ctrl+B)"><b>B</b></button>
+                    <button onClick={() => execEditorCommand('italic')} title="기울임 (Ctrl+I)"><i>I</i></button>
+                    <button onClick={() => execEditorCommand('underline')} title="밑줄 (Ctrl+U)"><u>U</u></button>
+                    <button onClick={() => execEditorCommand('strikeThrough')} title="취소선"><s>S</s></button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('insertUnorderedList')} title="글머리 기호">•≡</button>
+                    <button onClick={() => execEditorCommand('insertOrderedList')} title="번호 매기기">1.</button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('justifyLeft')} title="왼쪽 정렬">≡←</button>
+                    <button onClick={() => execEditorCommand('justifyCenter')} title="가운데 정렬">≡↔</button>
+                    <button onClick={() => execEditorCommand('justifyRight')} title="오른쪽 정렬">≡→</button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => {
+                        const url = prompt('링크 URL을 입력하세요:');
+                        if (url) execEditorCommand('createLink', url);
+                    }} title="링크 삽입">🔗</button>
+                    <button onClick={() => execEditorCommand('removeFormat')} title="서식 지우기">✕</button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('undo')} title="실행 취소 (Ctrl+Z)">↩</button>
+                    <button onClick={() => execEditorCommand('redo')} title="다시 실행 (Ctrl+Y)">↪</button>
+                </div>
+            );
+
+            // ===== 첨부파일 영역 컴포넌트 =====
+            const FileUploadArea = ({ attachments, setAttachments, fileInputRef }) => (
+                <div className="form-group">
+                    <label className="form-label">📎 첨부파일 ({attachments.length}/{MAX_FILE_COUNT})</label>
+                    <div
+                        className="file-upload-area"
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('dragging'); }}
+                        onDragLeave={(e) => { e.currentTarget.classList.remove('dragging'); }}
+                        onDrop={(e) => handleFileDrop(e, attachments, setAttachments)}
+                    >
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                                handleFileSelect(Array.from(e.target.files), attachments, setAttachments);
+                                e.target.value = '';
+                            }}
+                        />
+                        <div className="file-upload-icon">📂</div>
+                        <div className="file-upload-text">클릭하거나 파일을 여기로 끌어다 놓으세요</div>
+                        <div className="file-upload-hint">최대 {MAX_FILE_COUNT}개, 파일당 10MB 이하</div>
+                    </div>
+                    {attachments.length > 0 && (
+                        <div className="file-list">
+                            {attachments.map((file, idx) => (
+                                <div key={`${file.name}-${idx}`} className="file-item">
+                                    <span className="file-item-icon">{getFileIcon(file.type)}</span>
+                                    <div className="file-item-info">
+                                        <div className="file-item-name">{file.name}</div>
+                                        <div className="file-item-size">{formatFileSize(file.size)}</div>
+                                    </div>
+                                    <button
+                                        className="file-item-remove"
+                                        onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                        title="삭제"
+                                    >×</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+
+            // ===== 일반게시판 글쓰기 (리치에디터 + 첨부파일 + 링크미리보기) =====
+            const BoardWriteForm = ({ writeData, setWriteData, onSubmit, onCancel }) => {
+                const handleEditorInput = () => {
+                    const html = getEditorContent(boardEditorRef);
+                    const text = getEditorText(boardEditorRef);
+                    setWriteData(prev => ({ ...prev, content: html }));
+                    // Debounce link preview
+                    if (boardWriteDebounceRef.current) clearTimeout(boardWriteDebounceRef.current);
+                    boardWriteDebounceRef.current = setTimeout(() => {
+                        handleContentChangeWithPreview(text);
+                    }, 800);
+                };
+
+                return (
+                    <div className="board-write-form">
+                        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#134E42', marginBottom: '24px' }}>
+                            ✏️ 새 글 작성
+                        </h2>
+
+                        <div className="form-group">
+                            <label className="form-label">분류</label>
+                            <select
+                                className="form-input"
+                                value={writeData.board_type}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, board_type: e.target.value }))}
+                            >
+                                {Object.entries(BOARD_TYPE_MAP).map(([key, val]) => (
+                                    <option key={key} value={key}>{val.icon} {val.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">제목</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="제목을 입력하세요"
+                                value={writeData.title}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, title: e.target.value }))}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">내용</label>
+                            <p style={{ fontSize: '12px', color: '#9C9690', margin: '0 0 8px 0' }}>
+                                URL을 입력하면 자동으로 링크 미리보기가 표시됩니다.
+                            </p>
+                            {RichEditorToolbar({ editorRef: boardEditorRef })}
+                            <div
+                                ref={boardEditorRef}
+                                className="rich-editor-body"
+                                contentEditable
+                                data-placeholder="내용을 입력하세요. 텍스트 서식을 적용하거나 URL을 포함하면 링크 미리보기가 자동 생성됩니다."
+                                onInput={handleEditorInput}
+                                onPaste={(e) => {
+                                    // Clean paste: strip external formatting
+                                    const clipboardData = e.clipboardData;
+                                    const html = clipboardData.getData('text/html');
+                                    const text = clipboardData.getData('text/plain');
+                                    if (html) {
+                                        // Allow paste with basic formatting
+                                    } else if (text) {
+                                        e.preventDefault();
+                                        document.execCommand('insertText', false, text);
+                                    }
+                                    setTimeout(handleEditorInput, 50);
+                                }}
+                            />
+                        </div>
+
+                        {/* 링크 미리보기 영역 */}
+                        {(linkPreviews.length > 0 || linkPreviewLoading) && (
+                            <div className="link-preview-container" style={{ marginBottom: '20px' }}>
+                                <label className="form-label" style={{ marginBottom: '8px' }}>🔗 링크 미리보기</label>
+                                {linkPreviewLoading && (
+                                    <div className="link-preview-loading">
+                                        <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', marginBottom: 0 }}></div>
+                                        링크 정보를 불러오는 중...
+                                    </div>
+                                )}
+                                {linkPreviews.map(preview =>
+                                    LinkPreviewCard({
+                                        key: preview.url,
+                                        preview,
+                                        onRemove: (url) => setLinkPreviews(prev => prev.filter(p => p.url !== url))
+                                    })
+                                )}
+                            </div>
+                        )}
+
+                        {/* 첨부파일 영역 */}
+                        {FileUploadArea({ attachments: boardAttachments, setAttachments: setBoardAttachments, fileInputRef: boardFileInputRef })}
+
+                        {currentUser?.role === 'admin' && (
+                            <div className="form-group">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={writeData.is_pinned}
+                                        onChange={(e) => setWriteData(prev => ({ ...prev, is_pinned: e.target.checked }))}
+                                    />
+                                    <span className="form-label" style={{ margin: 0 }}>📌 상단 고정</span>
+                                </label>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                            <button className="btn btn-secondary" onClick={onCancel}>취소</button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={onSubmit}
+                                disabled={!writeData.title.trim() || !getEditorText(boardEditorRef).trim()}
+                            >등록</button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== 갤러리 글쓰기 (리치에디터 + 첨부파일) =====
+            const GalleryWriteForm = ({ writeData, setWriteData, onSubmit, onCancel }) => (
+                <div className="board-write-form">
+                    <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#134E42', marginBottom: '24px' }}>
+                        📸 사진 등록
+                    </h2>
+
+                    <div className="form-group">
+                        <label className="form-label">카테고리</label>
+                        <select
+                            className="form-input"
+                            value={writeData.category}
+                            onChange={(e) => setWriteData(prev => ({ ...prev, category: e.target.value }))}
+                        >
+                            {Object.entries(GALLERY_CATEGORY_MAP).map(([key, val]) => (
+                                <option key={key} value={key}>{val.icon} {key}</option>
+                            ))}
+                        </select>
                     </div>
 
-                    {data.galleries.length === 0 && (
-                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
-                            등록된 사진이 없습니다.
+                    <div className="form-group">
+                        <label className="form-label">제목</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="사진 제목을 입력하세요"
+                            value={writeData.title}
+                            onChange={(e) => setWriteData(prev => ({ ...prev, title: e.target.value }))}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">설명</label>
+                        {RichEditorToolbar({ editorRef: galleryEditorRef })}
+                        <div
+                            ref={galleryEditorRef}
+                            className="rich-editor-body"
+                            contentEditable
+                            data-placeholder="사진에 대한 설명을 입력하세요"
+                            onInput={() => setWriteData(prev => ({
+                                ...prev,
+                                description: galleryEditorRef.current ? galleryEditorRef.current.innerHTML : ''
+                            }))}
+                            style={{ minHeight: '150px' }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div className="form-group">
+                            <label className="form-label">촬영일</label>
+                            <input
+                                type="date"
+                                className="form-input"
+                                value={writeData.taken_date}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, taken_date: e.target.value }))}
+                            />
                         </div>
-                    )}
+                        <div className="form-group">
+                            <label className="form-label">촬영 장소</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="촬영 장소"
+                                value={writeData.location}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, location: e.target.value }))}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">촬영자</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="촬영자 이름"
+                            value={writeData.photographer}
+                            onChange={(e) => setWriteData(prev => ({ ...prev, photographer: e.target.value }))}
+                        />
+                    </div>
+
+                    {/* 첨부파일 영역 */}
+                    {FileUploadArea({ attachments: galleryAttachments, setAttachments: setGalleryAttachments, fileInputRef: galleryFileInputRef })}
+
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                        <button className="btn btn-secondary" onClick={onCancel}>취소</button>
+                        <button
+                            className="btn btn-primary"
+                            onClick={onSubmit}
+                            disabled={!writeData.title.trim()}
+                        >등록</button>
+                    </div>
                 </div>
             );
 
-            const renderBoard = () => (
-                <div>
-                    <h1 className="section-title">📋 게시판</h1>
-                    <p className="section-subtitle">공지사항, 자료실, FAQ를 관리합니다.</p>
+            // ===== 첨부파일 목록 로드 =====
+            const loadAttachments = async (parentType, parentId) => {
+                try {
+                    const { data, error } = await supabase
+                        .from('attachments')
+                        .select('*')
+                        .eq(`${parentType}_id`, parentId)
+                        .order('created_at', { ascending: true });
+                    if (error) throw error;
+                    return data || [];
+                } catch (err) {
+                    console.error('첨부파일 로드 실패:', err);
+                    return [];
+                }
+            };
 
-                    {data.boards.map(board => (
-                        <div key={board.id} className="item-card">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ flex: 1 }}>
-                                    <div className="item-title">{board.title}</div>
-                                    <div style={{
-                                        fontSize: '14px',
-                                        color: '#6B6560',
-                                        marginBottom: '8px',
-                                        lineHeight: '1.5'
-                                    }}>
-                                        {board.content?.substring(0, 150)}
-                                        {board.content?.length > 150 ? '...' : ''}
+            // 첨부파일 다운로드 URL 생성
+            const getAttachmentUrl = (filePath) => {
+                const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
+                return data?.publicUrl || '#';
+            };
+
+            // 파일 다운로드 실행 (blob fetch → 강제 다운로드)
+            const downloadFile = async (filePath, filename) => {
+                try {
+                    const { data, error } = await supabase.storage
+                        .from('attachments')
+                        .download(filePath);
+                    if (error) throw error;
+
+                    const url = URL.createObjectURL(data);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error('다운로드 실패:', err);
+                    // Fallback: public URL을 새 탭으로 열기
+                    window.open(getAttachmentUrl(filePath), '_blank');
+                }
+            };
+
+            // 첨부파일 표시 컴포넌트
+            const AttachmentListDisplay = ({ attachments }) => {
+                if (!attachments || attachments.length === 0) return null;
+                return (
+                    <div className="attachment-list">
+                        <div className="attachment-list-title">📎 첨부파일 ({attachments.length})</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {attachments.map(att => (
+                                <div key={att.id} className="file-item" style={{ cursor: 'default' }}>
+                                    <span className="file-item-icon">{getFileIcon(att.file_type)}</span>
+                                    <div className="file-item-info">
+                                        <div className="file-item-name">{att.original_filename}</div>
+                                        <div className="file-item-size">{formatFileSize(att.file_size)}</div>
                                     </div>
-                                    <div className="item-meta">
-                                        ✍️ {board.author?.name || '관리자'} •
-                                        📅 {new Date(board.created_at).toLocaleDateString()} •
-                                        👁️ {board.view_count || 0}회
-                                        {board.download_count > 0 && ` • ⬇️ ${board.download_count}회`}
-                                    </div>
+                                    <button
+                                        className="btn btn-secondary"
+                                        style={{ padding: '6px 12px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                                        onClick={() => downloadFile(att.file_path, att.original_filename)}
+                                    >⬇ 다운로드</button>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '16px' }}>
-                                    {board.is_pinned && (
-                                        <span className="badge badge-info">공지</span>
-                                    )}
-                                    <span className={`badge ${
-                                        board.board_type === 'notice' ? 'badge-warning' :
-                                        board.board_type === 'materials' ? 'badge-success' :
-                                        'badge-info'
-                                    }`}>
-                                        {board.board_type === 'notice' ? '공지사항' :
-                                         board.board_type === 'materials' ? '자료실' :
-                                         board.board_type === 'faq' ? 'FAQ' : board.board_type}
-                                    </span>
-                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== 게시글 상세보기 (일반게시판) =====
+            const BoardDetailView = ({ post, onBack, attachments }) => {
+                if (!post) return null;
+                const typeInfo = BOARD_TYPE_MAP[post.board_type] || { label: post.board_type, badge: 'badge-info' };
+
+                const contentText = post.content || '';
+                const contentUrls = extractUrls(contentText);
+                const isHtml = /<[a-z][\s\S]*>/i.test(contentText);
+
+                return (
+                    <div className="board-detail">
+                        <div className="board-detail-header">
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                                <span className={`badge ${typeInfo.badge}`}>{typeInfo.label}</span>
+                                {post.is_pinned && <span className="badge badge-info">📌 고정</span>}
+                            </div>
+                            <div className="board-detail-title">{post.title}</div>
+                            <div className="board-detail-meta">
+                                <span>✍️ {post.author?.name || '관리자'}</span>
+                                <span>📅 {new Date(post.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                <span>👁️ 조회 {post.view_count || 0}</span>
                             </div>
                         </div>
-                    ))}
 
-                    {data.boards.length === 0 && (
-                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
-                            등록된 게시글이 없습니다.
+                        {isHtml ? (
+                            <div className="board-detail-body" dangerouslySetInnerHTML={{ __html: contentText }} />
+                        ) : (
+                            <div className="board-detail-body">{contentText}</div>
+                        )}
+
+                        {/* 첨부파일 */}
+                        {AttachmentListDisplay({ attachments: attachments || [] })}
+
+                        {/* 본문 내 링크 미리보기 */}
+                        {contentUrls.length > 0 && (
+                            <div style={{ marginTop: '24px' }}>
+                                <div style={{ fontSize: '13px', color: '#9C9690', marginBottom: '8px' }}>🔗 관련 링크</div>
+                                {contentUrls.slice(0, 3).map(url => {
+                                    let domain = '';
+                                    try { domain = new URL(url).hostname.replace('www.', ''); } catch(e) {}
+                                    return (
+                                        <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', marginBottom: '6px' }}>
+                                            <div className="link-preview-card" style={{ maxWidth: '100%' }}>
+                                                <div className="link-preview-image" style={{ width: '80px', minHeight: '60px' }}>
+                                                    <span style={{ fontSize: '24px', opacity: 0.5 }}>🔗</span>
+                                                </div>
+                                                <div className="link-preview-info">
+                                                    <div className="link-preview-title">{domain || url}</div>
+                                                    <div className="link-preview-url">{url}</div>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <div className="board-detail-footer">
+                            <button className="btn btn-secondary" onClick={onBack}>← 목록으로</button>
                         </div>
-                    )}
-                </div>
-            );
+                    </div>
+                );
+            };
+
+            // ===== 갤러리 상세보기 =====
+            const GalleryDetailView = ({ item, onBack, attachments }) => {
+                if (!item) return null;
+                const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
+                const isHtml = /<[a-z][\s\S]*>/i.test(item.description || '');
+
+                return (
+                    <div className="board-detail">
+                        <div className="gallery-detail-image">
+                            {item.image_path && item.image_path !== 'placeholder' ? (
+                                <img src={item.image_path} alt={item.title} />
+                            ) : (
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                    <div style={{ fontSize: '64px', marginBottom: '12px' }}>📷</div>
+                                    <div>이미지가 등록되지 않았습니다.</div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="board-detail-header">
+                            <span className="gallery-card-category" style={{ background: `${catInfo.color}15`, color: catInfo.color }}>
+                                {catInfo.icon} {item.category}
+                            </span>
+                            <div className="board-detail-title" style={{ marginTop: '8px' }}>{item.title}</div>
+                            <div className="board-detail-meta">
+                                <span>📅 {item.taken_date || new Date(item.created_at).toLocaleDateString('ko-KR')}</span>
+                                <span>📍 {item.location || '미지정'}</span>
+                                <span>📷 {item.photographer || '관리자'}</span>
+                                <span>👁️ 조회 {item.view_count || 0}</span>
+                            </div>
+                        </div>
+
+                        {item.description && (
+                            isHtml ? (
+                                <div className="board-detail-body" dangerouslySetInnerHTML={{ __html: item.description }} />
+                            ) : (
+                                <div className="board-detail-body">{item.description}</div>
+                            )
+                        )}
+
+                        {/* 첨부파일 */}
+                        {AttachmentListDisplay({ attachments: attachments || [] })}
+
+                        <div className="board-detail-footer">
+                            <button className="btn btn-secondary" onClick={onBack}>← 목록으로</button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== 첨부파일 Supabase Storage 업로드 =====
+            const uploadAttachments = async (files, parentType, parentId) => {
+                const uploaded = [];
+                for (const file of files) {
+                    try {
+                        const timestamp = Date.now();
+                        const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                        const filePath = `${parentType}/${parentId}/${timestamp}_${safeName}`;
+
+                        // Upload to Supabase Storage
+                        const { data: storageData, error: storageError } = await supabase.storage
+                            .from('attachments')
+                            .upload(filePath, file);
+
+                        if (storageError) {
+                            console.warn('Storage upload failed, saving metadata only:', storageError.message);
+                        }
+
+                        // Save attachment metadata to DB
+                        const attachmentData = {
+                            [`${parentType}_id`]: parentId,
+                            file_path: storageData?.path || filePath,
+                            original_filename: file.name,
+                            file_size: file.size,
+                            file_type: file.type || 'application/octet-stream',
+                            uploaded_by: currentUser.id
+                        };
+
+                        const { error: dbError } = await supabase.from('attachments').insert([attachmentData]);
+                        if (dbError) console.error('Attachment DB insert failed:', dbError);
+
+                        uploaded.push(attachmentData);
+                    } catch (err) {
+                        console.error(`Failed to upload ${file.name}:`, err);
+                    }
+                }
+                return uploaded;
+            };
+
+            // ===== 게시글 저장 =====
+            const handleBoardSubmit = async () => {
+                const editorContent = getEditorContent(boardEditorRef);
+                const editorText = getEditorText(boardEditorRef);
+                if (!boardWriteData.title.trim() || !editorText.trim()) return;
+                try {
+                    const postData = {
+                        board_type: boardWriteData.board_type,
+                        title: boardWriteData.title.trim(),
+                        content: editorContent,
+                        author_id: currentUser.id,
+                        is_pinned: boardWriteData.is_pinned,
+                        status: 'published',
+                        published_at: new Date().toISOString(),
+                        tags: linkPreviews.length > 0 ? { links: linkPreviews } : null
+                    };
+
+                    const { data: inserted, error: insertError } = await supabase
+                        .from('boards').insert([postData]).select().single();
+                    if (insertError) throw insertError;
+
+                    // Upload attachments
+                    if (boardAttachments.length > 0 && inserted?.id) {
+                        await uploadAttachments(boardAttachments, 'board', inserted.id);
+                    }
+
+                    // Reload boards
+                    const { data: boards } = await supabase
+                        .from('boards')
+                        .select('*, author:users(name)')
+                        .eq('status', 'published')
+                        .order('created_at', { ascending: false });
+
+                    setData(prev => ({ ...prev, boards: boards || [] }));
+                    setBoardView('list');
+                    setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false });
+                    setLinkPreviews([]);
+                    setBoardAttachments([]);
+                    if (boardEditorRef.current) boardEditorRef.current.innerHTML = '';
+                } catch (err) {
+                    console.error('게시글 저장 실패:', err);
+                    alert('게시글 저장에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 갤러리 저장 =====
+            const handleGallerySubmit = async () => {
+                if (!galleryWriteData.title.trim()) return;
+                try {
+                    const descContent = galleryEditorRef.current ? galleryEditorRef.current.innerHTML : '';
+                    const postData = {
+                        title: galleryWriteData.title.trim(),
+                        description: descContent.trim() || null,
+                        category: galleryWriteData.category,
+                        location: galleryWriteData.location.trim() || null,
+                        photographer: galleryWriteData.photographer.trim() || null,
+                        taken_date: galleryWriteData.taken_date || null,
+                        image_path: 'placeholder',
+                        uploaded_by: currentUser.id,
+                        is_public: true
+                    };
+
+                    const { data: inserted, error: insertError } = await supabase
+                        .from('galleries').insert([postData]).select().single();
+                    if (insertError) throw insertError;
+
+                    // Upload attachments
+                    if (galleryAttachments.length > 0 && inserted?.id) {
+                        await uploadAttachments(galleryAttachments, 'gallery', inserted.id);
+                    }
+
+                    const { data: galleries } = await supabase
+                        .from('galleries')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    setData(prev => ({ ...prev, galleries: galleries || [] }));
+                    setGalleryView('list');
+                    setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '' });
+                    setGalleryAttachments([]);
+                    if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = '';
+                } catch (err) {
+                    console.error('갤러리 저장 실패:', err);
+                    alert('사진 등록에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 일반게시판 렌더링 (템플릿 활용) =====
+            const renderBoard = () => {
+                try {
+                const boardCategories = Object.entries(BOARD_TYPE_MAP).map(([key, val]) => ({
+                    key, label: val.label, icon: val.icon
+                }));
+
+                // Filter and search
+                let filteredBoards = data.boards;
+                if (boardCategory !== 'all') {
+                    filteredBoards = filteredBoards.filter(b => b.board_type === boardCategory);
+                }
+                if (boardSearchQuery.trim()) {
+                    const query = boardSearchQuery.toLowerCase();
+                    filteredBoards = filteredBoards.filter(b =>
+                        b.title?.toLowerCase().includes(query) ||
+                        b.content?.toLowerCase().includes(query) ||
+                        b.author?.name?.toLowerCase().includes(query)
+                    );
+                }
+
+                // Sort: pinned first, then by date
+                filteredBoards = [...filteredBoards].sort((a, b) => {
+                    if (a.is_pinned && !b.is_pinned) return -1;
+                    if (!a.is_pinned && b.is_pinned) return 1;
+                    return new Date(b.created_at) - new Date(a.created_at);
+                });
+
+                // Pagination
+                const totalItems = filteredBoards.length;
+                const startIdx = (boardCurrentPage - 1) * ITEMS_PER_PAGE;
+                const pageItems = filteredBoards.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+
+                // View routing
+                if (boardView === 'detail') {
+                    return (
+                        <div>
+                            {BoardDetailView({
+                                post: selectedPost,
+                                onBack: () => { setBoardView('list'); setSelectedPost(null); setDetailAttachments([]); },
+                                attachments: detailAttachments
+                            })}
+                        </div>
+                    );
+                }
+
+                if (boardView === 'write') {
+                    return (
+                        <div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <button className="btn btn-secondary" onClick={() => { setBoardView('list'); setLinkPreviews([]); setBoardAttachments([]); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; }}>
+                                    ← 목록으로
+                                </button>
+                            </div>
+                            {BoardWriteForm({
+                                writeData: boardWriteData,
+                                setWriteData: setBoardWriteData,
+                                onSubmit: handleBoardSubmit,
+                                onCancel: () => { setBoardView('list'); setLinkPreviews([]); setBoardAttachments([]); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; }
+                            })}
+                        </div>
+                    );
+                }
+
+                return (
+                    <div>
+                        {BoardTemplateHeader({
+                            title: "게시판",
+                            subtitle: "공지사항, 자료실, FAQ를 관리합니다.",
+                            icon: "📋",
+                            view: boardView,
+                            onWrite: () => setBoardView('write'),
+                            onBack: () => setBoardView('list'),
+                            categories: boardCategories,
+                            activeCategory: boardCategory,
+                            onCategoryChange: (cat) => { setBoardCategory(cat); setBoardCurrentPage(1); },
+                            searchQuery: boardSearchQuery,
+                            onSearchChange: (q) => { setBoardSearchQuery(q); setBoardCurrentPage(1); }
+                        })}
+
+                        {/* 게시글 목록 (리스트형) */}
+                        <div style={{ border: '1px solid #EBE8E1', borderRadius: '12px', overflow: 'hidden' }}>
+                            {/* 헤더 행 */}
+                            <div style={{
+                                display: 'flex', alignItems: 'center', padding: '12px 20px',
+                                background: '#F8F9FA', borderBottom: '2px solid #134E42',
+                                fontSize: '13px', fontWeight: '600', color: '#6B6560'
+                            }}>
+                                <div style={{ width: '40px', textAlign: 'center' }}>번호</div>
+                                <div style={{ flex: 1, paddingLeft: '12px' }}>제목</div>
+                                <div style={{ width: '80px', textAlign: 'center' }}>작성자</div>
+                                <div style={{ width: '90px', textAlign: 'center' }}>작성일</div>
+                                <div style={{ width: '50px', textAlign: 'center' }}>조회</div>
+                            </div>
+
+                            {pageItems.length > 0 ? pageItems.map((board, idx) => {
+                                const typeInfo = BOARD_TYPE_MAP[board.board_type] || { label: board.board_type, badge: 'badge-info', icon: '📄' };
+                                return (
+                                    <div
+                                        key={board.id}
+                                        className={`board-list-item ${board.is_pinned ? 'pinned' : ''}`}
+                                        onClick={() => {
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).then(() => {});
+                                            setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
+                                            setBoardView('detail');
+                                            loadAttachments('board', board.id).then(setDetailAttachments);
+                                        }}
+                                    >
+                                        <div className="board-list-number">
+                                            {board.is_pinned ? '📌' : totalItems - startIdx - idx}
+                                        </div>
+                                        <div className="board-list-content">
+                                            <div className="board-list-title">
+                                                <span className={`badge ${typeInfo.badge}`} style={{ fontSize: '11px', padding: '2px 8px' }}>
+                                                    {typeInfo.label}
+                                                </span>
+                                                <span className="title-text">{board.title}</span>
+                                                {board.tags?.links?.length > 0 && (
+                                                    <span style={{ fontSize: '12px', color: '#9C9690' }}>🔗</span>
+                                                )}
+                                            </div>
+                                            <div className="board-list-info">
+                                                <span>{board.content?.substring(0, 60)}{board.content?.length > 60 ? '...' : ''}</span>
+                                            </div>
+                                        </div>
+                                        <div className="board-list-meta">
+                                            <span>{board.author?.name || '관리자'}</span>
+                                            <span>{new Date(board.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}</span>
+                                            <span>{board.view_count || 0}</span>
+                                        </div>
+                                    </div>
+                                );
+                            }) : (
+                                <div className="board-empty">
+                                    <div className="board-empty-icon">📋</div>
+                                    <div className="board-empty-text">
+                                        {boardSearchQuery ? '검색 결과가 없습니다.' : '등록된 게시글이 없습니다.'}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {BoardPagination({
+                            totalItems,
+                            currentPage: boardCurrentPage,
+                            onPageChange: setBoardCurrentPage
+                        })}
+                    </div>
+                );
+                } catch (err) {
+                    console.error('renderBoard 에러:', err);
+                    return (
+                        <div style={{ padding: '40px', textAlign: 'center', color: '#DC2626' }}>
+                            <h2>게시판 로딩 오류</h2>
+                            <p>{err.message}</p>
+                            <pre style={{ textAlign: 'left', background: '#f5f5f5', padding: '12px', borderRadius: '8px', fontSize: '12px', overflow: 'auto' }}>{err.stack}</pre>
+                        </div>
+                    );
+                }
+            };
+
+            // ===== 갤러리게시판 렌더링 (템플릿 활용) =====
+            const renderGallery = () => {
+                const galleryCategories = Object.entries(GALLERY_CATEGORY_MAP).map(([key, val]) => ({
+                    key, label: key, icon: val.icon
+                }));
+
+                // Filter and search
+                let filteredGalleries = data.galleries;
+                if (galleryCategory !== 'all') {
+                    filteredGalleries = filteredGalleries.filter(g => g.category === galleryCategory);
+                }
+                if (gallerySearchQuery.trim()) {
+                    const query = gallerySearchQuery.toLowerCase();
+                    filteredGalleries = filteredGalleries.filter(g =>
+                        g.title?.toLowerCase().includes(query) ||
+                        g.description?.toLowerCase().includes(query) ||
+                        g.location?.toLowerCase().includes(query) ||
+                        g.photographer?.toLowerCase().includes(query)
+                    );
+                }
+
+                // Pagination
+                const totalItems = filteredGalleries.length;
+                const startIdx = (galleryCurrentPage - 1) * ITEMS_PER_PAGE;
+                const pageItems = filteredGalleries.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+
+                // View routing
+                if (galleryView === 'detail') {
+                    return (
+                        <div>
+                            {GalleryDetailView({
+                                item: selectedGalleryItem,
+                                onBack: () => { setGalleryView('list'); setSelectedGalleryItem(null); setDetailAttachments([]); },
+                                attachments: detailAttachments
+                            })}
+                        </div>
+                    );
+                }
+
+                if (galleryView === 'write') {
+                    return (
+                        <div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <button className="btn btn-secondary" onClick={() => { setGalleryView('list'); setGalleryAttachments([]); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; }}>
+                                    ← 목록으로
+                                </button>
+                            </div>
+                            {GalleryWriteForm({
+                                writeData: galleryWriteData,
+                                setWriteData: setGalleryWriteData,
+                                onSubmit: handleGallerySubmit,
+                                onCancel: () => { setGalleryView('list'); setGalleryAttachments([]); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; }
+                            })}
+                        </div>
+                    );
+                }
+
+                return (
+                    <div>
+                        {BoardTemplateHeader({
+                            title: "갤러리",
+                            subtitle: "사업 현장 사진과 결과물을 관리합니다.",
+                            icon: "📸",
+                            view: galleryView,
+                            onWrite: () => setGalleryView('write'),
+                            onBack: () => setGalleryView('list'),
+                            categories: galleryCategories,
+                            activeCategory: galleryCategory,
+                            onCategoryChange: (cat) => { setGalleryCategory(cat); setGalleryCurrentPage(1); },
+                            searchQuery: gallerySearchQuery,
+                            onSearchChange: (q) => { setGallerySearchQuery(q); setGalleryCurrentPage(1); }
+                        })}
+
+                        {/* 갤러리 그리드 */}
+                        {pageItems.length > 0 ? (
+                            <div className="gallery-grid">
+                                {pageItems.map(item => {
+                                    const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className="gallery-card"
+                                            onClick={async () => {
+                                                await supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id);
+                                                setSelectedGalleryItem({ ...item, view_count: (item.view_count || 0) + 1 });
+                                                setGalleryView('detail');
+                                                loadAttachments('gallery', item.id).then(setDetailAttachments);
+                                            }}
+                                        >
+                                            <div className="gallery-card-image">
+                                                {item.image_path && item.image_path !== 'placeholder' ? (
+                                                    <img src={item.image_path} alt={item.title} />
+                                                ) : (
+                                                    <span>📷 이미지 미리보기</span>
+                                                )}
+                                            </div>
+                                            <div className="gallery-card-body">
+                                                <span className="gallery-card-category" style={{ background: `${catInfo.color}15`, color: catInfo.color }}>
+                                                    {catInfo.icon} {item.category}
+                                                </span>
+                                                <div className="gallery-card-title">{item.title}</div>
+                                                <div className="gallery-card-meta">
+                                                    <span>📅 {item.taken_date || new Date(item.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}</span>
+                                                    <span>📍 {item.location || '미지정'}</span>
+                                                    <span>👁️ {item.view_count || 0}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="board-empty">
+                                <div className="board-empty-icon">📸</div>
+                                <div className="board-empty-text">
+                                    {gallerySearchQuery ? '검색 결과가 없습니다.' : '등록된 사진이 없습니다.'}
+                                </div>
+                            </div>
+                        )}
+
+                        {BoardPagination({
+                            totalItems,
+                            currentPage: galleryCurrentPage,
+                            onPageChange: setGalleryCurrentPage
+                        })}
+                    </div>
+                );
+            };
 
             const renderBudget = () => {
                 const subcategories = getAllSubcategories();
@@ -3928,6 +5789,9 @@
                                     className={`nav-btn ${currentPage === nav.id ? 'active' : ''}`}
                                     onClick={() => {
                                         setCurrentPage(nav.id);
+                                        // Reset board/gallery views when navigating
+                                        if (nav.id === 'board') { setBoardView('list'); setSelectedPost(null); }
+                                        if (nav.id === 'gallery') { setGalleryView('list'); setSelectedGalleryItem(null); }
                                     }}
                                     title={nav.description}
                                 >

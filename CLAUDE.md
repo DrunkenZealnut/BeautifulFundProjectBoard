@@ -50,7 +50,7 @@ Navigation is state-driven (no URL routing) via `currentPage` state:
 - `budget` → 예산 관리 (execution tracking, withholding tax calc)
 - `schedule` → 일정 관리 (events, participant tracking)
 - `gallery` → 갤러리 (categorized image management)
-- `board` → 게시판 (notice, materials, FAQ, Q&A, report)
+- `board` → 게시판 (공지, 자료, 보고서, 자유)
 - `admin` → 관리자 (user management, admin-only)
 
 ### Authentication
