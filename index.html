@@ -599,75 +599,78 @@
         console.log('🔑 API Key 상태:', supabaseKey ? '존재함' : '없음');
 
         // 예산 구조 데이터 (청년노동자인권센터 2026년 실제 예산편성 현황)
+        // h1 = 상반기, h2 = 하반기, total = 전체 (h1 + h2)
         const BUDGET_DATA = {
             projectName: "2026 공익단체 인큐베이팅 지원사업",
             organization: "청년노동자인권센터",
             totalBudget: 70000000,
             period: "2026.01 ~ 2026.12",
-            halfYearBudgets: {
-                firstHalf: 35410000,
-                secondHalf: 34590000
+            periods: {
+                total: { label: "1차년도 전체", budget: 70000000 },
+                h1: { label: "상반기 (1~6월)", budget: 35410000 },
+                h2: { label: "하반기 (7~12월)", budget: 34590000 }
             },
             categories: [
                 {
                     id: "project-costs",
                     name: "사업비",
-                    budget: 30300000,
+                    budget: 30300000, h1: 15750000, h2: 14550000,
                     description: "사업의 직접적 목적달성을 위한 비용",
                     subcategories: [
                         {
                             id: "labor-safety-textbook",
                             name: "노동안전보건 교과서 기초연구",
-                            budget: 9100000,
+                            budget: 9100000, h1: 4150000, h2: 4950000,
                             description: "반도체고 학생들을 위한 노동안전보건 교과서 개발 연구",
                             items: [
-                                { id: "seminar-fee", name: "세미나 진행비", type: "사업인건비", budget: 1000000, detail: "1인*4회*250,000" },
-                                { id: "consultation-fee", name: "자문비", type: "사업인건비", budget: 1500000, detail: "10회 * 150,000(자문위원, 반도체관련전문가, 교사등)" },
-                                { id: "interview-fee", name: "인터뷰 진행비", type: "사업인건비", budget: 6000000, detail: "반도체고 학생, 졸업생, 관련기업 노동자 인터뷰 10회 * 100,000원" },
-                                { id: "meeting-expense", name: "회의비", type: "사업회의비", budget: 600000, detail: "식비 및 다과 6회*5명 * 20,000원" }
+                                { id: "seminar-fee", name: "세미나 진행비", type: "사업인건비", budget: 1000000, h1: 500000, h2: 500000, detail: "1인*4회*250,000", h1detail: "세미나 2회", h2detail: "세미나 2회" },
+                                { id: "consultation-fee", name: "자문비", type: "사업인건비", budget: 1500000, h1: 750000, h2: 750000, detail: "10회 * 150,000", h1detail: "자문 5회", h2detail: "자문 5회" },
+                                { id: "interview-fee", name: "인터뷰 진행비", type: "사업인건비", budget: 6000000, h1: 600000, h2: 400000, detail: "인터뷰 10회 * 100,000원", h1detail: "인터뷰 6회", h2detail: "인터뷰 4회" },
+                                { id: "manuscript-fee", name: "교과서 원고료", type: "사업인건비", budget: 0, h1: 2000000, h2: 3000000, detail: "연구팀 교과서 분석 및 방향설계 원고료", h1detail: "착수금", h2detail: "잔금" },
+                                { id: "meeting-expense", name: "회의비", type: "사업회의비", budget: 600000, h1: 300000, h2: 300000, detail: "6회*5명*20,000원", h1detail: "3회*5명*20,000", h2detail: "3회*5명*20,000" }
                             ]
                         },
                         {
                             id: "labor-safety-app",
                             name: "노동안전보건 APP",
-                            budget: 2000000,
+                            budget: 2000000, h1: 1200000, h2: 800000,
                             description: "APP을 통한 입체적인 교육과 최신 정보 업데이트",
                             items: [
-                                { id: "app-consultation", name: "개발설계 자문", type: "사업인건비", budget: 1000000, detail: "개발설계, 자문" },
-                                { id: "app-development", name: "앱 개발비", type: "지급수수료", budget: 1000000, detail: "서버비용, 애플개발자등록비용, RAG구축" }
+                                { id: "app-consultation", name: "개발설계 자문", type: "사업인건비", budget: 1000000, h1: 600000, h2: 400000, detail: "개발설계, 자문", h1detail: "자문 3회", h2detail: "자문 2회" },
+                                { id: "app-development", name: "서버/개발비", type: "지급수수료", budget: 1000000, h1: 600000, h2: 400000, detail: "서버비용, 애플개발자등록비용, RAG구축", h1detail: "DB구독, 개발자등록 등", h2detail: "시스템 추가비용" }
                             ]
                         },
                         {
                             id: "campaign",
                             name: "캠페인",
-                            budget: 7600000,
+                            budget: 7600000, h1: 5000000, h2: 2600000,
                             description: "반도체고 청소년들과의 일상적인 관계형성을 위한 캠페인",
                             items: [
-                                { id: "campaign-consultation", name: "캠페인 자문", type: "사업인건비", budget: 900000, detail: "6회 * 150,000원" },
-                                { id: "campaign-travel", name: "캠페인 교통비", type: "여비교통비", budget: 3000000, detail: "30회 * 100,000원" },
-                                { id: "campaign-supplies", name: "캠페인 물품", type: "물품구매비", budget: 2500000, detail: "테이블, 배너, 의자, 문구류 등" },
-                                { id: "campaign-meeting", name: "캠페인 회의비", type: "사업회의비", budget: 1200000, detail: "15회*4인*20,000" }
+                                { id: "campaign-consultation", name: "캠페인 자문", type: "사업인건비", budget: 900000, h1: 600000, h2: 300000, detail: "6회 * 150,000원", h1detail: "자문 4회*150,000", h2detail: "자문 2회*150,000" },
+                                { id: "campaign-travel", name: "캠페인 교통비", type: "여비교통비", budget: 3000000, h1: 2000000, h2: 1000000, detail: "30회 * 100,000원", h1detail: "5개월*4회*100,000", h2detail: "10회*100,000" },
+                                { id: "campaign-supplies", name: "캠페인 물품", type: "물품구매비", budget: 2500000, h1: 2000000, h2: 500000, detail: "테이블, 배너, 의자, 문구류 등", h1detail: "커피차, 간식, 물품", h2detail: "간식, 물품" },
+                                { id: "campaign-meeting", name: "캠페인 회의비", type: "사업회의비", budget: 1200000, h1: 400000, h2: 800000, detail: "15회*4인*20,000", h1detail: "20회*20,000", h2detail: "캠페인 회의" }
                             ]
                         },
                         {
                             id: "youth-committee",
                             name: "청소년 참견위원회",
-                            budget: 11100000,
+                            budget: 11100000, h1: 5100000, h2: 6000000,
                             description: "청소년참견위원회를 모집하여 학내 노동안전보건인식 제고 활동 지원",
                             items: [
-                                { id: "committee-consultation", name: "위원회 자문", type: "사업인건비", budget: 600000, detail: "자문 4회*150,000" },
-                                { id: "committee-meeting", name: "위원회 운영비", type: "사업회의비", budget: 5000000, detail: "5개학교 운영 및 학습지원 - 식비 5회 * 10명 * 20,000원 * 5개교" },
-                                { id: "committee-supplies", name: "위원회 학습지원", type: "물품구매비", budget: 5000000, detail: "5개교 운영 및 학습지원 - 구독, 도서구매, 학내활동 5개교 x 1,000,000원" },
-                                { id: "school-visit", name: "학교방문비", type: "여비교통비", budget: 500000, detail: "학교방문 5회 * 100,000원" }
+                                { id: "committee-consultation", name: "위원회 자문", type: "사업인건비", budget: 600000, h1: 300000, h2: 300000, detail: "자문 4회*150,000", h1detail: "자문 2회*150,000", h2detail: "자문 2회*150,000" },
+                                { id: "committee-meeting", name: "위원회 운영비", type: "사업회의비", budget: 5000000, h1: 2000000, h2: 3000000, detail: "5개교*식비", h1detail: "2회*10명*20,000*5개교", h2detail: "3회*10명*20,000*5개교" },
+                                { id: "committee-supplies", name: "위원회 학습지원", type: "물품구매비", budget: 5000000, h1: 2500000, h2: 2500000, detail: "5개교*1,000,000원", h1detail: "5개교*500,000", h2detail: "5개교*500,000" },
+                                { id: "school-visit", name: "학교방문비", type: "여비교통비", budget: 500000, h1: 300000, h2: 200000, detail: "학교방문 5회 * 100,000원", h1detail: "3회*100,000", h2detail: "2회*100,000" }
                             ]
                         },
                         {
                             id: "reserve",
                             name: "예비비",
-                            budget: 500000,
+                            budget: 500000, h1: 300000, h2: 200000,
                             description: "예상 외 소요 비용",
                             items: [
-                                { id: "reserve-fund", name: "예비비", type: "예비비", budget: 500000, detail: "예상 외 소요 비용" }
+                                { id: "reserve-fund", name: "예비비", type: "예비비", budget: 500000, h1: 300000, h2: 200000, detail: "예상 외 소요", h1detail: "여비교통비 예상", h2detail: "보고서 인쇄 예상" }
                             ]
                         }
                     ]
@@ -675,55 +678,55 @@
                 {
                     id: "operating-costs",
                     name: "운영비",
-                    budget: 39700000,
+                    budget: 39700000, h1: 19660000, h2: 20040000,
                     description: "단체의 기관운영 및 관리를 위한 비용",
                     subcategories: [
                         {
                             id: "operating-personnel",
                             name: "운영인건비",
-                            budget: 35250000,
+                            budget: 35250000, h1: 17620000, h2: 17630000,
                             description: "단체 활동가의 기본급여 및 관련 비용",
                             items: [
-                                { id: "regular-salary", name: "상근활동가 인건비", type: "운영인건비", budget: 30400000, detail: "서울시생활임금(12,121원)*12개월*209시간" },
-                                { id: "part-time-salary", name: "시간제 인건비", type: "운영인건비", budget: 4850000, detail: "년400시간 인건비 : 서울시생활임금(12,121원)*400시간" }
+                                { id: "regular-salary", name: "상근활동가 인건비", type: "운영인건비", budget: 30400000, h1: 15200000, h2: 15200000, detail: "서울시생활임금(12,121원)*12개월*209시간", h1detail: "6개월 임금", h2detail: "6개월 임금" },
+                                { id: "part-time-salary", name: "시간제 인건비", type: "운영인건비", budget: 4850000, h1: 2420000, h2: 2430000, detail: "년400시간 인건비", h1detail: "200시간 단순인건비", h2detail: "200시간 단순인건비" }
                             ]
                         },
                         {
                             id: "rent",
                             name: "임차료",
-                            budget: 660000,
+                            budget: 660000, h1: 330000, h2: 330000,
                             description: "사무실 임차비",
                             items: [
-                                { id: "office-rent", name: "사무실 임대료", type: "임차료", budget: 660000, detail: "55,000*12" }
+                                { id: "office-rent", name: "사무실 임대료", type: "임차료", budget: 660000, h1: 330000, h2: 330000, detail: "55,000*12", h1detail: "6개월", h2detail: "6개월" }
                             ]
                         },
                         {
                             id: "general-management",
                             name: "일반관리비",
-                            budget: 2230000,
-                            description: "사무용품, 소프트웨어 구독 등",
+                            budget: 2230000, h1: 1010000, h2: 1220000,
+                            description: "소프트웨어 구독 등",
                             items: [
-                                { id: "software-claude", name: "클로드코드", type: "일반관리비", budget: 1650000, detail: "150,000*11" },
-                                { id: "google-workspace", name: "구글워크스페이스", type: "일반관리비", budget: 207900, detail: "18,900*11" },
-                                { id: "n8n-subscription", name: "n8n 구독", type: "일반관리비", budget: 374000, detail: "34,000*11" }
+                                { id: "software-claude", name: "클로드코드", type: "일반관리비", budget: 1650000, h1: 750000, h2: 900000, detail: "150,000*11", h1detail: "5개월", h2detail: "6개월" },
+                                { id: "google-workspace", name: "구글워크스페이스", type: "일반관리비", budget: 207900, h1: 94500, h2: 113400, detail: "18,900*11", h1detail: "5개월", h2detail: "6개월" },
+                                { id: "n8n-subscription", name: "n8n 구독", type: "일반관리비", budget: 374000, h1: 170000, h2: 204000, detail: "34,000*11", h1detail: "5개월", h2detail: "6개월" }
                             ]
                         },
                         {
                             id: "education-training",
                             name: "교육훈련비",
-                            budget: 1000000,
+                            budget: 1000000, h1: 400000, h2: 600000,
                             description: "운영위 운영비 및 워크샵",
                             items: [
-                                { id: "workshop-expense", name: "운영위 운영비 및 워크샵", type: "교육훈련비", budget: 1000000, detail: "숙소예약, 식사" }
+                                { id: "workshop-expense", name: "운영위 운영비 및 워크샵", type: "교육훈련비", budget: 1000000, h1: 400000, h2: 600000, detail: "숙소예약, 식사", h1detail: "5인*4회*20,000", h2detail: "워크샵+5인*2회*20,000" }
                             ]
                         },
                         {
                             id: "organization-promotion",
                             name: "홍보비",
-                            budget: 560000,
+                            budget: 560000, h1: 300000, h2: 260000,
                             description: "단체 홍보물 제작",
                             items: [
-                                { id: "promotional-materials", name: "단체 홍보물", type: "홍보비", budget: 560000, detail: "단체 팜플렛, 명함, 피켓 등" }
+                                { id: "promotional-materials", name: "단체 홍보물", type: "홍보비", budget: 560000, h1: 300000, h2: 260000, detail: "단체 팜플렛, 명함, 피켓 등", h1detail: "팜플렛, 피켓", h2detail: "팜플렛, 피켓" }
                             ]
                         }
                     ]
@@ -900,6 +903,7 @@
 
             // 예산관리 상태
             const [budgetTab, setBudgetTab] = useState("dashboard");
+            const [budgetPeriod, setBudgetPeriod] = useState("total"); // total | h1 | h2
             const [formData, setFormData] = useState({
                 subcategory_id: '',
                 subcategory_name: '',
@@ -995,6 +999,12 @@
                 }
 
                 return docs;
+            };
+
+            // 시기별 예산 조회 헬퍼
+            const getBudgetByPeriod = (item, period) => {
+                if (period === 'total') return item.budget;
+                return item[period] || 0;
             };
 
             const getAllSubcategories = () => {
@@ -1465,6 +1475,12 @@
                                 📊 대시보드
                             </button>
                             <button
+                                className={`tab-btn ${budgetTab === 'breakdown' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('breakdown')}
+                            >
+                                📋 예산편성표
+                            </button>
+                            <button
                                 className={`tab-btn ${budgetTab === 'register' ? 'active' : ''}`}
                                 onClick={() => setBudgetTab('register')}
                             >
@@ -1488,11 +1504,44 @@
                         <div className="card">
                             {budgetTab === 'dashboard' && (
                                 <div>
-                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
-                                        📊 예산 현황 대시보드
-                                    </h2>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>
+                                            📊 예산 현황 대시보드
+                                        </h2>
+                                        {/* 시기 필터 */}
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            {Object.entries(BUDGET_DATA.periods).map(([key, p]) => (
+                                                <button
+                                                    key={key}
+                                                    className={`btn ${budgetPeriod === key ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => setBudgetPeriod(key)}
+                                                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
 
-                                    {/* 예산 집행률 */}
+                                    {/* 시기별 예산 요약 카드 3개 */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+                                        {Object.entries(BUDGET_DATA.periods).map(([key, p]) => (
+                                            <div key={key} style={{
+                                                padding: '16px',
+                                                borderRadius: '12px',
+                                                background: budgetPeriod === key ? 'linear-gradient(135deg, #1B6B5A, #134E42)' : '#F8F9FA',
+                                                color: budgetPeriod === key ? 'white' : '#2D2B29',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s',
+                                                border: budgetPeriod === key ? 'none' : '1px solid #E2E0DD'
+                                            }} onClick={() => setBudgetPeriod(key)}>
+                                                <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '4px' }}>{p.label}</div>
+                                                <div style={{ fontSize: '22px', fontWeight: '700' }}>{(p.budget / 10000).toLocaleString()}만원</div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* 선택된 시기 전체 집행률 */}
                                     <div style={{
                                         background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
                                         color: 'white',
@@ -1500,7 +1549,9 @@
                                         borderRadius: '12px',
                                         marginBottom: '24px'
                                     }}>
-                                        <h3 style={{ margin: '0 0 16px 0' }}>전체 예산 집행률</h3>
+                                        <h3 style={{ margin: '0 0 16px 0' }}>
+                                            {BUDGET_DATA.periods[budgetPeriod].label} 예산 집행률
+                                        </h3>
                                         <div style={{
                                             height: '32px',
                                             background: 'rgba(255,255,255,0.2)',
@@ -1511,7 +1562,7 @@
                                             <div style={{
                                                 height: '100%',
                                                 background: 'white',
-                                                width: `${data.stats.usageRate || 0}%`,
+                                                width: `${Math.min(100, Math.round((data.stats.usedBudget || 0) / BUDGET_DATA.periods[budgetPeriod].budget * 100))}%`,
                                                 transition: 'width 0.3s'
                                             }} />
                                         </div>
@@ -1521,7 +1572,7 @@
                                             fontSize: '16px'
                                         }}>
                                             <span>집행: {Math.round((data.stats.usedBudget || 0) / 10000).toLocaleString()}만원</span>
-                                            <span>총예산: 7,000만원</span>
+                                            <span>예산: {(BUDGET_DATA.periods[budgetPeriod].budget / 10000).toLocaleString()}만원</span>
                                         </div>
                                         <div style={{
                                             textAlign: 'center',
@@ -1529,31 +1580,39 @@
                                             fontWeight: '700',
                                             marginTop: '16px'
                                         }}>
-                                            {data.stats.usageRate || 0}%
+                                            {Math.round((data.stats.usedBudget || 0) / BUDGET_DATA.periods[budgetPeriod].budget * 100)}%
                                         </div>
                                     </div>
 
-                                    {/* 예산 카테고리별 현황 */}
-                                    <div className="form-grid">
-                                        {BUDGET_DATA.categories.map(category => (
-                                            <div key={category.id} className="card" style={{ padding: '20px' }}>
-                                                <h4 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600' }}>
-                                                    {category.name}
-                                                </h4>
-                                                <div style={{
-                                                    fontSize: '24px',
-                                                    fontWeight: '700',
-                                                    color: '#1B6B5A',
-                                                    marginBottom: '8px'
-                                                }}>
-                                                    {(category.budget / 10000).toLocaleString()}만원
+                                    {/* 사업별 집행률 */}
+                                    <h3 style={{ marginBottom: '16px' }}>사업별 집행률</h3>
+                                    {BUDGET_DATA.categories.map(category => {
+                                        const catBudget = getBudgetByPeriod(category, budgetPeriod);
+                                        return (
+                                            <div key={category.id} style={{ marginBottom: '20px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                    <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>{category.name}</h4>
+                                                    <span style={{ fontSize: '15px', fontWeight: '700', color: '#1B6B5A' }}>{catBudget.toLocaleString()}원</span>
                                                 </div>
-                                                <div style={{ fontSize: '14px', color: '#6B6560' }}>
-                                                    {category.subcategories.length}개 하위 분류
-                                                </div>
+                                                {category.subcategories.map(sub => {
+                                                    const subBudget = getBudgetByPeriod(sub, budgetPeriod);
+                                                    if (subBudget === 0) return null;
+                                                    const pctOfCat = catBudget > 0 ? Math.round(subBudget / catBudget * 100) : 0;
+                                                    return (
+                                                        <div key={sub.id} style={{ marginBottom: '8px', padding: '10px 12px', background: '#F8F9FA', borderRadius: '8px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '4px' }}>
+                                                                <span>{sub.name}</span>
+                                                                <span style={{ fontWeight: '600' }}>{subBudget.toLocaleString()}원 ({pctOfCat}%)</span>
+                                                            </div>
+                                                            <div style={{ height: '6px', background: '#E2E0DD', borderRadius: '3px', overflow: 'hidden' }}>
+                                                                <div style={{ height: '100%', background: '#1B6B5A', width: `${pctOfCat}%`, borderRadius: '3px' }} />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
-                                        ))}
-                                    </div>
+                                        );
+                                    })}
 
                                     {/* 최근 집행 내역 */}
                                     <div style={{ marginTop: '32px' }}>
@@ -1583,6 +1642,186 @@
                                                 등록된 집행 내역이 없습니다.
                                             </div>
                                         )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* === 예산편성표 탭 === */}
+                            {budgetTab === 'breakdown' && (
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>
+                                            📋 예산편성표
+                                        </h2>
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            {Object.entries(BUDGET_DATA.periods).map(([key, p]) => (
+                                                <button
+                                                    key={key}
+                                                    className={`btn ${budgetPeriod === key ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => setBudgetPeriod(key)}
+                                                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 시기 비교 요약 */}
+                                    <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                            <thead>
+                                                <tr style={{ background: '#134E42', color: 'white' }}>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>구분</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>전체 예산</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>상반기</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>하반기</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>상반기 비중</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {BUDGET_DATA.categories.map(cat => (
+                                                    <React.Fragment key={cat.id}>
+                                                        <tr style={{ background: '#E8F5E9', fontWeight: '700' }}>
+                                                            <td style={{ padding: '10px 12px' }}>{cat.name}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{cat.budget.toLocaleString()}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{cat.h1.toLocaleString()}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{cat.h2.toLocaleString()}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(cat.h1 / cat.budget * 100)}%</td>
+                                                        </tr>
+                                                        {cat.subcategories.map(sub => (
+                                                            <tr key={sub.id} style={{ borderBottom: '1px solid #E2E0DD' }}>
+                                                                <td style={{ padding: '8px 12px', paddingLeft: '28px', color: '#4A4540' }}>{sub.name}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.budget.toLocaleString()}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.h1.toLocaleString()}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.h2.toLocaleString()}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.budget > 0 ? Math.round(sub.h1 / sub.budget * 100) : 0}%</td>
+                                                            </tr>
+                                                        ))}
+                                                    </React.Fragment>
+                                                ))}
+                                                <tr style={{ background: '#134E42', color: 'white', fontWeight: '700' }}>
+                                                    <td style={{ padding: '10px 12px' }}>합계</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.totalBudget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.periods.h1.budget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.periods.h2.budget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(BUDGET_DATA.periods.h1.budget / BUDGET_DATA.totalBudget * 100)}%</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* 선택 시기 상세 편성표 */}
+                                    <h3 style={{ marginBottom: '16px' }}>
+                                        {BUDGET_DATA.periods[budgetPeriod].label} 상세 편성표
+                                        <span style={{ fontSize: '14px', fontWeight: '400', color: '#6B6560', marginLeft: '12px' }}>
+                                            총 {BUDGET_DATA.periods[budgetPeriod].budget.toLocaleString()}원
+                                        </span>
+                                    </h3>
+
+                                    {BUDGET_DATA.categories.map(category => {
+                                        const catBudget = getBudgetByPeriod(category, budgetPeriod);
+                                        return (
+                                            <div key={category.id} style={{ marginBottom: '28px' }}>
+                                                <div style={{
+                                                    background: category.id === 'project-costs' ? '#1B6B5A' : '#2B6CB0',
+                                                    color: 'white',
+                                                    padding: '12px 16px',
+                                                    borderRadius: '8px 8px 0 0',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    <span>{category.name}</span>
+                                                    <span>{catBudget.toLocaleString()}원</span>
+                                                </div>
+
+                                                <div style={{ overflowX: 'auto' }}>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                                        <thead>
+                                                            <tr style={{ background: '#F8F9FA' }}>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>단위사업</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>항목명</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>계정</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '2px solid #E2E0DD' }}>예산액</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>산출근거</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {category.subcategories.map(sub => {
+                                                                const subBudget = getBudgetByPeriod(sub, budgetPeriod);
+                                                                if (subBudget === 0) return null;
+                                                                const items = sub.items.filter(item => getBudgetByPeriod(item, budgetPeriod) > 0);
+                                                                return (
+                                                                    <React.Fragment key={sub.id}>
+                                                                        {items.map((item, idx) => (
+                                                                            <tr key={item.id} style={{ borderBottom: '1px solid #F0EFED' }}>
+                                                                                {idx === 0 && (
+                                                                                    <td rowSpan={items.length} style={{
+                                                                                        padding: '8px 12px',
+                                                                                        fontWeight: '600',
+                                                                                        verticalAlign: 'top',
+                                                                                        borderRight: '1px solid #E2E0DD',
+                                                                                        background: '#FAFAF8'
+                                                                                    }}>
+                                                                                        {sub.name}
+                                                                                    </td>
+                                                                                )}
+                                                                                <td style={{ padding: '8px 12px' }}>{item.name}</td>
+                                                                                <td style={{ padding: '8px 12px' }}>
+                                                                                    <span style={{
+                                                                                        display: 'inline-block',
+                                                                                        padding: '2px 8px',
+                                                                                        borderRadius: '4px',
+                                                                                        fontSize: '11px',
+                                                                                        background: item.type === '사업인건비' ? '#FFF5F5' : item.type === '사업회의비' ? '#EBF8FF' : '#F0FFF4',
+                                                                                        color: item.type === '사업인건비' ? '#C53030' : item.type === '사업회의비' ? '#2B6CB0' : '#276749'
+                                                                                    }}>
+                                                                                        {item.type}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', fontVariantNumeric: 'tabular-nums' }}>
+                                                                                    {getBudgetByPeriod(item, budgetPeriod).toLocaleString()}
+                                                                                </td>
+                                                                                <td style={{ padding: '8px 12px', fontSize: '12px', color: '#6B6560' }}>
+                                                                                    {budgetPeriod === 'h1' ? (item.h1detail || item.detail) : budgetPeriod === 'h2' ? (item.h2detail || item.detail) : item.detail}
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                        <tr style={{ background: '#F8F9FA', fontWeight: '600', borderBottom: '2px solid #E2E0DD' }}>
+                                                                            <td colSpan={3} style={{ padding: '6px 12px', textAlign: 'right', fontSize: '12px' }}>{sub.name} 소계</td>
+                                                                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{subBudget.toLocaleString()}</td>
+                                                                            <td></td>
+                                                                        </tr>
+                                                                    </React.Fragment>
+                                                                );
+                                                            })}
+                                                            <tr style={{ background: category.id === 'project-costs' ? '#E8F5E9' : '#EBF8FF', fontWeight: '700' }}>
+                                                                <td colSpan={3} style={{ padding: '10px 12px', textAlign: 'right' }}>{category.name} 합계</td>
+                                                                <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '15px' }}>{catBudget.toLocaleString()}</td>
+                                                                <td></td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* 총 합계 */}
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
+                                        color: 'white',
+                                        padding: '20px 24px',
+                                        borderRadius: '12px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        fontSize: '18px',
+                                        fontWeight: '700'
+                                    }}>
+                                        <span>{BUDGET_DATA.periods[budgetPeriod].label} 총계</span>
+                                        <span style={{ fontSize: '24px' }}>{BUDGET_DATA.periods[budgetPeriod].budget.toLocaleString()}원</span>
                                     </div>
                                 </div>
                             )}
