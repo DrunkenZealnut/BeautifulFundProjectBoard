@@ -3124,96 +3124,90 @@
 
             // 회계가이드 페이지 렌더링
             const renderGuide = () => {
+                // DOCUMENT_RULES에서 증빙서류를 파생하는 헬퍼
+                const getDocsList = (ruleKey) => {
+                    const rule = DOCUMENT_RULES[ruleKey];
+                    if (!rule) return ['해당 항목의 증빙서류에 준함'];
+                    return [...(rule.base || []), ...(rule.required || []), ...(rule.conditional || [])];
+                };
+
                 const accountItems = [
                     { group: '사업비', name: '사업회의비', color: '#2B6CB0', bg: '#EBF8FF',
                       desc: '행사, 회의 등 진행을 위해 지급되는 장소 대관비, 다과구입, 식비, 다과비 등',
                       restriction: '인건비성 경비 편성불가',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증', '회의진행일지 (재단양식)'],
                       warning: '주류, 노래방 등 비용 지출 불가. 교통비는 여비교통비 계정으로 별도 지출.',
                       withholding: false },
                     { group: '사업비', name: '사업인건비', color: '#C53030', bg: '#FFF5F5',
                       desc: '강사비, 원고비, 발제비, 토론비, 인터뷰 사례비, 자문비, 회의참석비, 단순인건비 등',
                       restriction: '단체 내부인에는 지급불가 (대표자, 정기급여 수급자, 사업담당자)',
                       payment: '계좌이체만 가능 (현금 지급 불가)',
-                      docs: ['수령확인증 (재단서식)', '이체내역서 (일괄출력)', '이력서 (강사비, 발제비, 토론비 등)', '회의진행일지 (재단서식) 또는 강의/토론 자료·사진', '기타소득지급명세서 소득자별 연간집계표 (해당 시)'],
                       warning: '원천징수금액은 운영통장으로 이체 후 집행. 주민번호 수집 필요.',
                       withholding: true },
                     { group: '사업비', name: '지급수수료', color: '#6B46C1', bg: '#FAF5FF',
                       desc: '영상제작, 행사중계, 디자인, 통/번역, 연구조사, 장비임대 등 외주용역 비용',
                       restriction: '100만원 이상 용역은 2개 이상 비교견적 필요, 용역계약서 작성 필수',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['계약서 사본', '세금계산서(업체) 또는 수령확인증(개인)', '이체내역서 (일괄출력)', '사업자등록증(업체) 또는 신분증 사본(개인)', '비교견적서 및 업체 견적서', '이력서·포트폴리오·사유서 (개인용역 시)'],
                       warning: '개인용역계약 시 추가 서류 필요. 최저가 선택 불필수(품질 중요 시 재단 협의).',
                       withholding: true },
                     { group: '사업비', name: '여비교통비', color: '#C05621', bg: '#FFFAF0',
                       desc: '출장여비(숙박료, 식대) 및 교통비(대중교통, 통행료, 주차료, 자차 유류대), 여행자보험 등',
                       restriction: '실비지출에 한정, 영수증 필수',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증 (실비지출 증빙)', '출장보고서 또는 회의참석 확인서'],
                       warning: '영수증 없으면 불인정. 사업인건비와 중복지출 불가.',
                       withholding: false },
                     { group: '사업비', name: '물품구매비', color: '#276749', bg: '#F0FFF4',
                       desc: '단위사업에 필요한 물품 구입비용',
                       restriction: '100만원 이상 구매 시 2개 이상 비교견적 필요',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['구매내역 또는 거래명세서 사본', '세금계산서(카드매출전표)', '이체내역서 (계좌이체시)', '업체 사업자등록증 사본', '비교견적서 (100만원 이상)'],
                       warning: '적격증빙 불가한 개인 중고거래물품 구입은 인정 불가.',
                       withholding: false },
-                    { group: '사업비', name: '사업홍보비', color: '#D69E2E', bg: '#FFFFF0',
+                    { group: '사업비', name: '사업홍보비', color: '#D69E2E', bg: '#FFFFF0', ruleKey: '사업홍보비',
                       desc: '단위사업 홍보, 사업참여자 모집을 목적으로 지출한 홍보 비용',
                       restriction: '사업과의 직접적 연관성 입증 필요',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증', '이체내역서 (계좌이체시)', '사업관련성 입증자료'],
                       warning: '단위사업과 직접 관련된 홍보만 인정.',
                       withholding: false },
-                    { group: '사업비', name: '도서인쇄비', color: '#319795', bg: '#E6FFFA',
+                    { group: '사업비', name: '도서인쇄비', color: '#319795', bg: '#E6FFFA', ruleKey: '도서인쇄비',
                       desc: '자료집, 교재제본, 리플렛 등 인쇄물 제작비',
                       restriction: '사업목적 부합 인쇄물만 인정',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증', '이체내역서 (계좌이체시)', '제작물 샘플 또는 사진'],
                       warning: '사업목적과 부합하는 인쇄물만 인정.',
                       withholding: false },
-                    { group: '사업비', name: '예비비', color: '#4A5568', bg: '#F7FAFC',
+                    { group: '사업비', name: '예비비', color: '#4A5568', bg: '#F7FAFC', ruleKey: null,
                       desc: '예상 외 소요 비용 (지원금의 1/100 이내 권고)',
                       restriction: '속한 단위사업 내 다른 항목에 포함시켜 사용 가능 (50만원 이상 시 변경신청 필요)',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['해당 항목의 증빙서류에 준함'],
                       warning: '다른 단위사업에 포함시켜 사용 불가 (사업변경신청 필요).',
                       withholding: false },
                     { group: '운영비', name: '운영인건비', color: '#B83280', bg: '#FFF5F7',
                       desc: '단체 활동가(사업담당자)의 기본급여, 법정수당, 퇴직급여적립금, 사회보험 사용자부담금 등',
                       restriction: '지원단체에 소속된 사람에게만 지급 가능',
                       payment: '사업전용계좌 → 단체 운영통장으로 일괄 이체 후 지급',
-                      docs: ['급여지급명세서 (재단서식)', '이체내역서 (일괄출력)', '사업전용통장→기관운영계좌 이체확인증 (1건)', '기관운영계좌→담당자 개인계좌 이체확인증 (월별)'],
                       warning: '사업전용계좌에서 바로 지급하지 않음. 운영통장 경유 필수. 1년 미만 퇴직 시 퇴직적립금 반환.',
                       withholding: false },
                     { group: '운영비', name: '교육훈련비', color: '#C2410C', bg: '#FFF8F1',
                       desc: '단체 활동가의 역량강화를 위한 교육비, 대내외 인사 및 위원회 운영 회의비',
                       restriction: '역량강화 목적에 부합해야 함',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증', '교육참석 확인서', '교육내용 관련 자료'],
                       warning: '단체 활동가 역량강화 목적에 부합해야 함.',
                       withholding: false },
                     { group: '운영비', name: '임차료', color: '#0E7490', bg: '#F0FFFF',
                       desc: '사무실 임차비(임대보증금 설정불가), 관리비(집합건물 공용관리비, 장기수선충당금 등)',
                       restriction: '임대보증금 설정 불가',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증 또는 이체내역서', '임대차계약서 사본'],
                       warning: '임대보증금은 설정할 수 없음.',
                       withholding: false },
                     { group: '운영비', name: '일반관리비', color: '#92400E', bg: '#FFFFF0',
                       desc: '사무용품, 소모성물품, 수도광열비, 통신비, 제세공과금, 보험료, 금융기관수수료 등 (취득단가 100만원 미만)',
                       restriction: '취득단가 100만원 미만 물품만',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증', '사업관련성 입증자료', '이체내역서 (계좌이체시)'],
                       warning: '사회보험 사용자부담금 등은 운영인건비로 편성할 것.',
                       withholding: false },
                     { group: '운영비', name: '홍보비', color: '#553C9A', bg: '#F5F0FF',
                       desc: '단체홍보, 회원모집, 회원활동지원, 모금활동을 목적으로 지출한 홍보비용',
                       restriction: '단체홍보 목적에 부합해야 함',
                       payment: '전용계좌 체크카드 또는 계좌이체',
-                      docs: ['영수증', '홍보활동 관련 자료 (결과물, 사진 등)', '이체내역서 (계좌이체시)'],
                       warning: '사업홍보비와 구분하여 운영.',
                       withholding: false }
                 ];
@@ -3222,11 +3216,11 @@
                 const calcWithholding = () => {
                     const amount = parseInt(withholdingAmount) || 0;
                     if (amount <= 0) return null;
-                    const expenseDeduction = Math.round(amount * expenseRate / 100);
+                    const expenseDeduction = Math.floor(amount * expenseRate / 100);
                     const taxableIncome = amount - expenseDeduction;
                     const isExempt = taxableIncome <= 50000;
-                    const incomeTax = isExempt ? 0 : Math.round(taxableIncome * 0.2);
-                    const localTax = isExempt ? 0 : Math.round(incomeTax * 0.1);
+                    const incomeTax = isExempt ? 0 : Math.floor(taxableIncome * 0.2);
+                    const localTax = isExempt ? 0 : Math.floor(incomeTax * 0.1);
                     const totalTax = incomeTax + localTax;
                     const netPayment = amount - totalTax;
                     return { amount, expenseDeduction, taxableIncome, isExempt, incomeTax, localTax, totalTax, netPayment };
@@ -3385,7 +3379,7 @@
                                                                 <div style={{ padding: '12px', background: 'white', borderRadius: '8px', border: '1px solid #E2E0DD' }}>
                                                                     <div style={{ fontSize: '12px', fontWeight: '600', color: '#276749', marginBottom: '6px' }}>필요 증빙서류</div>
                                                                     <ul style={{ margin: '0', paddingLeft: '18px', fontSize: '13px', color: '#4A4540', lineHeight: '1.7' }}>
-                                                                        {account.docs.map((doc, j) => <li key={j}>{doc}</li>)}
+                                                                        {getDocsList(account.ruleKey !== undefined ? account.ruleKey : account.name).map((doc, j) => <li key={j}>{doc}</li>)}
                                                                     </ul>
                                                                 </div>
                                                                 <div style={{ padding: '10px 12px', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FDE68A', fontSize: '12px', color: '#92400E', lineHeight: '1.5' }}>
