@@ -1994,8 +1994,9 @@
             const [boardCurrentPage, setBoardCurrentPage] = useState(1);
             const [selectedPost, setSelectedPost] = useState(null);
             const [boardWriteData, setBoardWriteData] = useState({
-                title: '', content: '', board_type: 'notice', category: '', is_pinned: false
+                title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: ''
             });
+            const [editingPost, setEditingPost] = useState(null); // null이면 새글, 객체면 수정모드
 
             // 갤러리 상태
             const [galleryView, setGalleryView] = useState('list'); // list | detail | write
@@ -2004,8 +2005,9 @@
             const [galleryCurrentPage, setGalleryCurrentPage] = useState(1);
             const [selectedGalleryItem, setSelectedGalleryItem] = useState(null);
             const [galleryWriteData, setGalleryWriteData] = useState({
-                title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: ''
+                title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: ''
             });
+            const [editingGalleryItem, setEditingGalleryItem] = useState(null);
 
             // 링크 미리보기 상태
             const [linkPreviews, setLinkPreviews] = useState([]);
@@ -2516,6 +2518,20 @@
 
             const ITEMS_PER_PAGE = 10;
 
+            // 비밀번호 해시 유틸리티
+            const hashPassword = async (password) => {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(password);
+                const hash = await crypto.subtle.digest('SHA-256', data);
+                return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+            };
+
+            const verifyPostPassword = async (post, inputPassword) => {
+                if (!post.post_password) return true; // 비밀번호가 없는 글은 통과
+                const hashed = await hashPassword(inputPassword);
+                return hashed === post.post_password;
+            };
+
             // 링크 미리보기 추출 - 텍스트에서 URL을 감지
             const extractUrls = (text) => {
                 const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
@@ -2871,7 +2887,7 @@
             );
 
             // ===== 일반게시판 글쓰기 (리치에디터 + 첨부파일 + 링크미리보기) =====
-            const BoardWriteForm = ({ writeData, setWriteData, onSubmit, onCancel }) => {
+            const BoardWriteForm = ({ writeData, setWriteData, onSubmit, onCancel, isEdit }) => {
                 const handleEditorInput = () => {
                     const html = getEditorContent(boardEditorRef);
                     const text = getEditorText(boardEditorRef);
@@ -2886,7 +2902,7 @@
                 return (
                     <div className="board-write-form">
                         <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#134E42', marginBottom: '24px' }}>
-                            ✏️ 새 글 작성
+                            {isEdit ? '📝 글 수정' : '✏️ 새 글 작성'}
                         </h2>
 
                         <div className="form-group">
@@ -2964,6 +2980,20 @@
                         {/* 첨부파일 영역 */}
                         {FileUploadArea({ attachments: boardAttachments, setAttachments: setBoardAttachments, fileInputRef: boardFileInputRef })}
 
+                        {!isEdit && (
+                            <div className="form-group">
+                                <label className="form-label">🔒 비밀번호 <span style={{ fontSize: '12px', color: '#9C9690', fontWeight: '400' }}>(수정/삭제 시 필요)</span></label>
+                                <input
+                                    type="password"
+                                    className="form-input"
+                                    placeholder="비밀번호를 입력하세요"
+                                    value={writeData.password}
+                                    onChange={(e) => setWriteData(prev => ({ ...prev, password: e.target.value }))}
+                                    style={{ maxWidth: '300px' }}
+                                />
+                            </div>
+                        )}
+
                         {currentUser?.role === 'admin' && (
                             <div className="form-group">
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -2982,18 +3012,18 @@
                             <button
                                 className="btn btn-primary"
                                 onClick={onSubmit}
-                                disabled={!writeData.title.trim() || !getEditorText(boardEditorRef).trim()}
-                            >등록</button>
+                                disabled={!writeData.title.trim() || !getEditorText(boardEditorRef).trim() || (!isEdit && !writeData.password.trim())}
+                            >{isEdit ? '수정' : '등록'}</button>
                         </div>
                     </div>
                 );
             };
 
             // ===== 갤러리 글쓰기 (리치에디터 + 첨부파일) =====
-            const GalleryWriteForm = ({ writeData, setWriteData, onSubmit, onCancel }) => (
+            const GalleryWriteForm = ({ writeData, setWriteData, onSubmit, onCancel, isEdit }) => (
                 <div className="board-write-form">
                     <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#134E42', marginBottom: '24px' }}>
-                        📸 사진 등록
+                        {isEdit ? '📝 사진 수정' : '📸 사진 등록'}
                     </h2>
 
                     <div className="form-group">
@@ -3072,13 +3102,27 @@
                     {/* 첨부파일 영역 */}
                     {FileUploadArea({ attachments: galleryAttachments, setAttachments: setGalleryAttachments, fileInputRef: galleryFileInputRef })}
 
+                    {!isEdit && (
+                        <div className="form-group">
+                            <label className="form-label">🔒 비밀번호 <span style={{ fontSize: '12px', color: '#9C9690', fontWeight: '400' }}>(수정/삭제 시 필요)</span></label>
+                            <input
+                                type="password"
+                                className="form-input"
+                                placeholder="비밀번호를 입력하세요"
+                                value={writeData.password}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, password: e.target.value }))}
+                                style={{ maxWidth: '300px' }}
+                            />
+                        </div>
+                    )}
+
                     <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
                         <button className="btn btn-secondary" onClick={onCancel}>취소</button>
                         <button
                             className="btn btn-primary"
                             onClick={onSubmit}
-                            disabled={!writeData.title.trim()}
-                        >등록</button>
+                            disabled={!writeData.title.trim() || (!isEdit && !writeData.password.trim())}
+                        >{isEdit ? '수정' : '등록'}</button>
                     </div>
                 </div>
             );
@@ -3155,7 +3199,7 @@
             };
 
             // ===== 게시글 상세보기 (일반게시판) =====
-            const BoardDetailView = ({ post, onBack, attachments }) => {
+            const BoardDetailView = ({ post, onBack, attachments, onEdit, onDelete }) => {
                 if (!post) return null;
                 const typeInfo = BOARD_TYPE_MAP[post.board_type] || { label: post.board_type, badge: 'badge-info' };
 
@@ -3211,15 +3255,19 @@
                             </div>
                         )}
 
-                        <div className="board-detail-footer">
+                        <div className="board-detail-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <button className="btn btn-secondary" onClick={onBack}>← 목록으로</button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="btn btn-secondary" onClick={() => onEdit(post)} style={{ fontSize: '13px' }}>✏️ 수정</button>
+                                <button className="btn btn-secondary" onClick={() => onDelete(post)} style={{ fontSize: '13px', color: '#DC2626', borderColor: '#FCA5A5' }}>🗑️ 삭제</button>
+                            </div>
                         </div>
                     </div>
                 );
             };
 
             // ===== 갤러리 상세보기 =====
-            const GalleryDetailView = ({ item, onBack, attachments }) => {
+            const GalleryDetailView = ({ item, onBack, attachments, onEdit, onDelete }) => {
                 if (!item) return null;
                 const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
                 const isHtml = /<[a-z][\s\S]*>/i.test(item.description || '');
@@ -3261,8 +3309,12 @@
                         {/* 첨부파일 */}
                         {AttachmentListDisplay({ attachments: attachments || [] })}
 
-                        <div className="board-detail-footer">
+                        <div className="board-detail-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <button className="btn btn-secondary" onClick={onBack}>← 목록으로</button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="btn btn-secondary" onClick={() => onEdit(item)} style={{ fontSize: '13px' }}>✏️ 수정</button>
+                                <button className="btn btn-secondary" onClick={() => onDelete(item)} style={{ fontSize: '13px', color: '#DC2626', borderColor: '#FCA5A5' }}>🗑️ 삭제</button>
+                            </div>
                         </div>
                     </div>
                 );
@@ -3317,20 +3369,37 @@
                         board_type: boardWriteData.board_type,
                         title: boardWriteData.title.trim(),
                         content: editorContent,
-                        author_id: currentUser.id,
                         is_pinned: boardWriteData.is_pinned,
-                        status: 'published',
-                        published_at: new Date().toISOString(),
-                        tags: linkPreviews.length > 0 ? { links: linkPreviews } : null
+                        tags: linkPreviews.length > 0 ? { links: linkPreviews } : null,
+                        updated_at: new Date().toISOString()
                     };
 
-                    const { data: inserted, error: insertError } = await supabase
-                        .from('boards').insert([postData]).select().single();
-                    if (insertError) throw insertError;
+                    if (editingPost) {
+                        // 수정 모드
+                        const { error: updateError } = await supabase
+                            .from('boards').update(postData).eq('id', editingPost.id);
+                        if (updateError) throw updateError;
 
-                    // Upload attachments
-                    if (boardAttachments.length > 0 && inserted?.id) {
-                        await uploadAttachments(boardAttachments, 'board', inserted.id);
+                        // 새 첨부파일 업로드
+                        if (boardAttachments.length > 0) {
+                            await uploadAttachments(boardAttachments, 'board', editingPost.id);
+                        }
+                    } else {
+                        // 새글 작성
+                        postData.author_id = currentUser.id;
+                        postData.status = 'published';
+                        postData.published_at = new Date().toISOString();
+                        if (boardWriteData.password.trim()) {
+                            postData.post_password = await hashPassword(boardWriteData.password.trim());
+                        }
+
+                        const { data: inserted, error: insertError } = await supabase
+                            .from('boards').insert([postData]).select().single();
+                        if (insertError) throw insertError;
+
+                        if (boardAttachments.length > 0 && inserted?.id) {
+                            await uploadAttachments(boardAttachments, 'board', inserted.id);
+                        }
                     }
 
                     // Reload boards
@@ -3342,13 +3411,85 @@
 
                     setData(prev => ({ ...prev, boards: boards || [] }));
                     setBoardView('list');
-                    setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false });
+                    setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: '' });
+                    setEditingPost(null);
                     setLinkPreviews([]);
                     setBoardAttachments([]);
                     if (boardEditorRef.current) boardEditorRef.current.innerHTML = '';
                 } catch (err) {
                     console.error('게시글 저장 실패:', err);
                     alert('게시글 저장에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 게시글 수정 시작 =====
+            const startBoardEdit = async (post) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(post, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                setEditingPost(post);
+                setBoardWriteData({
+                    title: post.title,
+                    content: post.content,
+                    board_type: post.board_type,
+                    category: post.category || '',
+                    is_pinned: post.is_pinned || false,
+                    password: ''
+                });
+                setBoardView('write');
+                // 에디터 내용 설정 (다음 렌더 후)
+                setTimeout(() => {
+                    if (boardEditorRef.current) {
+                        boardEditorRef.current.innerHTML = post.content || '';
+                    }
+                }, 100);
+                // 기존 링크 미리보기 복원
+                if (post.tags?.links) {
+                    setLinkPreviews(post.tags.links);
+                }
+            };
+
+            // ===== 게시글 삭제 =====
+            const handleBoardDelete = async (post) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(post, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                if (!confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+                try {
+                    // 첨부파일 삭제
+                    const { data: attachments } = await supabase
+                        .from('attachments').select('file_path').eq('board_id', post.id);
+                    if (attachments?.length > 0) {
+                        await supabase.storage.from('attachments')
+                            .remove(attachments.map(a => a.file_path));
+                        await supabase.from('attachments').delete().eq('board_id', post.id);
+                    }
+                    // 게시글 삭제
+                    const { error } = await supabase.from('boards').delete().eq('id', post.id);
+                    if (error) throw error;
+
+                    // Reload
+                    const { data: boards } = await supabase
+                        .from('boards')
+                        .select('*, author:users(name)')
+                        .eq('status', 'published')
+                        .order('created_at', { ascending: false });
+                    setData(prev => ({ ...prev, boards: boards || [] }));
+                    setBoardView('list');
+                    setSelectedPost(null);
+                    setDetailAttachments([]);
+                    alert('게시글이 삭제되었습니다.');
+                } catch (err) {
+                    console.error('게시글 삭제 실패:', err);
+                    alert('삭제에 실패했습니다: ' + (err.message || err));
                 }
             };
 
@@ -3364,18 +3505,34 @@
                         location: galleryWriteData.location.trim() || null,
                         photographer: galleryWriteData.photographer.trim() || null,
                         taken_date: galleryWriteData.taken_date || null,
-                        image_path: 'placeholder',
-                        uploaded_by: currentUser.id,
-                        is_public: true
+                        updated_at: new Date().toISOString()
                     };
 
-                    const { data: inserted, error: insertError } = await supabase
-                        .from('galleries').insert([postData]).select().single();
-                    if (insertError) throw insertError;
+                    if (editingGalleryItem) {
+                        // 수정 모드
+                        const { error: updateError } = await supabase
+                            .from('galleries').update(postData).eq('id', editingGalleryItem.id);
+                        if (updateError) throw updateError;
 
-                    // Upload attachments
-                    if (galleryAttachments.length > 0 && inserted?.id) {
-                        await uploadAttachments(galleryAttachments, 'gallery', inserted.id);
+                        if (galleryAttachments.length > 0) {
+                            await uploadAttachments(galleryAttachments, 'gallery', editingGalleryItem.id);
+                        }
+                    } else {
+                        // 새글 작성
+                        postData.image_path = 'placeholder';
+                        postData.uploaded_by = currentUser.id;
+                        postData.is_public = true;
+                        if (galleryWriteData.password.trim()) {
+                            postData.post_password = await hashPassword(galleryWriteData.password.trim());
+                        }
+
+                        const { data: inserted, error: insertError } = await supabase
+                            .from('galleries').insert([postData]).select().single();
+                        if (insertError) throw insertError;
+
+                        if (galleryAttachments.length > 0 && inserted?.id) {
+                            await uploadAttachments(galleryAttachments, 'gallery', inserted.id);
+                        }
                     }
 
                     const { data: galleries } = await supabase
@@ -3385,12 +3542,76 @@
 
                     setData(prev => ({ ...prev, galleries: galleries || [] }));
                     setGalleryView('list');
-                    setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '' });
+                    setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' });
+                    setEditingGalleryItem(null);
                     setGalleryAttachments([]);
                     if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = '';
                 } catch (err) {
                     console.error('갤러리 저장 실패:', err);
                     alert('사진 등록에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 갤러리 수정 시작 =====
+            const startGalleryEdit = async (item) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(item, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                setEditingGalleryItem(item);
+                setGalleryWriteData({
+                    title: item.title,
+                    description: item.description || '',
+                    category: item.category,
+                    location: item.location || '',
+                    photographer: item.photographer || '',
+                    taken_date: item.taken_date || '',
+                    password: ''
+                });
+                setGalleryView('write');
+                setTimeout(() => {
+                    if (galleryEditorRef.current) {
+                        galleryEditorRef.current.innerHTML = item.description || '';
+                    }
+                }, 100);
+            };
+
+            // ===== 갤러리 삭제 =====
+            const handleGalleryDelete = async (item) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(item, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                if (!confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+                try {
+                    const { data: attachments } = await supabase
+                        .from('attachments').select('file_path').eq('gallery_id', item.id);
+                    if (attachments?.length > 0) {
+                        await supabase.storage.from('attachments')
+                            .remove(attachments.map(a => a.file_path));
+                        await supabase.from('attachments').delete().eq('gallery_id', item.id);
+                    }
+                    const { error } = await supabase.from('galleries').delete().eq('id', item.id);
+                    if (error) throw error;
+
+                    const { data: galleries } = await supabase
+                        .from('galleries')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    setData(prev => ({ ...prev, galleries: galleries || [] }));
+                    setGalleryView('list');
+                    setSelectedGalleryItem(null);
+                    setDetailAttachments([]);
+                    alert('갤러리 항목이 삭제되었습니다.');
+                } catch (err) {
+                    console.error('갤러리 삭제 실패:', err);
+                    alert('삭제에 실패했습니다: ' + (err.message || err));
                 }
             };
 
@@ -3434,7 +3655,9 @@
                             {BoardDetailView({
                                 post: selectedPost,
                                 onBack: () => { setBoardView('list'); setSelectedPost(null); setDetailAttachments([]); },
-                                attachments: detailAttachments
+                                attachments: detailAttachments,
+                                onEdit: startBoardEdit,
+                                onDelete: handleBoardDelete
                             })}
                         </div>
                     );
@@ -3444,7 +3667,7 @@
                     return (
                         <div>
                             <div style={{ marginBottom: '16px' }}>
-                                <button className="btn btn-secondary" onClick={() => { setBoardView('list'); setLinkPreviews([]); setBoardAttachments([]); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; }}>
+                                <button className="btn btn-secondary" onClick={() => { setBoardView('list'); setEditingPost(null); setLinkPreviews([]); setBoardAttachments([]); setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: '' }); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; }}>
                                     ← 목록으로
                                 </button>
                             </div>
@@ -3452,7 +3675,8 @@
                                 writeData: boardWriteData,
                                 setWriteData: setBoardWriteData,
                                 onSubmit: handleBoardSubmit,
-                                onCancel: () => { setBoardView('list'); setLinkPreviews([]); setBoardAttachments([]); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; }
+                                onCancel: () => { setBoardView('list'); setEditingPost(null); setLinkPreviews([]); setBoardAttachments([]); setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: '' }); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; },
+                                isEdit: !!editingPost
                             })}
                         </div>
                     );
@@ -3588,7 +3812,9 @@
                             {GalleryDetailView({
                                 item: selectedGalleryItem,
                                 onBack: () => { setGalleryView('list'); setSelectedGalleryItem(null); setDetailAttachments([]); },
-                                attachments: detailAttachments
+                                attachments: detailAttachments,
+                                onEdit: startGalleryEdit,
+                                onDelete: handleGalleryDelete
                             })}
                         </div>
                     );
@@ -3606,7 +3832,8 @@
                                 writeData: galleryWriteData,
                                 setWriteData: setGalleryWriteData,
                                 onSubmit: handleGallerySubmit,
-                                onCancel: () => { setGalleryView('list'); setGalleryAttachments([]); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; }
+                                onCancel: () => { setGalleryView('list'); setEditingGalleryItem(null); setGalleryAttachments([]); setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' }); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; },
+                                isEdit: !!editingGalleryItem
                             })}
                         </div>
                     );
@@ -5790,8 +6017,8 @@
                                     onClick={() => {
                                         setCurrentPage(nav.id);
                                         // Reset board/gallery views when navigating
-                                        if (nav.id === 'board') { setBoardView('list'); setSelectedPost(null); }
-                                        if (nav.id === 'gallery') { setGalleryView('list'); setSelectedGalleryItem(null); }
+                                        if (nav.id === 'board') { setBoardView('list'); setSelectedPost(null); setEditingPost(null); }
+                                        if (nav.id === 'gallery') { setGalleryView('list'); setSelectedGalleryItem(null); setEditingGalleryItem(null); }
                                     }}
                                     title={nav.description}
                                 >

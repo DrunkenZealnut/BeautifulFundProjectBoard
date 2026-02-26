@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS public.galleries (
     file_size INTEGER,
     image_width INTEGER,
     image_height INTEGER,
+    post_password VARCHAR(255),
     taken_date DATE,
     location VARCHAR(200),
     photographer VARCHAR(100),
@@ -133,6 +134,7 @@ CREATE TABLE IF NOT EXISTS public.boards (
     board_type TEXT CHECK (board_type IN ('notice', 'materials', 'report', 'free')) NOT NULL,
     title VARCHAR(300) NOT NULL,
     content TEXT NOT NULL,
+    post_password VARCHAR(255),
     category VARCHAR(100),
     subcategory VARCHAR(100),
     author_id UUID NOT NULL REFERENCES public.users(id),
@@ -272,6 +274,14 @@ BEGIN
     DROP POLICY IF EXISTS "Public update access for galleries" ON public.galleries;
     CREATE POLICY "Public update access for galleries" ON public.galleries
         FOR UPDATE USING (true) WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Public delete access for boards" ON public.boards;
+    CREATE POLICY "Public delete access for boards" ON public.boards
+        FOR DELETE USING (true);
+
+    DROP POLICY IF EXISTS "Public delete access for galleries" ON public.galleries;
+    CREATE POLICY "Public delete access for galleries" ON public.galleries
+        FOR DELETE USING (true);
 END
 $$;
 
