@@ -1139,10 +1139,10 @@
                 setIsLoading(true);
 
                 try {
-                    // users 테이블에서 username으로 조회
+                    // users 테이블에서 username으로 조회 (password_hash는 인증에만 사용)
                     const { data: users, error } = await supabase
                         .from('users')
-                        .select('*')
+                        .select('id, username, name, email, role, phone, organization, position, password_hash')
                         .eq('username', username)
                         .eq('is_active', true)
                         .limit(1);
@@ -1164,7 +1164,7 @@
                         return;
                     }
 
-                    // 로그인 성공 - localStorage에 세션 저장
+                    // 로그인 성공 - localStorage에 세션 저장 (password_hash 제외, 만료시간 포함)
                     const sessionData = {
                         id: user.id,
                         username: user.username,
@@ -1172,7 +1172,8 @@
                         role: user.role,
                         email: user.email,
                         organization: user.organization,
-                        position: user.position
+                        position: user.position,
+                        expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24시간
                     };
                     localStorage.setItem('bf_user_session', JSON.stringify(sessionData));
                     onLogin(sessionData);
@@ -1237,7 +1238,14 @@
             const [currentUser, setCurrentUser] = useState(() => {
                 try {
                     const saved = localStorage.getItem('bf_user_session');
-                    return saved ? JSON.parse(saved) : null;
+                    if (!saved) return null;
+                    const session = JSON.parse(saved);
+                    // 세션 만료 확인
+                    if (session.expiresAt && Date.now() > session.expiresAt) {
+                        localStorage.removeItem('bf_user_session');
+                        return null;
+                    }
+                    return session;
                 } catch { return null; }
             });
 
@@ -2903,7 +2911,7 @@
                 try {
                     const { data: users, error } = await supabase
                         .from('users')
-                        .select('*')
+                        .select('id, username, name, email, role, phone, organization, position, is_active, created_at, updated_at')
                         .order('created_at', { ascending: true });
 
                     if (error) throw error;
@@ -3086,13 +3094,15 @@
                 viewer: '열람자'
             };
 
-            // 관리자 페이지 렌더링
-            const renderAdmin = () => {
-                // 관리자 페이지 진입 시 사용자 목록 로딩
-                if (adminUsers.length === 0 && !adminLoading) {
+            // 관리자 페이지 진입 시 사용자 목록 로딩
+            useEffect(() => {
+                if (currentPage === 'admin' && adminUsers.length === 0 && !adminLoading) {
                     loadAdminUsers();
                 }
+            }, [currentPage]);
 
+            // 관리자 페이지 렌더링
+            const renderAdmin = () => {
                 return (
                     <div>
                         <h1 className="section-title">⚙️ 관리자</h1>

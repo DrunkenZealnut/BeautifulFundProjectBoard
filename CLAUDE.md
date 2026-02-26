@@ -58,6 +58,9 @@ Navigation is state-driven (no URL routing) via `currentPage` state:
 - Session stored in `localStorage` (`bf_user_session`)
 - Admin page visible only to users with `role = 'admin'`
 - Default admin account: `admin` / `admin1234`
+- Session expires after 24 hours
+
+> **중요**: 프로덕션 환경에서는 반드시 기본 관리자 비밀번호를 변경하세요!
 
 ### File variants
 
