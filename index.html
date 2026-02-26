@@ -1,0 +1,2373 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>아름다운재단 2026 공익단체 인큐베이팅 지원사업 관리시스템</title>
+
+    <!-- React 및 Babel CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Supabase 클라이언트 -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background-color: #F8F6F1;
+            color: #2D2D2D;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #134E42 0%, #1B6B5A 100%);
+            color: white;
+            padding: 24px 0;
+            margin-bottom: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(19, 78, 66, 0.15);
+        }
+
+        .navigation {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .nav-btn.active {
+            background: #1B6B5A;
+            color: white;
+            box-shadow: 0 2px 8px rgba(27, 107, 90, 0.3);
+        }
+
+        .nav-btn:not(.active) {
+            background: transparent;
+            color: #6B6560;
+        }
+
+        .nav-btn:not(.active):hover {
+            background: #F8F9FA;
+            color: #134E42;
+        }
+
+        .content-area {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+            padding: 32px;
+            min-height: 500px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #F8F9FA 0%, #FFFFFF 100%);
+            border: 1px solid #EBE8E1;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: #134E42;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #9C9690;
+            font-weight: 500;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 20px 0;
+            color: #134E42;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-subtitle {
+            color: #6B6560;
+            margin: 0 0 28px 0;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .item-card {
+            background: #FFFFFF;
+            border: 1px solid #E9ECEF;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .item-card:hover {
+            border-color: #1B6B5A;
+            box-shadow: 0 4px 12px rgba(27, 107, 90, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .item-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            color: #2D2D2D;
+        }
+
+        .item-meta {
+            font-size: 13px;
+            color: #6C757D;
+            line-height: 1.4;
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+            color: #6B6560;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #1B6B5A;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #FFF5F5;
+            border: 1px solid #FEB2B2;
+            color: #C53030;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .success-message {
+            background: #F0FFF4;
+            border: 1px solid #9AE6B4;
+            color: #276749;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #2D2D2D;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #1B6B5A;
+            box-shadow: 0 0 0 3px rgba(27, 107, 90, 0.1);
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #1B6B5A;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #134E42;
+        }
+
+        .btn-secondary {
+            background: #F8F9FA;
+            color: #6B6560;
+            border: 1px solid #D1D5DB;
+        }
+
+        .btn-secondary:hover {
+            background: #E9ECEF;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #EBE8E1;
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+            color: #2D2D2D;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #D4EDDA;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #FFF3CD;
+            color: #856404;
+        }
+
+        .badge-info {
+            background: #D1ECF1;
+            color: #0C5460;
+        }
+
+        /* 고급 예산관리 탭 스타일 */
+        .tab-navigation {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .tab-btn.active {
+            background: #1B6B5A;
+            color: white;
+            box-shadow: 0 2px 8px rgba(27, 107, 90, 0.3);
+        }
+
+        .tab-btn:not(.active) {
+            background: #F8F9FA;
+            color: #6B6560;
+        }
+
+        .tab-btn:not(.active):hover {
+            background: #E9ECEF;
+            color: #134E42;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #2D3748;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 12px 16px;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #1B6B5A;
+            box-shadow: 0 0 0 3px rgba(27, 107, 90, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1B6B5A 0%, #134E42 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(27, 107, 90, 0.3);
+        }
+
+        .btn-secondary {
+            background: #F7FAFC;
+            color: #4A5568;
+            border: 1px solid #E2E8F0;
+        }
+
+        .btn-secondary:hover {
+            background: #EDF2F7;
+        }
+
+        .calculation-result {
+            background: linear-gradient(135deg, #1B6B5A 0%, #134E42 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 16px;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .result-item:last-child {
+            margin-bottom: 0;
+            font-weight: 700;
+            font-size: 18px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 24px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+        }
+
+        .execution-item {
+            background: white;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+
+        .execution-item:hover {
+            border-color: #1B6B5A;
+            box-shadow: 0 4px 12px rgba(27, 107, 90, 0.1);
+        }
+
+        .execution-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .execution-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2D3748;
+            margin-bottom: 4px;
+        }
+
+        .execution-amount {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1B6B5A;
+        }
+
+        .execution-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 8px;
+            color: #6B6560;
+            font-size: 14px;
+        }
+
+        .documents-list {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #E2E8F0;
+        }
+
+        .document-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            color: #6B6560;
+            font-size: 13px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            .navigation {
+                padding: 12px;
+            }
+
+            .nav-btn {
+                padding: 10px 12px;
+                font-size: 13px;
+            }
+
+            .content-area {
+                padding: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                gap: 16px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .execution-header {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .execution-meta {
+                grid-template-columns: 1fr;
+            }
+
+            .tab-navigation {
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <div>시스템을 초기화하고 있습니다...</div>
+        </div>
+    </div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+
+        // Supabase 설정 (SUPABASE_SETUP.md에서 가져온 올바른 키)
+        const supabaseUrl = 'https://exnloiyzmdzbhljwwxrs.supabase.co';
+        const supabaseKey = 'sb_publishable_6EjqM_6qP_wFQGD54P2M9Q_eULAJHnJ';
+
+        console.log('🚀 Supabase 초기화 중...', { url: supabaseUrl, keyLength: supabaseKey.length });
+
+        // Supabase 클라이언트 초기화
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        console.log('✅ Supabase 클라이언트 초기화됨:', supabase);
+        console.log('🔑 API Key 상태:', supabaseKey ? '존재함' : '없음');
+
+        // 예산 구조 데이터 (청년노동자인권센터 2026년 실제 예산편성 현황)
+        const BUDGET_DATA = {
+            projectName: "2026 공익단체 인큐베이팅 지원사업",
+            organization: "청년노동자인권센터",
+            totalBudget: 70000000,
+            period: "2026.01 ~ 2026.12",
+            halfYearBudgets: {
+                firstHalf: 35410000,
+                secondHalf: 34590000
+            },
+            categories: [
+                {
+                    id: "project-costs",
+                    name: "사업비",
+                    budget: 30300000,
+                    description: "사업의 직접적 목적달성을 위한 비용",
+                    subcategories: [
+                        {
+                            id: "labor-safety-textbook",
+                            name: "노동안전보건 교과서 기초연구",
+                            budget: 9100000,
+                            description: "반도체고 학생들을 위한 노동안전보건 교과서 개발 연구",
+                            items: [
+                                { id: "seminar-fee", name: "세미나 진행비", type: "사업인건비", budget: 1000000, detail: "1인*4회*250,000" },
+                                { id: "consultation-fee", name: "자문비", type: "사업인건비", budget: 1500000, detail: "10회 * 150,000(자문위원, 반도체관련전문가, 교사등)" },
+                                { id: "interview-fee", name: "인터뷰 진행비", type: "사업인건비", budget: 6000000, detail: "반도체고 학생, 졸업생, 관련기업 노동자 인터뷰 10회 * 100,000원" },
+                                { id: "meeting-expense", name: "회의비", type: "사업회의비", budget: 600000, detail: "식비 및 다과 6회*5명 * 20,000원" }
+                            ]
+                        },
+                        {
+                            id: "labor-safety-app",
+                            name: "노동안전보건 APP",
+                            budget: 2000000,
+                            description: "APP을 통한 입체적인 교육과 최신 정보 업데이트",
+                            items: [
+                                { id: "app-consultation", name: "개발설계 자문", type: "사업인건비", budget: 1000000, detail: "개발설계, 자문" },
+                                { id: "app-development", name: "앱 개발비", type: "지급수수료", budget: 1000000, detail: "서버비용, 애플개발자등록비용, RAG구축" }
+                            ]
+                        },
+                        {
+                            id: "campaign",
+                            name: "캠페인",
+                            budget: 7600000,
+                            description: "반도체고 청소년들과의 일상적인 관계형성을 위한 캠페인",
+                            items: [
+                                { id: "campaign-consultation", name: "캠페인 자문", type: "사업인건비", budget: 900000, detail: "6회 * 150,000원" },
+                                { id: "campaign-travel", name: "캠페인 교통비", type: "여비교통비", budget: 3000000, detail: "30회 * 100,000원" },
+                                { id: "campaign-supplies", name: "캠페인 물품", type: "물품구매비", budget: 2500000, detail: "테이블, 배너, 의자, 문구류 등" },
+                                { id: "campaign-meeting", name: "캠페인 회의비", type: "사업회의비", budget: 1200000, detail: "15회*4인*20,000" }
+                            ]
+                        },
+                        {
+                            id: "youth-committee",
+                            name: "청소년 참견위원회",
+                            budget: 11100000,
+                            description: "청소년참견위원회를 모집하여 학내 노동안전보건인식 제고 활동 지원",
+                            items: [
+                                { id: "committee-consultation", name: "위원회 자문", type: "사업인건비", budget: 600000, detail: "자문 4회*150,000" },
+                                { id: "committee-meeting", name: "위원회 운영비", type: "사업회의비", budget: 5000000, detail: "5개학교 운영 및 학습지원 - 식비 5회 * 10명 * 20,000원 * 5개교" },
+                                { id: "committee-supplies", name: "위원회 학습지원", type: "물품구매비", budget: 5000000, detail: "5개교 운영 및 학습지원 - 구독, 도서구매, 학내활동 5개교 x 1,000,000원" },
+                                { id: "school-visit", name: "학교방문비", type: "여비교통비", budget: 500000, detail: "학교방문 5회 * 100,000원" }
+                            ]
+                        },
+                        {
+                            id: "reserve",
+                            name: "예비비",
+                            budget: 500000,
+                            description: "예상 외 소요 비용",
+                            items: [
+                                { id: "reserve-fund", name: "예비비", type: "예비비", budget: 500000, detail: "예상 외 소요 비용" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "operating-costs",
+                    name: "운영비",
+                    budget: 39700000,
+                    description: "단체의 기관운영 및 관리를 위한 비용",
+                    subcategories: [
+                        {
+                            id: "operating-personnel",
+                            name: "운영인건비",
+                            budget: 35250000,
+                            description: "단체 활동가의 기본급여 및 관련 비용",
+                            items: [
+                                { id: "regular-salary", name: "상근활동가 인건비", type: "운영인건비", budget: 30400000, detail: "서울시생활임금(12,121원)*12개월*209시간" },
+                                { id: "part-time-salary", name: "시간제 인건비", type: "운영인건비", budget: 4850000, detail: "년400시간 인건비 : 서울시생활임금(12,121원)*400시간" }
+                            ]
+                        },
+                        {
+                            id: "rent",
+                            name: "임차료",
+                            budget: 660000,
+                            description: "사무실 임차비",
+                            items: [
+                                { id: "office-rent", name: "사무실 임대료", type: "임차료", budget: 660000, detail: "55,000*12" }
+                            ]
+                        },
+                        {
+                            id: "general-management",
+                            name: "일반관리비",
+                            budget: 2230000,
+                            description: "사무용품, 소프트웨어 구독 등",
+                            items: [
+                                { id: "software-claude", name: "클로드코드", type: "일반관리비", budget: 1650000, detail: "150,000*11" },
+                                { id: "google-workspace", name: "구글워크스페이스", type: "일반관리비", budget: 207900, detail: "18,900*11" },
+                                { id: "n8n-subscription", name: "n8n 구독", type: "일반관리비", budget: 374000, detail: "34,000*11" }
+                            ]
+                        },
+                        {
+                            id: "education-training",
+                            name: "교육훈련비",
+                            budget: 1000000,
+                            description: "운영위 운영비 및 워크샵",
+                            items: [
+                                { id: "workshop-expense", name: "운영위 운영비 및 워크샵", type: "교육훈련비", budget: 1000000, detail: "숙소예약, 식사" }
+                            ]
+                        },
+                        {
+                            id: "organization-promotion",
+                            name: "홍보비",
+                            budget: 560000,
+                            description: "단체 홍보물 제작",
+                            items: [
+                                { id: "promotional-materials", name: "단체 홍보물", type: "홍보비", budget: 560000, detail: "단체 팜플렛, 명함, 피켓 등" }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        // 증빙서류 규칙 엔진 (아름다운재단 2026 공익단체 인큐베이팅 지원사업 기준)
+        const DOCUMENT_RULES = {
+            "사업인건비": {
+                description: "강사비, 원고비, 발제비, 토론비, 인터뷰 사례비, 자문비, 회의참석비, 단순인건비 등 (단체 내부인 지급불가)",
+                paymentMethod: "계좌이체만 가능 (현금 지급 불가)",
+                base: ["전용계좌 체크카드 매출전표 또는 이체내역서"],
+                required: [
+                    "수령확인증 (재단서식)",
+                    "이체내역서 (일괄출력)",
+                    "이력서 (강사비, 발제비, 토론비 등 지급 시)",
+                    "회의진행일지 (재단서식) 또는 강의/토론 자료나 사진 등 비용지출 증명자료"
+                ],
+                conditional: [
+                    "기타소득지급명세서 소득자별 연간집계표 (해당 시에만 제출)"
+                ],
+                withholding: true,
+                withholdingThreshold: 125000,
+                withholdingRate: { income: 8, local: 1 },
+                notes: "단체 내부인에는 지급 불가. 계좌입금 원칙, 원천징수금액은 운영통장으로 이체 후 집행. 주민번호 취합 필요 (연말 기타소득지급명세서 제출용)."
+            },
+            "운영인건비": {
+                description: "단체 활동가(사업담당자)의 기본급여, 법정수당, 퇴직급여적립금, 사회보험 사용자부담금 등 (지원단체 소속자만 지급가능)",
+                paymentMethod: "사업전용계좌에서 단체 운영통장으로 일괄 이체 후 지급",
+                base: ["급여지급명세서 (재단서식 제공)", "이체내역서 (일괄출력)"],
+                required: [
+                    "사업전용통장에서 기관운영계좌로의 이체확인증 (1건)",
+                    "기관운영계좌에서 담당자 개인계좌로의 이체확인증 (월 이체 내역)"
+                ],
+                conditional: [],
+                withholding: false,
+                notes: "지원단체 소속자에게만 지급 가능. 사업전용계좌에서 바로 지급하지 않고 운영통장 경유."
+            },
+            "사업회의비": {
+                description: "행사, 회의 등 진행을 위한 장소 대관비, 다과구입, 식비 등 (인건비성 경비 편성불가)",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서", "(전자)계산서", "현금영수증(매출증빙)"],
+                required: ["영수증", "이체내역서 (계좌이체시)"],
+                conditional: [
+                    "사업자등록증 사본 (세금계산서 발급시)",
+                    "면세사업자등록증 (계산서 발급시)"
+                ],
+                withholding: false,
+                notes: "인건비성 경비 지출 불가. 주류, 노래방 등 비용 지출 불가. 교통비는 여비교통비 계정으로 별도 지출."
+            },
+            "사업홍보비": {
+                description: "단위사업 홍보, 사업참여자 모집을 목적으로 지출한 홍보 비용",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서", "(전자)계산서", "현금영수증(매출증빙)"],
+                required: ["영수증", "이체내역서 (계좌이체시)", "사업관련성 입증자료"],
+                conditional: [
+                    "사업자등록증 사본 (세금계산서 발급시)",
+                    "면세사업자등록증 (계산서 발급시)"
+                ],
+                withholding: false,
+                notes: "단위사업과의 직접적 연관성이 입증되어야 함."
+            },
+            "물품구매비": {
+                description: "단위사업에 필요한 물품 구입비용",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서", "(전자)계산서", "현금영수증(매출증빙)"],
+                required: [
+                    "구매내역 또는 거래명세서 사본",
+                    "세금계산서(카드매출전표)",
+                    "이체내역서 (계좌이체시)",
+                    "업체 사업자등록증 사본"
+                ],
+                conditional: [
+                    "비교견적서 및 업체 견적서 (100만원 미만의 경우 최종 계약업체의 상세견적서만 제출)"
+                ],
+                withholding: false,
+                notes: "적격증빙이 불가능한 개인과의 중고거래물품 구입 등은 인정되지 않음."
+            },
+            "도서인쇄비": {
+                description: "자료집, 교재제본, 리플렛 등 인쇄물 제작비",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서", "(전자)계산서", "현금영수증(매출증빙)"],
+                required: ["영수증", "이체내역서 (계좌이체시)", "제작물 샘플 또는 사진"],
+                conditional: [
+                    "사업자등록증 사본 (세금계산서 발급시)",
+                    "면세사업자등록증 (계산서 발급시)"
+                ],
+                withholding: false,
+                notes: "사업목적과 부합하는 인쇄물만 인정."
+            },
+            "지급수수료": {
+                description: "전문서비스 수수료, 용역비 등",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "세금계산서(업체) 또는 수령확인증(개인)"],
+                required: [
+                    "계약서 사본",
+                    "세금계산서(업체) 또는 수령확인증/기타소득지급명세서(개인)",
+                    "이체내역서 (일괄출력)",
+                    "사업자등록증(업체) 또는 신분증 사본(개인, 주민번호 뒷자리 마스킹)",
+                    "비교견적서 및 업체 견적서 (100만원 미만의 경우 최종 계약업체의 상세견적서만)"
+                ],
+                conditional: [
+                    "이력서, 포트폴리오, 사유서 (개인용역계약의 경우)"
+                ],
+                withholding: true,
+                withholdingThreshold: 125000,
+                withholdingRate: { income: 8, local: 1 },
+                notes: "개인용역계약시 추가 서류 필요. 원천징수 대상인 경우 세무처리 필요."
+            },
+            "여비교통비": {
+                description: "사업 관련 교통비 및 출장비 (실비지출, 영수증 필수)",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["교통비 영수증", "숙박비 영수증", "식비 영수증"],
+                required: ["영수증 (실비지출 증빙)", "출장보고서 또는 회의참석 확인서"],
+                conditional: [],
+                withholding: false,
+                notes: "실비지출에 한정. 영수증이 없는 경우 불인정. 사업인건비와 중복지출 불가."
+            },
+            "교육훈련비": {
+                description: "단체 활동가의 역량강화를 위한 교육비, 대내외 인사 및 위원회 운영 회의비",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서", "(전자)계산서"],
+                required: ["영수증", "교육참석 확인서", "교육내용 관련 자료"],
+                conditional: ["이체내역서 (계좌이체시)"],
+                withholding: false,
+                notes: "단체 활동가 역량강화 목적에 부합해야 함."
+            },
+            "기자재구매관리비": {
+                description: "단체운영에 필요한 유무형자산 구입비 및 유지보수비 (취득단가 100만원 이상)",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서"],
+                required: [
+                    "구매내역 또는 거래명세서",
+                    "세금계산서",
+                    "사업자등록증 사본",
+                    "비교견적서 (100만원 이상)"
+                ],
+                conditional: ["이체내역서 (계좌이체시)"],
+                withholding: false,
+                notes: "취득단가 100만원 이상 자산. 단체운영 목적에 부합해야 함."
+            },
+            "일반관리비": {
+                description: "사무용품, 소모성물품, 수도광열비, 통신비, 제세공과금, 보험료, 금융기관수수료 등 (취득단가 100만원 미만)",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서", "(전자)계산서", "현금영수증"],
+                required: ["영수증", "사업관련성 입증자료"],
+                conditional: ["이체내역서 (계좌이체시)"],
+                withholding: false,
+                notes: "취득단가 100만원 미만. 단체운영에 필요한 경비. 사회보험 사용자부담금 등은 운영인건비로 편성."
+            },
+            "홍보비": {
+                description: "단체홍보, 회원모집, 회원활동지원, 모금활동을 목적으로 지출한 홍보비용",
+                paymentMethod: "전용계좌 체크카드 또는 계좌이체",
+                base: ["전용계좌 체크카드 매출전표", "(전자)세금계산서", "(전자)계산서"],
+                required: ["영수증", "홍보활동 관련 자료 (결과물, 사진 등)"],
+                conditional: ["이체내역서 (계좌이체시)"],
+                withholding: false,
+                notes: "단체홍보 목적에 부합해야 함. 사업홍보비와 구분하여 운영."
+            }
+        };
+
+        function ProjectManagementSystem() {
+            const [currentPage, setCurrentPage] = useState("dashboard");
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [data, setData] = useState({
+                schedules: [],
+                galleries: [],
+                boards: [],
+                budgetExecutions: [],
+                stats: {}
+            });
+
+            // 예산관리 상태
+            const [budgetTab, setBudgetTab] = useState("dashboard");
+            const [formData, setFormData] = useState({
+                subcategory_id: '',
+                subcategory_name: '',
+                category_name: '',
+                budget_item_id: '',
+                budget_item_name: '',
+                type: '',
+                description: '',
+                amount: '',
+                payment_method: '카드',
+                execution_date: new Date().toISOString().split('T')[0],
+                recipient: ''
+            });
+            const [calculatorAmount, setCalculatorAmount] = useState('');
+            const [calculationResult, setCalculationResult] = useState(null);
+            const [calcIncomeType, setCalcIncomeType] = useState('강사료');
+            const [calcPersons, setCalcPersons] = useState([{ name: '', amount: '' }]);
+            const [calcMultiResults, setCalcMultiResults] = useState(null);
+            const [calcMode, setCalcMode] = useState('single'); // single | multi
+
+            // 예산관리 helper functions
+            // 원천징수 계산: 원단위 절사 (국세, 지방세 따로 계산 후 절사)
+            const calculateWithholdingTax = (amount) => {
+                if (amount <= 125000) {
+                    return { income: 0, local: 0, total: 0, net: amount, taxable: false };
+                }
+                const incomeTax = Math.floor(amount * 0.08);   // 국세: 8% 후 원단위 절사
+                const localTax = Math.floor(incomeTax * 0.1);   // 지방세: 국세의 10% 후 원단위 절사
+                return {
+                    income: incomeTax,
+                    local: localTax,
+                    total: incomeTax + localTax,
+                    net: amount - (incomeTax + localTax),
+                    taxable: true
+                };
+            };
+
+            const calculateMultiPersonTax = () => {
+                const results = calcPersons
+                    .filter(p => p.amount && parseInt(p.amount) > 0)
+                    .map(p => ({
+                        name: p.name || '(이름없음)',
+                        amount: parseInt(p.amount),
+                        ...calculateWithholdingTax(parseInt(p.amount))
+                    }));
+                const summary = results.reduce((acc, r) => ({
+                    totalAmount: acc.totalAmount + r.amount,
+                    totalIncome: acc.totalIncome + r.income,
+                    totalLocal: acc.totalLocal + r.local,
+                    totalTax: acc.totalTax + r.total,
+                    totalNet: acc.totalNet + r.net
+                }), { totalAmount: 0, totalIncome: 0, totalLocal: 0, totalTax: 0, totalNet: 0 });
+                setCalcMultiResults({ persons: results, summary });
+            };
+
+            // 소득유형별 정보
+            const INCOME_TYPE_INFO = {
+                '강사료': {
+                    label: '강사료',
+                    desc: '외부 강사 초빙 시 지급하는 강의 대가',
+                    docs: ['강의확인서 (인적사항, 강의일시/장소/주제, 소속/직위)', '강사료 지급내역서 (등급, 강사료, 공제액, 실지급액, 입금계좌)', '이체증', '강의 유인물 또는 강의자료 또는 강의사진 중 1가지', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['외래강사에 한하여 지급 (단체 직원, 임직원 지급 불가)', '금액 불문 계좌입금 원칙', '강사 등급에 맞는 이력사항 기재 필수', '야외 현장 강의 시 강의사진 첨부 필수']
+                },
+                '단순인건비': {
+                    label: '단순인건비',
+                    desc: '일용직 형태로 고용한 임시 근로자에게 지급하는 인건비',
+                    docs: ['고용 계획서 (고용목적, 기간, 인적사항, 지급단가)', '업무일지 또는 참여확인서', '지급내역서 (이름, 업무, 근무기간, 인건비, 공제액, 실지급액, 입금계좌)', '이체증', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['단체 구성원이나 임직원에게 지급 불가', '반드시 계좌이체 (현금지급 불가)', '고용 전 내부 품의 결재 필요', '주민번호 취합 필요 (연말 기타소득지급명세서 제출용)']
+                },
+                '회의참석수당': {
+                    label: '회의참석수당 / 심사비 / 토론비 / 발제비',
+                    desc: '전문가 자문회의 등 참가자에게 지급하는 수당',
+                    docs: ['회의참석 확인서 (인적사항, 회의명, 일시/장소)', '회의 참석수당 지급내역서', '회의록 사본', '이체증', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['1일 1회 한하여 지급 (최대 15만원)', '기본료 2시간 이내: 100,000원', '초과료 2시간 초과 시: +50,000원 (시간 무관)', '단체 임직원, 단순 청중에게 지급 불가', '토론비/발제비는 회의참석수당 적용 (강사수당 불가)', '금액 불문 계좌이체 원칙']
+                },
+                '원고료': {
+                    label: '원고료',
+                    desc: '외부 기고, 번역, 원고 작성 등에 대한 대가',
+                    docs: ['원고 수령 확인서', '지급내역서', '이체증', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['외부인에 한하여 지급', '계좌이체 원칙']
+                }
+            };
+
+            const getRequiredDocuments = (type, paymentMethod) => {
+                if (!DOCUMENT_RULES[type]) return [];
+
+                const rule = DOCUMENT_RULES[type];
+                let docs = [...rule.base, ...rule.required];
+
+                // 조건부 서류 추가
+                if (rule.conditional && rule.conditional.length > 0) {
+                    docs.push(...rule.conditional);
+                }
+
+                return docs;
+            };
+
+            const getAllSubcategories = () => {
+                const subcategories = [];
+                BUDGET_DATA.categories.forEach(category => {
+                    category.subcategories.forEach(subcategory => {
+                        subcategories.push({
+                            ...subcategory,
+                            categoryName: category.name
+                        });
+                    });
+                });
+                return subcategories;
+            };
+
+            const getAllBudgetItems = (subcategoryId) => {
+                const subcategories = getAllSubcategories();
+                const subcategory = subcategories.find(s => s.id === subcategoryId);
+                return subcategory ? subcategory.items : [];
+            };
+
+            // 데이터 로딩 함수들
+            const loadSchedules = useCallback(async () => {
+                try {
+                    console.log('🔍 스케줄 데이터 로딩 시작...');
+                    console.log('🔗 Supabase 연결 확인:', { url: supabaseUrl, key: supabaseKey?.substring(0, 10) + '...' });
+
+                    // Supabase 클라이언트 연결 테스트
+                    console.log('🔗 연결 테스트 수행 중...');
+                    try {
+                        const { data: pingTest, error: pingError } = await supabase.auth.getSession();
+                        console.log('🏓 연결 테스트 결과:', { pingError });
+                    } catch (pingErr) {
+                        console.error('🏓 연결 테스트 실패:', pingErr);
+                    }
+
+                    // 먼저 테이블 존재 확인
+                    console.log('📋 테이블 존재 확인 중...');
+                    const { data: tableCheck, error: tableError } = await supabase
+                        .from('schedules')
+                        .select('count', { count: 'exact', head: true });
+
+                    console.log('📊 테이블 확인 결과:', { count: tableCheck, error: tableError });
+
+                    // 실제 데이터 조회
+                    const { data: schedules, error } = await supabase
+                        .from('schedules')
+                        .select('*')
+                        .order('start_date', { ascending: true });
+
+                    console.log('📊 Supabase 스케줄 응답:', {
+                        data: schedules,
+                        error,
+                        count: schedules ? schedules.length : 0
+                    });
+
+                    if (error) {
+                        console.error('❌ 스케줄 로딩 오류:', error);
+                        console.error('❌ 오류 상세:', error.message, error.details, error.hint);
+                        console.error('❌ 전체 오류 객체:', JSON.stringify(error, null, 2));
+
+                        if (error.message === 'Invalid API key') {
+                            console.error('🔑 API 키 문제 감지. Supabase 대시보드에서 API 키를 확인하세요.');
+                        }
+                        throw error;
+                    }
+
+                    if (schedules && schedules.length > 0) {
+                        console.log('✅ 로딩된 스케줄들:', schedules.map(s => ({ id: s.id, title: s.title, date: s.start_date })));
+                    } else {
+                        console.warn('⚠️ 스케줄이 없습니다. RLS 정책을 확인해주세요.');
+                    }
+
+                    return schedules || [];
+                } catch (err) {
+                    console.error('💥 스케줄 로딩 중 예외 발생:', err);
+                    console.error('💥 예외 상세:', err.message, err.stack);
+                    return [];
+                }
+            }, []);
+
+            const loadGalleries = useCallback(async () => {
+                try {
+                    const { data: galleries, error } = await supabase
+                        .from('galleries')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                        .limit(10);
+
+                    if (error) throw error;
+                    return galleries || [];
+                } catch (err) {
+                    console.error('Error loading galleries:', err);
+                    return [];
+                }
+            }, []);
+
+            const loadBoards = useCallback(async () => {
+                try {
+                    const { data: boards, error } = await supabase
+                        .from('boards')
+                        .select('*, author:users(name)')
+                        .eq('status', 'published')
+                        .order('created_at', { ascending: false })
+                        .limit(10);
+
+                    if (error) throw error;
+                    return boards || [];
+                } catch (err) {
+                    console.error('Error loading boards:', err);
+                    return [];
+                }
+            }, []);
+
+            const loadBudgetExecutions = useCallback(async () => {
+                try {
+                    const { data: executions, error } = await supabase
+                        .from('budget_executions')
+                        .select('*')
+                        .order('execution_date', { ascending: false })
+                        .limit(10);
+
+                    if (error) throw error;
+                    return executions || [];
+                } catch (err) {
+                    console.error('Error loading budget executions:', err);
+                    return [];
+                }
+            }, []);
+
+            // 통계 계산
+            const calculateStats = useCallback((schedules, galleries, boards, executions) => {
+                const totalBudget = 70000000; // 7천만원
+                const usedBudget = executions.reduce((sum, exec) => sum + (exec.amount || 0), 0);
+                const usageRate = Math.round((usedBudget / totalBudget) * 100);
+
+                const upcomingSchedules = schedules.filter(s =>
+                    new Date(s.start_date) >= new Date()
+                ).length;
+
+                return {
+                    usageRate,
+                    usedBudget,
+                    totalBudget,
+                    upcomingSchedules,
+                    totalSchedules: schedules.length,
+                    totalGalleries: galleries.length,
+                    totalBoards: boards.length
+                };
+            }, []);
+
+            // 초기 데이터 로딩
+            useEffect(() => {
+                const loadAllData = async () => {
+                    try {
+                        setLoading(true);
+                        setError(null);
+
+                        const [schedules, galleries, boards, executions] = await Promise.all([
+                            loadSchedules(),
+                            loadGalleries(),
+                            loadBoards(),
+                            loadBudgetExecutions()
+                        ]);
+
+                        const stats = calculateStats(schedules, galleries, boards, executions);
+
+                        setData({
+                            schedules,
+                            galleries,
+                            boards,
+                            budgetExecutions: executions,
+                            stats
+                        });
+
+                    } catch (err) {
+                        setError('데이터를 불러오는 중 오류가 발생했습니다: ' + err.message);
+                        console.error('Error loading data:', err);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                loadAllData();
+            }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
+
+            // 페이지 렌더링 함수들
+            const renderDashboard = () => (
+                <div>
+                    <h1 className="section-title">
+                        🏠 전체 현황
+                    </h1>
+                    <p className="section-subtitle">
+                        청년노동자인권센터 2026년 공익단체 인큐베이팅 지원사업의 전체 현황을 확인할 수 있습니다.
+                    </p>
+
+                    <div className="stats-grid">
+                        <div
+                            className="stat-card"
+                            style={{ cursor: 'pointer', position: 'relative' }}
+                            onClick={() => setCurrentPage('budget')}
+                        >
+                            <div className="stat-value">{data.stats.usageRate || 0}%</div>
+                            <div className="stat-label">예산 집행률</div>
+                            <div style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                fontSize: '14px',
+                                opacity: '0.6'
+                            }}>
+                                💰
+                            </div>
+                        </div>
+                        <div className="stat-card" onClick={() => setCurrentPage('schedule')} style={{ cursor: 'pointer' }}>
+                            <div className="stat-value">{data.stats.upcomingSchedules || 0}</div>
+                            <div className="stat-label">예정된 일정</div>
+                            <div style={{ fontSize: '12px', color: '#9C9690', marginTop: '4px' }}>
+                                전체: {data.schedules ? data.schedules.length : 0}개
+                                {data.schedules && data.schedules.length === 0 && (
+                                    <div>⚠️ 스케줄 데이터 없음</div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.stats.totalGalleries || 0}</div>
+                            <div className="stat-label">갤러리 사진</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.stats.totalBoards || 0}</div>
+                            <div className="stat-label">게시글</div>
+                        </div>
+                    </div>
+
+                    <div className="grid-2">
+                        <div className="card">
+                            <div className="card-header">
+                                <h2 className="card-title">📅 최근 일정</h2>
+                            </div>
+                            {data.schedules.slice(0, 5).map(schedule => (
+                                <div key={schedule.id} className="item-card">
+                                    <div className="item-title">{schedule.title}</div>
+                                    <div className="item-meta">
+                                        📅 {schedule.start_date}<br/>
+                                        📍 {schedule.location}<br/>
+                                        🏷️ {schedule.category}
+                                        {schedule.subcategory && ` > ${schedule.subcategory}`}
+                                    </div>
+                                </div>
+                            ))}
+                            {data.schedules.length === 0 && (
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
+                                    등록된 일정이 없습니다.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="card">
+                            <div className="card-header">
+                                <h2 className="card-title">📋 최근 게시글</h2>
+                            </div>
+                            {data.boards.slice(0, 5).map(board => (
+                                <div key={board.id} className="item-card">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div>
+                                            <div className="item-title">{board.title}</div>
+                                            <div className="item-meta">
+                                                ✍️ {board.author?.name || '관리자'} •
+                                                📅 {new Date(board.created_at).toLocaleDateString()} •
+                                                👁️ {board.view_count || 0}회
+                                            </div>
+                                        </div>
+                                        {board.is_pinned && (
+                                            <span className="badge badge-info">공지</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            {data.boards.length === 0 && (
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
+                                    등록된 게시글이 없습니다.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderSchedule = () => (
+                <div>
+                    <h1 className="section-title">📅 일정 관리</h1>
+                    <p className="section-subtitle">사업 일정과 참여자를 관리합니다.</p>
+
+                    {loading && (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#9C9690' }}>
+                            데이터를 로딩 중입니다...
+                        </div>
+                    )}
+
+                    {error && (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#e74c3c' }}>
+                            오류: {error}
+                        </div>
+                    )}
+
+                    {!loading && !error && data.schedules.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#9C9690' }}>
+                            등록된 일정이 없습니다.<br/>
+                            <small>📊 현재 스케줄 개수: {data.schedules ? data.schedules.length : 0}</small><br/>
+                            <small>🔗 Supabase URL: {supabaseUrl}</small><br/>
+                            <small>🔑 API Key: {supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'Not found'}</small><br/>
+                            <small>💾 브라우저 콘솔을 확인하여 더 자세한 디버그 정보를 확인하세요.</small>
+                        </div>
+                    )}
+
+                    {!loading && !error && data.schedules.length > 0 && data.schedules.map(schedule => (
+                        <div key={schedule.id} className="item-card">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <div className="item-title">{schedule.title}</div>
+                                    <div className="item-meta">
+                                        📅 {schedule.start_date} {schedule.end_date && `~ ${schedule.end_date}`}<br/>
+                                        🕒 {schedule.start_time && `${schedule.start_time} - ${schedule.end_time}`}<br/>
+                                        📍 {schedule.location}<br/>
+                                        👥 {schedule.current_participants || 0}/{schedule.max_participants || 0}명<br/>
+                                        🏷️ {schedule.category} {schedule.subcategory && `> ${schedule.subcategory}`}
+                                    </div>
+                                </div>
+                                <span className={`badge ${
+                                    schedule.status === 'completed' ? 'badge-success' :
+                                    schedule.status === 'ongoing' ? 'badge-warning' :
+                                    'badge-info'
+                                }`}>
+                                    {schedule.status === 'completed' ? '완료' :
+                                     schedule.status === 'ongoing' ? '진행중' :
+                                     schedule.status === 'cancelled' ? '취소' : '예정'}
+                                </span>
+                            </div>
+                        </div>
+                    ))}
+
+                    {data.schedules.length === 0 && (
+                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                            등록된 일정이 없습니다.
+                        </div>
+                    )}
+                </div>
+            );
+
+            const renderGallery = () => (
+                <div>
+                    <h1 className="section-title">📸 갤러리</h1>
+                    <p className="section-subtitle">사업 현장 사진과 결과물을 관리합니다.</p>
+
+                    <div className="grid-3">
+                        {data.galleries.map(item => (
+                            <div key={item.id} style={{
+                                background: 'white',
+                                border: '1px solid #EBE8E1',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                            }}>
+                                <div style={{
+                                    height: '200px',
+                                    background: 'linear-gradient(135deg, #134E42 0%, #1B6B5A 100%)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontSize: '14px'
+                                }}>
+                                    📷 이미지 미리보기
+                                </div>
+                                <div style={{ padding: '16px' }}>
+                                    <div className="item-title">{item.title}</div>
+                                    {item.description && (
+                                        <div style={{ fontSize: '14px', color: '#6B6560', marginBottom: '8px' }}>
+                                            {item.description}
+                                        </div>
+                                    )}
+                                    <div className="item-meta">
+                                        🏷️ {item.category} {item.subcategory && `> ${item.subcategory}`}<br/>
+                                        📅 {item.taken_date || new Date(item.created_at).toLocaleDateString()}<br/>
+                                        📍 {item.location || '미지정'}<br/>
+                                        📷 {item.photographer || '관리자'}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {data.galleries.length === 0 && (
+                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                            등록된 사진이 없습니다.
+                        </div>
+                    )}
+                </div>
+            );
+
+            const renderBoard = () => (
+                <div>
+                    <h1 className="section-title">📋 게시판</h1>
+                    <p className="section-subtitle">공지사항, 자료실, FAQ를 관리합니다.</p>
+
+                    {data.boards.map(board => (
+                        <div key={board.id} className="item-card">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ flex: 1 }}>
+                                    <div className="item-title">{board.title}</div>
+                                    <div style={{
+                                        fontSize: '14px',
+                                        color: '#6B6560',
+                                        marginBottom: '8px',
+                                        lineHeight: '1.5'
+                                    }}>
+                                        {board.content?.substring(0, 150)}
+                                        {board.content?.length > 150 ? '...' : ''}
+                                    </div>
+                                    <div className="item-meta">
+                                        ✍️ {board.author?.name || '관리자'} •
+                                        📅 {new Date(board.created_at).toLocaleDateString()} •
+                                        👁️ {board.view_count || 0}회
+                                        {board.download_count > 0 && ` • ⬇️ ${board.download_count}회`}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '16px' }}>
+                                    {board.is_pinned && (
+                                        <span className="badge badge-info">공지</span>
+                                    )}
+                                    <span className={`badge ${
+                                        board.board_type === 'notice' ? 'badge-warning' :
+                                        board.board_type === 'materials' ? 'badge-success' :
+                                        'badge-info'
+                                    }`}>
+                                        {board.board_type === 'notice' ? '공지사항' :
+                                         board.board_type === 'materials' ? '자료실' :
+                                         board.board_type === 'faq' ? 'FAQ' : board.board_type}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {data.boards.length === 0 && (
+                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                            등록된 게시글이 없습니다.
+                        </div>
+                    )}
+                </div>
+            );
+
+            const renderBudget = () => {
+                const subcategories = getAllSubcategories();
+                const selectedBudgetItems = getAllBudgetItems(formData.subcategory_id);
+
+                return (
+                    <div>
+                        <h1 className="section-title">💰 예산 관리</h1>
+                        <p className="section-subtitle">총 7천만원 예산의 고급 집행 관리 시스템</p>
+
+                        {/* 탭 네비게이션 */}
+                        <div className="tab-navigation">
+                            <button
+                                className={`tab-btn ${budgetTab === 'dashboard' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('dashboard')}
+                            >
+                                📊 대시보드
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'register' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('register')}
+                            >
+                                📝 집행등록
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'calculator' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('calculator')}
+                            >
+                                🧮 원천징수계산
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'history' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('history')}
+                            >
+                                📋 집행내역
+                            </button>
+                        </div>
+
+                        {/* 탭 내용 */}
+                        <div className="card">
+                            {budgetTab === 'dashboard' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        📊 예산 현황 대시보드
+                                    </h2>
+
+                                    {/* 예산 집행률 */}
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
+                                        color: 'white',
+                                        padding: '24px',
+                                        borderRadius: '12px',
+                                        marginBottom: '24px'
+                                    }}>
+                                        <h3 style={{ margin: '0 0 16px 0' }}>전체 예산 집행률</h3>
+                                        <div style={{
+                                            height: '32px',
+                                            background: 'rgba(255,255,255,0.2)',
+                                            borderRadius: '16px',
+                                            overflow: 'hidden',
+                                            marginBottom: '16px'
+                                        }}>
+                                            <div style={{
+                                                height: '100%',
+                                                background: 'white',
+                                                width: `${data.stats.usageRate || 0}%`,
+                                                transition: 'width 0.3s'
+                                            }} />
+                                        </div>
+                                        <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            fontSize: '16px'
+                                        }}>
+                                            <span>집행: {Math.round((data.stats.usedBudget || 0) / 10000).toLocaleString()}만원</span>
+                                            <span>총예산: 7,000만원</span>
+                                        </div>
+                                        <div style={{
+                                            textAlign: 'center',
+                                            fontSize: '32px',
+                                            fontWeight: '700',
+                                            marginTop: '16px'
+                                        }}>
+                                            {data.stats.usageRate || 0}%
+                                        </div>
+                                    </div>
+
+                                    {/* 예산 카테고리별 현황 */}
+                                    <div className="form-grid">
+                                        {BUDGET_DATA.categories.map(category => (
+                                            <div key={category.id} className="card" style={{ padding: '20px' }}>
+                                                <h4 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600' }}>
+                                                    {category.name}
+                                                </h4>
+                                                <div style={{
+                                                    fontSize: '24px',
+                                                    fontWeight: '700',
+                                                    color: '#1B6B5A',
+                                                    marginBottom: '8px'
+                                                }}>
+                                                    {(category.budget / 10000).toLocaleString()}만원
+                                                </div>
+                                                <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                    {category.subcategories.length}개 하위 분류
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* 최근 집행 내역 */}
+                                    <div style={{ marginTop: '32px' }}>
+                                        <h3 style={{ marginBottom: '16px' }}>최근 집행 내역</h3>
+                                        {data.budgetExecutions.slice(0, 5).map(execution => (
+                                            <div key={execution.id} className="execution-item">
+                                                <div className="execution-header">
+                                                    <div>
+                                                        <div className="execution-title">{execution.budget_item_name}</div>
+                                                        <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                            {execution.description}
+                                                        </div>
+                                                    </div>
+                                                    <div className="execution-amount">
+                                                        {execution.amount?.toLocaleString()}원
+                                                    </div>
+                                                </div>
+                                                <div className="execution-meta">
+                                                    <span>📅 {execution.execution_date}</span>
+                                                    <span>💳 {execution.payment_method}</span>
+                                                    <span>🏷️ {execution.category_name}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {data.budgetExecutions.length === 0 && (
+                                            <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                                등록된 집행 내역이 없습니다.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'register' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        📝 예산 집행 등록
+                                    </h2>
+
+                                    <div className="form-grid">
+                                        <div className="form-group">
+                                            <label>예산 분류</label>
+                                            <select
+                                                value={formData.subcategory_id}
+                                                onChange={(e) => {
+                                                    const subcategory = subcategories.find(s => s.id === e.target.value);
+                                                    setFormData({
+                                                        ...formData,
+                                                        subcategory_id: e.target.value,
+                                                        subcategory_name: subcategory?.name || '',
+                                                        category_name: subcategory?.categoryName || '',
+                                                        budget_item_id: '',
+                                                        budget_item_name: '',
+                                                        type: ''
+                                                    });
+                                                }}
+                                            >
+                                                <option value="">분류 선택</option>
+                                                {subcategories.map(subcategory => (
+                                                    <option key={subcategory.id} value={subcategory.id}>
+                                                        {subcategory.categoryName} > {subcategory.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>예산 항목</label>
+                                            <select
+                                                value={formData.budget_item_id}
+                                                onChange={(e) => {
+                                                    const item = selectedBudgetItems.find(i => i.id === e.target.value);
+                                                    setFormData({
+                                                        ...formData,
+                                                        budget_item_id: e.target.value,
+                                                        budget_item_name: item?.name || '',
+                                                        type: item?.type || ''
+                                                    });
+                                                }}
+                                                disabled={!formData.subcategory_id}
+                                            >
+                                                <option value="">항목 선택</option>
+                                                {selectedBudgetItems.map(item => (
+                                                    <option key={item.id} value={item.id}>
+                                                        {item.name} ({item.type})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>집행 금액</label>
+                                            <input
+                                                type="number"
+                                                placeholder="금액 입력"
+                                                value={formData.amount}
+                                                onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                                            />
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>결제 방법</label>
+                                            <select
+                                                value={formData.payment_method}
+                                                onChange={(e) => setFormData({...formData, payment_method: e.target.value})}
+                                            >
+                                                <option value="카드">카드</option>
+                                                <option value="계좌이체">계좌이체</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>집행일</label>
+                                            <input
+                                                type="date"
+                                                value={formData.execution_date}
+                                                onChange={(e) => setFormData({...formData, execution_date: e.target.value})}
+                                            />
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>수취인</label>
+                                            <input
+                                                type="text"
+                                                placeholder="수취인 입력"
+                                                value={formData.recipient}
+                                                onChange={(e) => setFormData({...formData, recipient: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group" style={{ marginTop: '24px' }}>
+                                        <label>집행 내용</label>
+                                        <textarea
+                                            rows="3"
+                                            placeholder="집행 내용 상세 설명"
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                        />
+                                    </div>
+
+                                    {/* 필요 서류 안내 */}
+                                    {formData.type && (
+                                        <div style={{
+                                            background: '#F8F9FA',
+                                            border: '1px solid #E2E8F0',
+                                            borderRadius: '8px',
+                                            padding: '16px',
+                                            marginTop: '24px'
+                                        }}>
+                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
+                                                📄 필요 증빙서류
+                                            </h4>
+                                            <div>
+                                                {getRequiredDocuments(formData.type, formData.payment_method).map((doc, index) => (
+                                                    <div key={index} style={{
+                                                        padding: '4px 0',
+                                                        fontSize: '14px'
+                                                    }}>
+                                                        ✓ {doc}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {DOCUMENT_RULES[formData.type]?.notes && (
+                                                <div style={{
+                                                    marginTop: '12px',
+                                                    padding: '8px',
+                                                    background: 'rgba(27, 107, 90, 0.1)',
+                                                    borderRadius: '4px',
+                                                    fontSize: '13px',
+                                                    whiteSpace: 'pre-line'
+                                                }}>
+                                                    💡 {DOCUMENT_RULES[formData.type].notes}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div style={{
+                                        display: 'flex',
+                                        gap: '12px',
+                                        marginTop: '24px'
+                                    }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={async () => {
+                                                try {
+                                                    console.log('📝 예산 집행 등록 시작...');
+
+                                                    // 필수 필드 검증
+                                                    if (!formData.subcategory_id || !formData.budget_item_id || !formData.description || !formData.amount) {
+                                                        alert('필수 필드를 모두 입력해주세요.');
+                                                        return;
+                                                    }
+
+                                                    // 삽입할 데이터 준비
+                                                    const insertData = {
+                                                        subcategory_id: formData.subcategory_id,
+                                                        subcategory_name: formData.subcategory_name,
+                                                        category_name: formData.category_name,
+                                                        budget_item_id: formData.budget_item_id,
+                                                        budget_item_name: formData.budget_item_name,
+                                                        type: formData.type,
+                                                        description: formData.description,
+                                                        amount: parseInt(formData.amount),
+                                                        payment_method: formData.payment_method,
+                                                        execution_date: formData.execution_date,
+                                                        recipient: formData.recipient,
+                                                        status: 'pending',
+                                                        created_by: '00000000-0000-0000-0000-000000000001'
+                                                    };
+
+                                                    console.log('📊 삽입할 데이터:', insertData);
+
+                                                    // 데이터베이스에 저장
+                                                    const { data, error } = await supabase
+                                                        .from('budget_executions')
+                                                        .insert([insertData]);
+
+                                                    console.log('📊 Supabase INSERT 응답:', { data, error });
+
+                                                    if (error) {
+                                                        console.error('❌ 예산 집행 등록 오류:', error);
+                                                        console.error('❌ 오류 상세:', error.message, error.details, error.hint);
+                                                        console.error('❌ 전체 오류 객체:', JSON.stringify(error, null, 2));
+
+                                                        if (error.message && error.message.includes('row-level security')) {
+                                                            alert('예산 집행 등록 중 오류가 발생했습니다: RLS 정책 오류 - Supabase 대시보드에서 SQL 스키마를 다시 실행해주세요.');
+                                                        } else {
+                                                            alert('예산 집행 등록 중 오류가 발생했습니다: ' + error.message);
+                                                        }
+                                                        return;
+                                                    }
+
+                                                    alert('예산 집행이 성공적으로 등록되었습니다.');
+
+                                                    // 폼 초기화
+                                                    setFormData({
+                                                        subcategory_id: '',
+                                                        subcategory_name: '',
+                                                        category_name: '',
+                                                        budget_item_id: '',
+                                                        budget_item_name: '',
+                                                        type: '',
+                                                        description: '',
+                                                        amount: '',
+                                                        payment_method: '카드',
+                                                        execution_date: new Date().toISOString().split('T')[0],
+                                                        recipient: ''
+                                                    });
+
+                                                    // 데이터 새로고침
+                                                    window.location.reload();
+
+                                                } catch (error) {
+                                                    console.error('예산 집행 등록 오류:', error);
+                                                    alert('예산 집행 등록 중 오류가 발생했습니다.');
+                                                }
+                                            }}
+                                        >
+                                            💾 등록하기
+                                        </button>
+                                        <button
+                                            className="btn btn-secondary"
+                                            onClick={() => {
+                                                setFormData({
+                                                    subcategory_id: '',
+                                                    subcategory_name: '',
+                                                    category_name: '',
+                                                    budget_item_id: '',
+                                                    budget_item_name: '',
+                                                    type: '',
+                                                    description: '',
+                                                    amount: '',
+                                                    payment_method: '카드',
+                                                    execution_date: new Date().toISOString().split('T')[0],
+                                                    recipient: ''
+                                                });
+                                            }}
+                                        >
+                                            🔄 초기화
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'calculator' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>
+                                        🧮 원천징수세 계산기
+                                    </h2>
+                                    <p style={{ fontSize: '14px', color: '#6B6560', marginBottom: '20px' }}>
+                                        기타소득(강사료, 단순인건비, 회의수당 등) 지급 시 원천징수 자동 계산
+                                    </p>
+
+                                    {/* 모드 전환 */}
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                                        <button
+                                            className={`btn ${calcMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setCalcMode('single')}
+                                            style={{ fontSize: '13px', padding: '8px 16px' }}
+                                        >
+                                            1인 계산
+                                        </button>
+                                        <button
+                                            className={`btn ${calcMode === 'multi' ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setCalcMode('multi')}
+                                            style={{ fontSize: '13px', padding: '8px 16px' }}
+                                        >
+                                            다인 일괄계산
+                                        </button>
+                                    </div>
+
+                                    {/* 소득유형 선택 */}
+                                    <div className="form-group" style={{ marginBottom: '16px', maxWidth: '500px' }}>
+                                        <label>소득 유형</label>
+                                        <select
+                                            value={calcIncomeType}
+                                            onChange={(e) => setCalcIncomeType(e.target.value)}
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
+                                        >
+                                            {Object.entries(INCOME_TYPE_INFO).map(([key, info]) => (
+                                                <option key={key} value={key}>{info.label}</option>
+                                            ))}
+                                        </select>
+                                        <p style={{ fontSize: '13px', color: '#9C9690', marginTop: '4px' }}>
+                                            {INCOME_TYPE_INFO[calcIncomeType].desc}
+                                        </p>
+                                    </div>
+
+                                    {/* === 1인 계산 모드 === */}
+                                    {calcMode === 'single' && (
+                                        <div>
+                                            <div className="form-grid" style={{ maxWidth: '500px' }}>
+                                                <div className="form-group">
+                                                    <label>지급 금액 (원)</label>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="금액 입력 (예: 210000)"
+                                                        value={calculatorAmount}
+                                                        onChange={(e) => setCalculatorAmount(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                                                <button
+                                                    className="btn btn-primary"
+                                                    onClick={() => {
+                                                        if (calculatorAmount) {
+                                                            const result = calculateWithholdingTax(parseInt(calculatorAmount));
+                                                            setCalculationResult(result);
+                                                        }
+                                                    }}
+                                                >
+                                                    📊 계산하기
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    onClick={() => {
+                                                        setCalculatorAmount('');
+                                                        setCalculationResult(null);
+                                                    }}
+                                                >
+                                                    🔄 초기화
+                                                </button>
+                                            </div>
+
+                                            {calculationResult && (
+                                                <div className="calculation-result">
+                                                    <h3 style={{ margin: '0 0 16px 0' }}>계산 결과</h3>
+                                                    <div className="result-item">
+                                                        <span>지급 금액:</span>
+                                                        <span>{parseInt(calculatorAmount).toLocaleString()}원</span>
+                                                    </div>
+                                                    {!calculationResult.taxable ? (
+                                                        <div style={{ padding: '12px', background: 'rgba(255,255,255,0.15)', borderRadius: '8px', marginTop: '8px', textAlign: 'center' }}>
+                                                            ✅ 125,000원 이하 → <strong>원천징수 없음</strong> (전액 지급)
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <div className="result-item">
+                                                                <span>소득세 (국세 8%):</span>
+                                                                <span>{calculationResult.income.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div className="result-item" style={{ fontSize: '13px', opacity: 0.8, marginTop: '-4px', marginBottom: '12px' }}>
+                                                                <span style={{ paddingLeft: '12px' }}>= {parseInt(calculatorAmount).toLocaleString()} × 0.08 → 원단위 절사</span>
+                                                            </div>
+                                                            <div className="result-item">
+                                                                <span>지방소득세 (국세의 10%):</span>
+                                                                <span>{calculationResult.local.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div className="result-item" style={{ fontSize: '13px', opacity: 0.8, marginTop: '-4px', marginBottom: '12px' }}>
+                                                                <span style={{ paddingLeft: '12px' }}>= {calculationResult.income.toLocaleString()} × 0.1 → 원단위 절사</span>
+                                                            </div>
+                                                            <div className="result-item">
+                                                                <span>총 원천징수세:</span>
+                                                                <span>{calculationResult.total.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div className="result-item">
+                                                                <span>실수령액:</span>
+                                                                <span>{calculationResult.net.toLocaleString()}원</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* === 다인 일괄계산 모드 === */}
+                                    {calcMode === 'multi' && (
+                                        <div>
+                                            <p style={{ fontSize: '13px', color: '#9C9690', marginBottom: '12px' }}>
+                                                여러 명에게 지급할 때 개인별로 국세/지방세를 따로 계산해야 원단위 절사 차이가 발생하지 않습니다.
+                                            </p>
+                                            <div style={{ maxWidth: '600px' }}>
+                                                {calcPersons.map((person, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                                                        <span style={{ fontSize: '13px', color: '#9C9690', minWidth: '24px' }}>{idx + 1}</span>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="이름"
+                                                            value={person.name}
+                                                            onChange={(e) => {
+                                                                const updated = [...calcPersons];
+                                                                updated[idx].name = e.target.value;
+                                                                setCalcPersons(updated);
+                                                            }}
+                                                            style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
+                                                        />
+                                                        <input
+                                                            type="number"
+                                                            placeholder="지급금액 (원)"
+                                                            value={person.amount}
+                                                            onChange={(e) => {
+                                                                const updated = [...calcPersons];
+                                                                updated[idx].amount = e.target.value;
+                                                                setCalcPersons(updated);
+                                                            }}
+                                                            style={{ flex: 1.5, padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
+                                                        />
+                                                        {calcPersons.length > 1 && (
+                                                            <button
+                                                                onClick={() => setCalcPersons(calcPersons.filter((_, i) => i !== idx))}
+                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#E53E3E', padding: '4px' }}
+                                                            >×</button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    onClick={() => setCalcPersons([...calcPersons, { name: '', amount: '' }])}
+                                                    style={{ fontSize: '13px', padding: '6px 14px', marginTop: '4px' }}
+                                                >
+                                                    + 추가
+                                                </button>
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                                                <button className="btn btn-primary" onClick={calculateMultiPersonTax}>
+                                                    📊 일괄 계산
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    onClick={() => {
+                                                        setCalcPersons([{ name: '', amount: '' }]);
+                                                        setCalcMultiResults(null);
+                                                    }}
+                                                >
+                                                    🔄 초기화
+                                                </button>
+                                            </div>
+
+                                            {calcMultiResults && (
+                                                <div style={{ marginTop: '16px' }}>
+                                                    <div style={{ overflowX: 'auto' }}>
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                                                            <thead>
+                                                                <tr style={{ background: '#1B6B5A', color: 'white' }}>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>이름</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>지급액</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>소득세(국세)</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>지방세</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>공제합계</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>실지급액</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {calcMultiResults.persons.map((p, i) => (
+                                                                    <tr key={i} style={{ borderBottom: '1px solid #E2E0DD', background: p.taxable ? 'white' : '#F0FFF4' }}>
+                                                                        <td style={{ padding: '10px 12px' }}>{p.name}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.amount.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.income.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.local.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>{p.total.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>{p.net.toLocaleString()}</td>
+                                                                    </tr>
+                                                                ))}
+                                                                <tr style={{ background: '#134E42', color: 'white', fontWeight: '700' }}>
+                                                                    <td style={{ padding: '10px 12px' }}>합계</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalAmount.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalIncome.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalLocal.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalTax.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalNet.toLocaleString()}</td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <p style={{ fontSize: '12px', color: '#9C9690', marginTop: '8px' }}>
+                                                        * 국세와 지방세를 인원별로 따로 계산 후 원단위 절사 적용. 총액 일괄 계산(8.8%) 시 금액 차이가 발생할 수 있습니다.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 선택한 소득유형별 필요서류 */}
+                                    <div style={{ marginTop: '28px', padding: '20px', background: '#FFFBF0', borderRadius: '12px', border: '1px solid #F0E6D0' }}>
+                                        <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#8B6914' }}>
+                                            📋 {INCOME_TYPE_INFO[calcIncomeType].label} - 필요 증빙서류
+                                        </h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            {INCOME_TYPE_INFO[calcIncomeType].docs.map((doc, i) => (
+                                                <div key={i} style={{ fontSize: '13px', color: '#5C4A1E', paddingLeft: '8px' }}>
+                                                    {i + 1}. {doc}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {INCOME_TYPE_INFO[calcIncomeType].rules && (
+                                            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #F0E6D0' }}>
+                                                <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#8B6914' }}>⚠️ 지급 시 주의사항</h4>
+                                                {INCOME_TYPE_INFO[calcIncomeType].rules.map((rule, i) => (
+                                                    <div key={i} style={{ fontSize: '13px', color: '#5C4A1E', paddingLeft: '8px', marginBottom: '4px' }}>
+                                                        • {rule}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 원천징수 해설 */}
+                                    <div style={{ marginTop: '20px', padding: '20px', background: '#F8F9FA', borderRadius: '12px' }}>
+                                        <h4 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>📖 원천징수란?</h4>
+
+                                        <div style={{ fontSize: '14px', color: '#4A4540', lineHeight: '1.7' }}>
+                                            <p style={{ marginBottom: '12px' }}>
+                                                <strong>원천징수(源泉徵收)</strong>란 소득을 지급하는 자(원천징수의무자)가,
+                                                소득을 받는 사람이 내야 할 세금을 <strong>미리 떼어서 대신 납부</strong>하는 제도입니다.
+                                            </p>
+                                            <p style={{ marginBottom: '12px' }}>
+                                                <strong>원천세</strong> = 소득세(국세) + 지방소득세 특별징수분(지방세)
+                                            </p>
+
+                                            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #E2E0DD' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>🔢 계산 방법</h5>
+                                                <div style={{ fontSize: '13px' }}>
+                                                    <p>① 과세 여부 판단: 건당 지급액이 <strong>125,000원 초과</strong>인지 확인</p>
+                                                    <p>② 국세(소득세): 지급액 × <strong>8%</strong> → 원단위 절사(버림)</p>
+                                                    <p>③ 지방세: 국세 × <strong>10%</strong> → 원단위 절사(버림)</p>
+                                                    <p>④ 실지급액 = 지급액 - 국세 - 지방세</p>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ background: '#FFF5F5', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #FED7D7' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#C53030' }}>⚠️ 실무 주의사항 (원단위 절사)</h5>
+                                                <p style={{ fontSize: '13px', color: '#742A2A' }}>
+                                                    세액 계산 시 1원 단위까지 나올 경우 <strong>원단위는 절사(버림)</strong>합니다.
+                                                    인원이 많을 경우 총액 일괄계산(8.8%)은 피하고, <strong>반드시 개인별로 국세/지방세를 따로 계산</strong>한 뒤 합산하세요.
+                                                    개별 계산 결과와 일괄 계산 결과가 달라질 수 있습니다.
+                                                </p>
+                                            </div>
+
+                                            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #E2E0DD' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>💡 계산 예시: 강사료 210,000원</h5>
+                                                <div style={{ fontSize: '13px', fontFamily: 'monospace', lineHeight: '2' }}>
+                                                    <p>국세 = 210,000 × 0.08 = <strong>16,800원</strong></p>
+                                                    <p>지방세 = 16,800 × 0.1 = <strong>1,680원</strong></p>
+                                                    <p>원천징수액 = 16,800 + 1,680 = <strong>18,480원</strong></p>
+                                                    <p>실지급액 = 210,000 - 18,480 = <strong>191,520원</strong></p>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #E2E0DD' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>📌 기타소득이란?</h5>
+                                                <p style={{ fontSize: '13px' }}>
+                                                    이자·배당·사업·근로소득 등에 해당하지 않는, <strong>일시적·불규칙적으로 발생하는 소득</strong>을 말합니다.
+                                                    보조사업에서는 <strong>강사료, 원고료, 단순인건비</strong> 등이 해당합니다.
+                                                </p>
+                                                <p style={{ fontSize: '13px', marginTop: '4px' }}>
+                                                    사업자등록증이나 고유번호증이 없는 개인명의(주민번호)로도 신고할 수 있습니다.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 신고/납부 안내 */}
+                                    <div style={{ marginTop: '20px', padding: '20px', background: '#EBF8FF', borderRadius: '12px', border: '1px solid #BEE3F8' }}>
+                                        <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', color: '#2B6CB0' }}>🏛️ 신고 · 납부 안내</h4>
+                                        <div style={{ fontSize: '13px', color: '#2A4365', lineHeight: '1.8' }}>
+
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <strong>📅 신고/납부 기한</strong>
+                                                <p>지급한 달의 <strong>다음 달 10일</strong>까지 관할 세무서에 신고·납부</p>
+                                                <p style={{ paddingLeft: '12px', color: '#4A5568' }}>예) 7월 31일 지급 → 8월 10일까지 / 8월 1일 지급 → 9월 10일까지</p>
+                                            </div>
+
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <strong>🖥️ 신고 방법 (택1)</strong>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', marginTop: '8px', background: 'white' }}>
+                                                    <thead>
+                                                        <tr>
+                                                            <th style={{ padding: '8px', border: '1px solid #BEE3F8', textAlign: 'left' }}></th>
+                                                            <th style={{ padding: '8px', border: '1px solid #BEE3F8', textAlign: 'left' }}>세무서 방문</th>
+                                                            <th style={{ padding: '8px', border: '1px solid #BEE3F8', textAlign: 'left' }}>인터넷 (홈택스+위택스)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8', fontWeight: '600' }}>장점</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>1:1 상담 가능, 공인인증서 불필요, 국세 신고 시 지방세도 함께 처리</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>익숙해지면 간편, 신고~납부까지 한 번에 처리 가능</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8', fontWeight: '600' }}>단점</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>매월 방문 번거로움, 납부는 은행 창구에서 별도 처리</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>공인인증서 필수, 국세(홈택스)·지방세(위택스) 따로 신고</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <strong>💡 실무 팁</strong>
+                                                <p>• 월말이나 다음 달 초에 <strong>한꺼번에 신고/납부</strong>하는 것이 효율적 (위택스는 최종 신고/납부만 인정)</p>
+                                                <p>• 인터넷 납부 시 <strong>신고자와 결제 계좌 예금주가 동일</strong>해야 함</p>
+                                                <p>• 카드 납부 시 수수료 추가 발생 (신용 0.8%, 체크 0.7%) → <strong>계좌이체 추천</strong></p>
+                                                <p>• 신고확인서와 납부영수증은 <strong>증빙자료에 반드시 첨부</strong></p>
+                                            </div>
+
+                                            <div style={{ background: '#FFF5F5', padding: '12px', borderRadius: '8px', border: '1px solid #FED7D7' }}>
+                                                <strong style={{ color: '#C53030' }}>📌 기타소득지급명세서 (연 1회)</strong>
+                                                <p style={{ color: '#742A2A' }}>
+                                                    기타소득을 지급한 자는 <strong>다음 연도 2월 말까지</strong> 1년간의 기타소득 지급명세서를 국세청에 제출해야 합니다.
+                                                    미제출 시 <strong>미제출금액의 2% 가산세</strong> 부과 (3개월 내 지연제출 시 1%).
+                                                </p>
+                                                <p style={{ color: '#742A2A', marginTop: '4px' }}>
+                                                    → 수령자의 <strong>주민등록번호가 필요</strong>하므로, 지급 시 확인서에 주민번호를 함께 기재하도록 합니다.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 원천징수 기본 기준 요약 */}
+                                    <div style={{ marginTop: '20px', padding: '20px', background: '#F0FFF4', borderRadius: '12px', border: '1px solid #C6F6D5' }}>
+                                        <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#276749' }}>✅ 원천징수 기준 요약</h4>
+                                        <div style={{ fontSize: '13px', color: '#22543D', lineHeight: '1.8' }}>
+                                            <p>• <strong>과세 기준</strong>: 건당 기타소득 125,000원 초과 시 원천징수 (소득세법 제21조, 제84조, 제127조, 제129조)</p>
+                                            <p>• <strong>세율</strong>: 소득세(국세) 8% + 지방소득세 국세의 10% = 실효세율 약 8.8%</p>
+                                            <p>• <strong>적용 대상</strong>: 강사료, 원고료, 단순인건비, 회의참석수당, 심사비, 토론비, 발제비, 자문비 등</p>
+                                            <p>• <strong>원천징수의무자</strong>: 기타소득을 지급하는 단체(대표자) 또는 사업진행자</p>
+                                            <p>• <strong>지급 원칙</strong>: 금액 불문 계좌이체 원칙 (현금지급 불가)</p>
+                                            <p>• <strong>내부자 지급 불가</strong>: 단체 대표, 상근직원, 사업담당자, 임직원에게는 인건비성 경비 지급 불가</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'history' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        📋 예산 집행 내역
+                                    </h2>
+
+                                    {data.budgetExecutions.map(execution => (
+                                        <div key={execution.id} className="execution-item">
+                                            <div className="execution-header">
+                                                <div>
+                                                    <div className="execution-title">{execution.budget_item_name}</div>
+                                                    <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                        {execution.description}
+                                                    </div>
+                                                </div>
+                                                <div className="execution-amount">
+                                                    {execution.amount?.toLocaleString()}원
+                                                </div>
+                                            </div>
+                                            <div className="execution-meta">
+                                                <span>📅 {execution.execution_date}</span>
+                                                <span>💳 {execution.payment_method}</span>
+                                                <span>🏷️ {execution.category_name} > {execution.subcategory_name}</span>
+                                                {execution.recipient && <span>👤 {execution.recipient}</span>}
+                                            </div>
+                                            {DOCUMENT_RULES[execution.type] && (
+                                                <div className="documents-list">
+                                                    <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
+                                                    {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => (
+                                                        <div key={index} className="document-item">
+                                                            <span>📄 {doc}</span>
+                                                            <span style={{
+                                                                color: '#1B6B5A',
+                                                                fontSize: '12px'
+                                                            }}>
+                                                                미제출
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {data.budgetExecutions.length === 0 && (
+                                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                            등록된 집행 내역이 없습니다.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderContent = () => {
+                if (loading) {
+                    return (
+                        <div className="loading">
+                            <div className="loading-spinner"></div>
+                            <div>데이터를 불러오고 있습니다...</div>
+                        </div>
+                    );
+                }
+
+                if (error) {
+                    return (
+                        <div>
+                            <div className="error-message">
+                                {error}
+                            </div>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => window.location.reload()}
+                            >
+                                다시 시도
+                            </button>
+                        </div>
+                    );
+                }
+
+                switch(currentPage) {
+                    case "dashboard": return renderDashboard();
+                    case "budget": return renderBudget();
+                    case "schedule": return renderSchedule();
+                    case "gallery": return renderGallery();
+                    case "board": return renderBoard();
+                    default: return renderDashboard();
+                }
+            };
+
+            return (
+                <div>
+                    {/* Header */}
+                    <div className="header">
+                        <div className="container">
+                            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
+                                아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                            </h1>
+                            <p style={{ margin: '8px 0 0 0', fontSize: '15px', opacity: 0.9 }}>
+                                청년노동자인권센터 • 총 예산 7천만원 • Supabase 연동
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="container">
+                        {/* Navigation */}
+                        <div className="navigation">
+                            {[
+                                { id: 'dashboard', label: '🏠 대시보드', description: '전체 현황 보기' },
+                                {
+                                    id: 'budget',
+                                    label: '💰 예산관리',
+                                    description: '고급 예산 집행 시스템'
+                                },
+                                { id: 'schedule', label: '📅 일정관리', description: '사업 일정 및 참여자 관리' },
+                                { id: 'gallery', label: '📸 갤러리', description: '현장 사진 및 결과물' },
+                                { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' }
+                            ].map(nav => (
+                                <button
+                                    key={nav.id}
+                                    className={`nav-btn ${currentPage === nav.id ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setCurrentPage(nav.id);
+                                    }}
+                                    title={nav.description}
+                                >
+                                    {nav.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Content */}
+                        <div className="content-area">
+                            {renderContent()}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // 앱 렌더링
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ProjectManagementSystem />);
+    </script>
+</body>
+</html>

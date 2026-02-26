@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>아름다운재단 2026 공익단체 인큐베이팅 지원사업 관리시스템</title>
+
+    <!-- React 및 Babel CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background-color: #F8F6F1;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: #134E42;
+            color: white;
+            padding: 16px 0;
+            margin-bottom: 20px;
+        }
+
+        .navigation {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+        }
+
+        .nav-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-btn.active {
+            background: #1B6B5A;
+            color: white;
+        }
+
+        .nav-btn:not(.active) {
+            background: transparent;
+            color: #6B6560;
+        }
+
+        .content-area {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+            padding: 24px;
+            min-height: 400px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid #EBE8E1;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: #134E42;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #9C9690;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0 0 16px 0;
+            color: #134E42;
+        }
+
+        .item-card {
+            background: #F8F9FA;
+            border: 1px solid #E9ECEF;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .item-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+        }
+
+        .item-meta {
+            font-size: 12px;
+            color: #6C757D;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            color: #6B6560;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loading">시스템을 로딩 중입니다...</div>
+    </div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 샘플 데이터
+        const sampleData = {
+            totalBudget: 70000000,
+            usedBudget: 15230000,
+            schedules: [
+                {
+                    id: 1,
+                    title: "노동안전보건 교육",
+                    date: "2026-03-15",
+                    participants: "25/30",
+                    location: "청년노동자인권센터"
+                },
+                {
+                    id: 2,
+                    title: "청년노동자 권익보호 캠페인",
+                    date: "2026-03-20",
+                    participants: "15/20",
+                    location: "시청광장"
+                }
+            ],
+            gallery: [
+                {
+                    id: 1,
+                    title: "교육 현장 사진",
+                    category: "현장사진",
+                    date: "2026-03-15"
+                },
+                {
+                    id: 2,
+                    title: "캠페인 홍보물",
+                    category: "결과물",
+                    date: "2026-03-10"
+                }
+            ],
+            boards: [
+                {
+                    id: 1,
+                    title: "2026년 사업 킥오프 미팅 안내",
+                    type: "notice",
+                    author: "관리자",
+                    date: "2026-01-15",
+                    views: 156
+                },
+                {
+                    id: 2,
+                    title: "노동안전보건 교육 자료집 v1.0",
+                    type: "materials",
+                    author: "김담당자",
+                    date: "2026-02-01",
+                    views: 89
+                }
+            ]
+        };
+
+        function ProjectManagementSystem() {
+            const [currentPage, setCurrentPage] = useState("dashboard");
+
+            const usageRate = Math.round((sampleData.usedBudget / sampleData.totalBudget) * 100);
+
+            const renderDashboard = () => (
+                <div>
+                    <h1 className="section-title">📊 전체 현황</h1>
+
+                    <div className="stats-grid">
+                        <div className="stat-card">
+                            <div className="stat-value">{usageRate}%</div>
+                            <div className="stat-label">예산 집행률</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{sampleData.schedules.length}</div>
+                            <div className="stat-label">진행 중 일정</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{sampleData.gallery.length}</div>
+                            <div className="stat-label">갤러리 사진</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{sampleData.boards.length}</div>
+                            <div className="stat-label">게시글</div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
+                        <div>
+                            <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>📅 최근 일정</h2>
+                            {sampleData.schedules.map(schedule => (
+                                <div key={schedule.id} className="item-card">
+                                    <div className="item-title">{schedule.title}</div>
+                                    <div className="item-meta">
+                                        📅 {schedule.date} | 📍 {schedule.location} | 👥 {schedule.participants}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div>
+                            <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>📋 최근 게시글</h2>
+                            {sampleData.boards.map(board => (
+                                <div key={board.id} className="item-card">
+                                    <div className="item-title">{board.title}</div>
+                                    <div className="item-meta">
+                                        ✍️ {board.author} | 📅 {board.date} | 👁️ {board.views}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderSchedule = () => (
+                <div>
+                    <h1 className="section-title">📅 일정 관리</h1>
+                    <p style={{ color: '#6B6560', marginBottom: '24px' }}>사업 일정과 참여자를 관리합니다.</p>
+
+                    {sampleData.schedules.map(schedule => (
+                        <div key={schedule.id} className="item-card">
+                            <div className="item-title">{schedule.title}</div>
+                            <div className="item-meta">
+                                📅 {schedule.date}<br/>
+                                📍 {schedule.location}<br/>
+                                👥 {schedule.participants}명
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+
+            const renderGallery = () => (
+                <div>
+                    <h1 className="section-title">📸 갤러리</h1>
+                    <p style={{ color: '#6B6560', marginBottom: '24px' }}>사업 현장 사진과 결과물을 관리합니다.</p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                        {sampleData.gallery.map(item => (
+                            <div key={item.id} style={{
+                                background: 'white',
+                                border: '1px solid #EBE8E1',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                            }}>
+                                <div style={{
+                                    height: '200px',
+                                    background: 'linear-gradient(135deg, #134E42 0%, #1B6B5A 100%)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontSize: '14px'
+                                }}>
+                                    📷 이미지 미리보기
+                                </div>
+                                <div style={{ padding: '16px' }}>
+                                    <div className="item-title">{item.title}</div>
+                                    <div className="item-meta">
+                                        카테고리: {item.category}<br/>
+                                        촬영일: {item.date}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+
+            const renderBoard = () => (
+                <div>
+                    <h1 className="section-title">📋 게시판</h1>
+                    <p style={{ color: '#6B6560', marginBottom: '24px' }}>공지사항, 자료실, FAQ를 관리합니다.</p>
+
+                    {sampleData.boards.map(board => (
+                        <div key={board.id} className="item-card" style={{ cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <div className="item-title">{board.title}</div>
+                                    <div className="item-meta">
+                                        ✍️ {board.author} • 📅 {board.date} • 👁️ {board.views}회
+                                    </div>
+                                </div>
+                                {board.type === 'notice' && (
+                                    <span style={{
+                                        background: '#134E42',
+                                        color: 'white',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px'
+                                    }}>
+                                        공지
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+
+            const renderBudget = () => (
+                <div>
+                    <h1 className="section-title">💰 예산 관리</h1>
+                    <p style={{ color: '#6B6560', marginBottom: '24px' }}>총 7천만원 예산의 집행 현황을 관리합니다.</p>
+
+                    <div className="item-card">
+                        <div className="item-title">전체 예산 집행률: {usageRate}%</div>
+                        <div style={{
+                            height: '20px',
+                            background: '#F0F0F0',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            marginTop: '12px'
+                        }}>
+                            <div style={{
+                                height: '100%',
+                                background: 'linear-gradient(90deg, #134E42 0%, #1B6B5A 100%)',
+                                width: `${usageRate}%`,
+                                transition: 'width 0.3s'
+                            }} />
+                        </div>
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            marginTop: '8px',
+                            fontSize: '12px',
+                            color: '#6C757D'
+                        }}>
+                            <span>집행: {(sampleData.usedBudget / 10000).toLocaleString()}만원</span>
+                            <span>총예산: {(sampleData.totalBudget / 10000).toLocaleString()}만원</span>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderContent = () => {
+                switch(currentPage) {
+                    case "dashboard": return renderDashboard();
+                    case "budget": return renderBudget();
+                    case "schedule": return renderSchedule();
+                    case "gallery": return renderGallery();
+                    case "board": return renderBoard();
+                    default: return renderDashboard();
+                }
+            };
+
+            return (
+                <div>
+                    {/* Header */}
+                    <div className="header">
+                        <div className="container">
+                            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '700' }}>
+                                아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                            </h1>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '14px', opacity: 0.9 }}>
+                                청년노동자인권센터 • 총 예산 7천만원
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="container">
+                        {/* Navigation */}
+                        <div className="navigation">
+                            {[
+                                { id: 'dashboard', label: '🏠 대시보드' },
+                                { id: 'budget', label: '💰 예산관리' },
+                                { id: 'schedule', label: '📅 일정관리' },
+                                { id: 'gallery', label: '📸 갤러리' },
+                                { id: 'board', label: '📋 게시판' }
+                            ].map(nav => (
+                                <button
+                                    key={nav.id}
+                                    className={`nav-btn ${currentPage === nav.id ? 'active' : ''}`}
+                                    onClick={() => setCurrentPage(nav.id)}
+                                >
+                                    {nav.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Content */}
+                        <div className="content-area">
+                            {renderContent()}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // 앱 렌더링
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ProjectManagementSystem />);
+    </script>
+</body>
+</html>

@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>아름다운재단 2026 공익단체 인큐베이팅 지원사업 관리시스템</title>
+
+    <!-- React 및 Babel CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Supabase 클라이언트 -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background-color: #F8F6F1;
+            color: #2D2D2D;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #134E42 0%, #1B6B5A 100%);
+            color: white;
+            padding: 24px 0;
+            margin-bottom: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(19, 78, 66, 0.15);
+        }
+
+        .navigation {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .nav-btn.active {
+            background: #1B6B5A;
+            color: white;
+            box-shadow: 0 2px 8px rgba(27, 107, 90, 0.3);
+        }
+
+        .nav-btn:not(.active) {
+            background: transparent;
+            color: #6B6560;
+        }
+
+        .nav-btn:not(.active):hover {
+            background: #F8F9FA;
+            color: #134E42;
+        }
+
+        .content-area {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+            padding: 32px;
+            min-height: 500px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #F8F9FA 0%, #FFFFFF 100%);
+            border: 1px solid #EBE8E1;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: #134E42;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #9C9690;
+            font-weight: 500;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 20px 0;
+            color: #134E42;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-subtitle {
+            color: #6B6560;
+            margin: 0 0 28px 0;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .item-card {
+            background: #FFFFFF;
+            border: 1px solid #E9ECEF;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .item-card:hover {
+            border-color: #1B6B5A;
+            box-shadow: 0 4px 12px rgba(27, 107, 90, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .item-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            color: #2D2D2D;
+        }
+
+        .item-meta {
+            font-size: 13px;
+            color: #6C757D;
+            line-height: 1.4;
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+            color: #6B6560;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #1B6B5A;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #FFF5F5;
+            border: 1px solid #FEB2B2;
+            color: #C53030;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .success-message {
+            background: #F0FFF4;
+            border: 1px solid #9AE6B4;
+            color: #276749;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #2D2D2D;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #1B6B5A;
+            box-shadow: 0 0 0 3px rgba(27, 107, 90, 0.1);
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #1B6B5A;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #134E42;
+        }
+
+        .btn-secondary {
+            background: #F8F9FA;
+            color: #6B6560;
+            border: 1px solid #D1D5DB;
+        }
+
+        .btn-secondary:hover {
+            background: #E9ECEF;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #EBE8E1;
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+            color: #2D2D2D;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #D4EDDA;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #FFF3CD;
+            color: #856404;
+        }
+
+        .badge-info {
+            background: #D1ECF1;
+            color: #0C5460;
+        }
+
+        /* 고급 예산관리 탭 스타일 */
+        .tab-navigation {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .tab-btn.active {
+            background: #1B6B5A;
+            color: white;
+            box-shadow: 0 2px 8px rgba(27, 107, 90, 0.3);
+        }
+
+        .tab-btn:not(.active) {
+            background: #F8F9FA;
+            color: #6B6560;
+        }
+
+        .tab-btn:not(.active):hover {
+            background: #E9ECEF;
+            color: #134E42;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #2D3748;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 12px 16px;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #1B6B5A;
+            box-shadow: 0 0 0 3px rgba(27, 107, 90, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #1B6B5A 0%, #134E42 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(27, 107, 90, 0.3);
+        }
+
+        .btn-secondary {
+            background: #F7FAFC;
+            color: #4A5568;
+            border: 1px solid #E2E8F0;
+        }
+
+        .btn-secondary:hover {
+            background: #EDF2F7;
+        }
+
+        .calculation-result {
+            background: linear-gradient(135deg, #1B6B5A 0%, #134E42 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 16px;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .result-item:last-child {
+            margin-bottom: 0;
+            font-weight: 700;
+            font-size: 18px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 24px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #EBE8E1;
+        }
+
+        .execution-item {
+            background: white;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+
+        .execution-item:hover {
+            border-color: #1B6B5A;
+            box-shadow: 0 4px 12px rgba(27, 107, 90, 0.1);
+        }
+
+        .execution-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .execution-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2D3748;
+            margin-bottom: 4px;
+        }
+
+        .execution-amount {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1B6B5A;
+        }
+
+        .execution-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 8px;
+            color: #6B6560;
+            font-size: 14px;
+        }
+
+        .documents-list {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #E2E8F0;
+        }
+
+        .document-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            color: #6B6560;
+            font-size: 13px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            .navigation {
+                padding: 12px;
+            }
+
+            .nav-btn {
+                padding: 10px 12px;
+                font-size: 13px;
+            }
+
+            .content-area {
+                padding: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                gap: 16px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .execution-header {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .execution-meta {
+                grid-template-columns: 1fr;
+            }
+
+            .tab-navigation {
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <div>시스템을 초기화하고 있습니다...</div>
+        </div>
+    </div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+
+        // Supabase 설정
+        const supabaseUrl = 'https://exnloiyzmdzbhljwwxrs.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4bmxvaXl6bWR6Ymhsand3eHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI2MDczODUsImV4cCI6MjA0ODE4MzM4NX0.sb_publishable_6EjqM_6qP_wFQGD54P2M9Q_eULAJHnJ';
+
+        // Supabase 클라이언트 초기화
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        // 예산 구조 데이터
+        const BUDGET_DATA = {
+            projectName: "2026 공익단체 인큐베이팅 지원사업",
+            organization: "청년노동자인권센터",
+            totalBudget: 70000000,
+            categories: [
+                {
+                    id: "labor-education",
+                    name: "노동교육",
+                    budget: 25000000,
+                    subcategories: [
+                        {
+                            id: "safety-health",
+                            name: "노동안전보건",
+                            budget: 15000000,
+                            items: [
+                                { id: "lecturer-fee", name: "강사비", type: "자문비", budget: 8000000 },
+                                { id: "material-cost", name: "교육자료 제작", type: "일반지출", budget: 3000000 },
+                                { id: "venue-rental", name: "교육장 임차", type: "일반지출", budget: 4000000 }
+                            ]
+                        },
+                        {
+                            id: "rights-protection",
+                            name: "권익보호",
+                            budget: 10000000,
+                            items: [
+                                { id: "campaign-cost", name: "캠페인 진행비", type: "일반지출", budget: 6000000 },
+                                { id: "publicity-cost", name: "홍보물 제작", type: "일반지출", budget: 4000000 }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "capacity-building",
+                    name: "역량강화",
+                    budget: 20000000,
+                    subcategories: [
+                        {
+                            id: "staff-training",
+                            name: "활동가 교육",
+                            budget: 12000000,
+                            items: [
+                                { id: "training-fee", name: "교육비", type: "자문비", budget: 8000000 },
+                                { id: "travel-cost", name: "교통비", type: "일반지출", budget: 4000000 }
+                            ]
+                        },
+                        {
+                            id: "research",
+                            name: "조사연구",
+                            budget: 8000000,
+                            items: [
+                                { id: "research-fee", name: "조사용역비", type: "자문비", budget: 6000000 },
+                                { id: "survey-cost", name: "설문조사 진행비", type: "일반지출", budget: 2000000 }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "operations",
+                    name: "사업운영",
+                    budget: 25000000,
+                    subcategories: [
+                        {
+                            id: "personnel",
+                            name: "인건비",
+                            budget: 18000000,
+                            items: [
+                                { id: "project-staff", name: "사업인건비", type: "사업인건비", budget: 15000000 },
+                                { id: "simple-labor", name: "단순인건비", type: "단순인건비", budget: 3000000 }
+                            ]
+                        },
+                        {
+                            id: "office-expenses",
+                            name: "사무비",
+                            budget: 7000000,
+                            items: [
+                                { id: "office-supplies", name: "사무용품", type: "일반지출", budget: 3000000 },
+                                { id: "communication", name: "통신비", type: "일반지출", budget: 2000000 },
+                                { id: "utilities", name: "공공요금", type: "일반지출", budget: 2000000 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        // 증빙서류 규칙 엔진
+        const DOCUMENT_RULES = {
+            "자문비": {
+                base: ["지출결의서"],
+                card: ["카드결제 영수증"],
+                transfer: ["계좌이체증", "통장사본", "사업자등록증"],
+                always: ["참석확인서 또는 강의확인서", "지급내역서", "회의록/보고서/발제문 중 1건"],
+                withholding: true,
+                withholdingDocs: ["원천징수 납부내역서 (국세)", "원천징수 납부내역서 (지방세)"],
+                optional: ["신분증", "통장사본 (확인서에 계좌+서명 있으면 생략 가능)"],
+                notes: "외부 전문가에 한하여 지급. 내부자(대표, 임직원)에게 지급 불가.\n1일 1회, 기본료 10만원(2시간 이내), 초과료 5만원."
+            },
+            "사업인건비": {
+                base: ["지출결의서"],
+                card: [],
+                transfer: ["계좌이체증"],
+                always: ["고용 계획서 (고용목적, 기간, 인적사항)", "업무일지 또는 참여확인서", "지급내역서"],
+                withholding: true,
+                withholdingDocs: ["원천징수 납부내역서 (국세)", "원천징수 납부내역서 (지방세)"],
+                optional: ["신분증", "통장사본"],
+                notes: "반드시 계좌이체(현금 불가). 내부자에게 지급 불가.\n주민번호 취합 필요 (다음해 2월 기타소득지급명세서 제출 시)."
+            },
+            "단순인건비": {
+                base: ["지출결의서"],
+                card: [],
+                transfer: ["계좌이체증"],
+                always: ["고용 계획서 (고용목적, 기간, 인적사항)", "업무일지 또는 참여확인서", "지급내역서"],
+                withholding: true,
+                withholdingDocs: ["원천징수 납부내역서 (국세)", "원천징수 납부내역서 (지방세)"],
+                optional: ["신분증", "통장사본"],
+                notes: "반드시 계좌이체(현금 불가). 내부자에게 지급 불가.\n주민번호 취합 필요."
+            },
+            "일반지출": {
+                base: ["지출결의서"],
+                card: ["카드결제 영수증", "세금계산서 또는 계산서"],
+                transfer: ["계좌이체증", "세금계산서 또는 계산서"],
+                always: ["사업관련성을 입증하는 자료"],
+                withholding: false,
+                withholdingDocs: [],
+                optional: [],
+                notes: "사업과의 관련성이 명확히 입증되어야 함."
+            }
+        };
+
+        function ProjectManagementSystem() {
+            const [currentPage, setCurrentPage] = useState("dashboard");
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [data, setData] = useState({
+                schedules: [],
+                galleries: [],
+                boards: [],
+                budgetExecutions: [],
+                stats: {}
+            });
+
+            // 예산관리 상태
+            const [budgetTab, setBudgetTab] = useState("dashboard");
+            const [formData, setFormData] = useState({
+                subcategory_id: '',
+                subcategory_name: '',
+                category_name: '',
+                budget_item_id: '',
+                budget_item_name: '',
+                type: '',
+                description: '',
+                amount: '',
+                payment_method: '카드',
+                execution_date: new Date().toISOString().split('T')[0],
+                recipient: ''
+            });
+            const [calculatorAmount, setCalculatorAmount] = useState('');
+            const [calculationResult, setCalculationResult] = useState(null);
+
+            // 예산관리 helper functions
+            const calculateWithholdingTax = (amount) => {
+                if (amount <= 125000) {
+                    return { income: 0, local: 0, total: 0, net: amount };
+                }
+                const incomeTax = Math.round(amount * 0.08);
+                const localTax = Math.round(incomeTax * 0.1);
+                return {
+                    income: incomeTax,
+                    local: localTax,
+                    total: incomeTax + localTax,
+                    net: amount - (incomeTax + localTax)
+                };
+            };
+
+            const getRequiredDocuments = (type, paymentMethod) => {
+                if (!DOCUMENT_RULES[type]) return [];
+
+                const rule = DOCUMENT_RULES[type];
+                let docs = [...rule.base, ...rule.always];
+
+                if (paymentMethod === '카드') {
+                    docs.push(...rule.card);
+                } else {
+                    docs.push(...rule.transfer);
+                }
+
+                if (rule.withholding) {
+                    docs.push(...rule.withholdingDocs);
+                }
+
+                return docs;
+            };
+
+            const getAllSubcategories = () => {
+                const subcategories = [];
+                BUDGET_DATA.categories.forEach(category => {
+                    category.subcategories.forEach(subcategory => {
+                        subcategories.push({
+                            ...subcategory,
+                            categoryName: category.name
+                        });
+                    });
+                });
+                return subcategories;
+            };
+
+            const getAllBudgetItems = (subcategoryId) => {
+                const subcategories = getAllSubcategories();
+                const subcategory = subcategories.find(s => s.id === subcategoryId);
+                return subcategory ? subcategory.items : [];
+            };
+
+            // 데이터 로딩 함수들
+            const loadSchedules = useCallback(async () => {
+                try {
+                    const { data: schedules, error } = await supabase
+                        .from('schedules')
+                        .select('*')
+                        .order('start_date', { ascending: true })
+                        .limit(10);
+
+                    if (error) throw error;
+                    return schedules || [];
+                } catch (err) {
+                    console.error('Error loading schedules:', err);
+                    return [];
+                }
+            }, []);
+
+            const loadGalleries = useCallback(async () => {
+                try {
+                    const { data: galleries, error } = await supabase
+                        .from('galleries')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                        .limit(10);
+
+                    if (error) throw error;
+                    return galleries || [];
+                } catch (err) {
+                    console.error('Error loading galleries:', err);
+                    return [];
+                }
+            }, []);
+
+            const loadBoards = useCallback(async () => {
+                try {
+                    const { data: boards, error } = await supabase
+                        .from('boards')
+                        .select('*, author:users(name)')
+                        .eq('status', 'published')
+                        .order('created_at', { ascending: false })
+                        .limit(10);
+
+                    if (error) throw error;
+                    return boards || [];
+                } catch (err) {
+                    console.error('Error loading boards:', err);
+                    return [];
+                }
+            }, []);
+
+            const loadBudgetExecutions = useCallback(async () => {
+                try {
+                    const { data: executions, error } = await supabase
+                        .from('budget_executions')
+                        .select('*')
+                        .order('execution_date', { ascending: false })
+                        .limit(10);
+
+                    if (error) throw error;
+                    return executions || [];
+                } catch (err) {
+                    console.error('Error loading budget executions:', err);
+                    return [];
+                }
+            }, []);
+
+            // 통계 계산
+            const calculateStats = useCallback((schedules, galleries, boards, executions) => {
+                const totalBudget = 70000000; // 7천만원
+                const usedBudget = executions.reduce((sum, exec) => sum + (exec.amount || 0), 0);
+                const usageRate = Math.round((usedBudget / totalBudget) * 100);
+
+                const upcomingSchedules = schedules.filter(s =>
+                    new Date(s.start_date) >= new Date()
+                ).length;
+
+                return {
+                    usageRate,
+                    usedBudget,
+                    totalBudget,
+                    upcomingSchedules,
+                    totalSchedules: schedules.length,
+                    totalGalleries: galleries.length,
+                    totalBoards: boards.length
+                };
+            }, []);
+
+            // 초기 데이터 로딩
+            useEffect(() => {
+                const loadAllData = async () => {
+                    try {
+                        setLoading(true);
+                        setError(null);
+
+                        const [schedules, galleries, boards, executions] = await Promise.all([
+                            loadSchedules(),
+                            loadGalleries(),
+                            loadBoards(),
+                            loadBudgetExecutions()
+                        ]);
+
+                        const stats = calculateStats(schedules, galleries, boards, executions);
+
+                        setData({
+                            schedules,
+                            galleries,
+                            boards,
+                            budgetExecutions: executions,
+                            stats
+                        });
+
+                    } catch (err) {
+                        setError('데이터를 불러오는 중 오류가 발생했습니다: ' + err.message);
+                        console.error('Error loading data:', err);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                loadAllData();
+            }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
+
+            // 페이지 렌더링 함수들
+            const renderDashboard = () => (
+                <div>
+                    <h1 className="section-title">
+                        🏠 전체 현황
+                    </h1>
+                    <p className="section-subtitle">
+                        청년노동자인권센터 2026년 공익단체 인큐베이팅 지원사업의 전체 현황을 확인할 수 있습니다.
+                    </p>
+
+                    <div className="stats-grid">
+                        <div
+                            className="stat-card"
+                            style={{ cursor: 'pointer', position: 'relative' }}
+                            onClick={() => setCurrentPage('budget')}
+                        >
+                            <div className="stat-value">{data.stats.usageRate || 0}%</div>
+                            <div className="stat-label">예산 집행률</div>
+                            <div style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                fontSize: '14px',
+                                opacity: '0.6'
+                            }}>
+                                💰
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.stats.upcomingSchedules || 0}</div>
+                            <div className="stat-label">예정된 일정</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.stats.totalGalleries || 0}</div>
+                            <div className="stat-label">갤러리 사진</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-value">{data.stats.totalBoards || 0}</div>
+                            <div className="stat-label">게시글</div>
+                        </div>
+                    </div>
+
+                    <div className="grid-2">
+                        <div className="card">
+                            <div className="card-header">
+                                <h2 className="card-title">📅 최근 일정</h2>
+                            </div>
+                            {data.schedules.slice(0, 5).map(schedule => (
+                                <div key={schedule.id} className="item-card">
+                                    <div className="item-title">{schedule.title}</div>
+                                    <div className="item-meta">
+                                        📅 {schedule.start_date}<br/>
+                                        📍 {schedule.location}<br/>
+                                        🏷️ {schedule.category}
+                                        {schedule.subcategory && ` > ${schedule.subcategory}`}
+                                    </div>
+                                </div>
+                            ))}
+                            {data.schedules.length === 0 && (
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
+                                    등록된 일정이 없습니다.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="card">
+                            <div className="card-header">
+                                <h2 className="card-title">📋 최근 게시글</h2>
+                            </div>
+                            {data.boards.slice(0, 5).map(board => (
+                                <div key={board.id} className="item-card">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div>
+                                            <div className="item-title">{board.title}</div>
+                                            <div className="item-meta">
+                                                ✍️ {board.author?.name || '관리자'} •
+                                                📅 {new Date(board.created_at).toLocaleDateString()} •
+                                                👁️ {board.view_count || 0}회
+                                            </div>
+                                        </div>
+                                        {board.is_pinned && (
+                                            <span className="badge badge-info">공지</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            {data.boards.length === 0 && (
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
+                                    등록된 게시글이 없습니다.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderSchedule = () => (
+                <div>
+                    <h1 className="section-title">📅 일정 관리</h1>
+                    <p className="section-subtitle">사업 일정과 참여자를 관리합니다.</p>
+
+                    {data.schedules.map(schedule => (
+                        <div key={schedule.id} className="item-card">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <div className="item-title">{schedule.title}</div>
+                                    <div className="item-meta">
+                                        📅 {schedule.start_date} {schedule.end_date && `~ ${schedule.end_date}`}<br/>
+                                        🕒 {schedule.start_time && `${schedule.start_time} - ${schedule.end_time}`}<br/>
+                                        📍 {schedule.location}<br/>
+                                        👥 {schedule.current_participants || 0}/{schedule.max_participants || 0}명<br/>
+                                        🏷️ {schedule.category} {schedule.subcategory && `> ${schedule.subcategory}`}
+                                    </div>
+                                </div>
+                                <span className={`badge ${
+                                    schedule.status === 'completed' ? 'badge-success' :
+                                    schedule.status === 'ongoing' ? 'badge-warning' :
+                                    'badge-info'
+                                }`}>
+                                    {schedule.status === 'completed' ? '완료' :
+                                     schedule.status === 'ongoing' ? '진행중' :
+                                     schedule.status === 'cancelled' ? '취소' : '예정'}
+                                </span>
+                            </div>
+                        </div>
+                    ))}
+
+                    {data.schedules.length === 0 && (
+                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                            등록된 일정이 없습니다.
+                        </div>
+                    )}
+                </div>
+            );
+
+            const renderGallery = () => (
+                <div>
+                    <h1 className="section-title">📸 갤러리</h1>
+                    <p className="section-subtitle">사업 현장 사진과 결과물을 관리합니다.</p>
+
+                    <div className="grid-3">
+                        {data.galleries.map(item => (
+                            <div key={item.id} style={{
+                                background: 'white',
+                                border: '1px solid #EBE8E1',
+                                borderRadius: '12px',
+                                overflow: 'hidden',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                            }}>
+                                <div style={{
+                                    height: '200px',
+                                    background: 'linear-gradient(135deg, #134E42 0%, #1B6B5A 100%)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontSize: '14px'
+                                }}>
+                                    📷 이미지 미리보기
+                                </div>
+                                <div style={{ padding: '16px' }}>
+                                    <div className="item-title">{item.title}</div>
+                                    {item.description && (
+                                        <div style={{ fontSize: '14px', color: '#6B6560', marginBottom: '8px' }}>
+                                            {item.description}
+                                        </div>
+                                    )}
+                                    <div className="item-meta">
+                                        🏷️ {item.category} {item.subcategory && `> ${item.subcategory}`}<br/>
+                                        📅 {item.taken_date || new Date(item.created_at).toLocaleDateString()}<br/>
+                                        📍 {item.location || '미지정'}<br/>
+                                        📷 {item.photographer || '관리자'}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {data.galleries.length === 0 && (
+                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                            등록된 사진이 없습니다.
+                        </div>
+                    )}
+                </div>
+            );
+
+            const renderBoard = () => (
+                <div>
+                    <h1 className="section-title">📋 게시판</h1>
+                    <p className="section-subtitle">공지사항, 자료실, FAQ를 관리합니다.</p>
+
+                    {data.boards.map(board => (
+                        <div key={board.id} className="item-card">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ flex: 1 }}>
+                                    <div className="item-title">{board.title}</div>
+                                    <div style={{
+                                        fontSize: '14px',
+                                        color: '#6B6560',
+                                        marginBottom: '8px',
+                                        lineHeight: '1.5'
+                                    }}>
+                                        {board.content?.substring(0, 150)}
+                                        {board.content?.length > 150 ? '...' : ''}
+                                    </div>
+                                    <div className="item-meta">
+                                        ✍️ {board.author?.name || '관리자'} •
+                                        📅 {new Date(board.created_at).toLocaleDateString()} •
+                                        👁️ {board.view_count || 0}회
+                                        {board.download_count > 0 && ` • ⬇️ ${board.download_count}회`}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '16px' }}>
+                                    {board.is_pinned && (
+                                        <span className="badge badge-info">공지</span>
+                                    )}
+                                    <span className={`badge ${
+                                        board.board_type === 'notice' ? 'badge-warning' :
+                                        board.board_type === 'materials' ? 'badge-success' :
+                                        'badge-info'
+                                    }`}>
+                                        {board.board_type === 'notice' ? '공지사항' :
+                                         board.board_type === 'materials' ? '자료실' :
+                                         board.board_type === 'faq' ? 'FAQ' : board.board_type}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {data.boards.length === 0 && (
+                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                            등록된 게시글이 없습니다.
+                        </div>
+                    )}
+                </div>
+            );
+
+            const renderBudget = () => {
+                const subcategories = getAllSubcategories();
+                const selectedBudgetItems = getAllBudgetItems(formData.subcategory_id);
+
+                return (
+                    <div>
+                        <h1 className="section-title">💰 예산 관리</h1>
+                        <p className="section-subtitle">총 7천만원 예산의 고급 집행 관리 시스템</p>
+
+                        {/* 탭 네비게이션 */}
+                        <div className="tab-navigation">
+                            <button
+                                className={`tab-btn ${budgetTab === 'dashboard' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('dashboard')}
+                            >
+                                📊 대시보드
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'register' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('register')}
+                            >
+                                📝 집행등록
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'calculator' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('calculator')}
+                            >
+                                🧮 원천징수계산
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'history' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('history')}
+                            >
+                                📋 집행내역
+                            </button>
+                        </div>
+
+                        {/* 탭 내용 */}
+                        <div className="card">
+                            {budgetTab === 'dashboard' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        📊 예산 현황 대시보드
+                                    </h2>
+
+                                    {/* 예산 집행률 */}
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
+                                        color: 'white',
+                                        padding: '24px',
+                                        borderRadius: '12px',
+                                        marginBottom: '24px'
+                                    }}>
+                                        <h3 style={{ margin: '0 0 16px 0' }}>전체 예산 집행률</h3>
+                                        <div style={{
+                                            height: '32px',
+                                            background: 'rgba(255,255,255,0.2)',
+                                            borderRadius: '16px',
+                                            overflow: 'hidden',
+                                            marginBottom: '16px'
+                                        }}>
+                                            <div style={{
+                                                height: '100%',
+                                                background: 'white',
+                                                width: `${data.stats.usageRate || 0}%`,
+                                                transition: 'width 0.3s'
+                                            }} />
+                                        </div>
+                                        <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            fontSize: '16px'
+                                        }}>
+                                            <span>집행: {Math.round((data.stats.usedBudget || 0) / 10000).toLocaleString()}만원</span>
+                                            <span>총예산: 7,000만원</span>
+                                        </div>
+                                        <div style={{
+                                            textAlign: 'center',
+                                            fontSize: '32px',
+                                            fontWeight: '700',
+                                            marginTop: '16px'
+                                        }}>
+                                            {data.stats.usageRate || 0}%
+                                        </div>
+                                    </div>
+
+                                    {/* 예산 카테고리별 현황 */}
+                                    <div className="form-grid">
+                                        {BUDGET_DATA.categories.map(category => (
+                                            <div key={category.id} className="card" style={{ padding: '20px' }}>
+                                                <h4 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600' }}>
+                                                    {category.name}
+                                                </h4>
+                                                <div style={{
+                                                    fontSize: '24px',
+                                                    fontWeight: '700',
+                                                    color: '#1B6B5A',
+                                                    marginBottom: '8px'
+                                                }}>
+                                                    {(category.budget / 10000).toLocaleString()}만원
+                                                </div>
+                                                <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                    {category.subcategories.length}개 하위 분류
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* 최근 집행 내역 */}
+                                    <div style={{ marginTop: '32px' }}>
+                                        <h3 style={{ marginBottom: '16px' }}>최근 집행 내역</h3>
+                                        {data.budgetExecutions.slice(0, 5).map(execution => (
+                                            <div key={execution.id} className="execution-item">
+                                                <div className="execution-header">
+                                                    <div>
+                                                        <div className="execution-title">{execution.budget_item_name}</div>
+                                                        <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                            {execution.description}
+                                                        </div>
+                                                    </div>
+                                                    <div className="execution-amount">
+                                                        {execution.amount?.toLocaleString()}원
+                                                    </div>
+                                                </div>
+                                                <div className="execution-meta">
+                                                    <span>📅 {execution.execution_date}</span>
+                                                    <span>💳 {execution.payment_method}</span>
+                                                    <span>🏷️ {execution.category_name}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {data.budgetExecutions.length === 0 && (
+                                            <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                                등록된 집행 내역이 없습니다.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'register' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        📝 예산 집행 등록
+                                    </h2>
+
+                                    <div className="form-grid">
+                                        <div className="form-group">
+                                            <label>예산 분류</label>
+                                            <select
+                                                value={formData.subcategory_id}
+                                                onChange={(e) => {
+                                                    const subcategory = subcategories.find(s => s.id === e.target.value);
+                                                    setFormData({
+                                                        ...formData,
+                                                        subcategory_id: e.target.value,
+                                                        subcategory_name: subcategory?.name || '',
+                                                        category_name: subcategory?.categoryName || '',
+                                                        budget_item_id: '',
+                                                        budget_item_name: '',
+                                                        type: ''
+                                                    });
+                                                }}
+                                            >
+                                                <option value="">분류 선택</option>
+                                                {subcategories.map(subcategory => (
+                                                    <option key={subcategory.id} value={subcategory.id}>
+                                                        {subcategory.categoryName} > {subcategory.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>예산 항목</label>
+                                            <select
+                                                value={formData.budget_item_id}
+                                                onChange={(e) => {
+                                                    const item = selectedBudgetItems.find(i => i.id === e.target.value);
+                                                    setFormData({
+                                                        ...formData,
+                                                        budget_item_id: e.target.value,
+                                                        budget_item_name: item?.name || '',
+                                                        type: item?.type || ''
+                                                    });
+                                                }}
+                                                disabled={!formData.subcategory_id}
+                                            >
+                                                <option value="">항목 선택</option>
+                                                {selectedBudgetItems.map(item => (
+                                                    <option key={item.id} value={item.id}>
+                                                        {item.name} ({item.type})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>집행 금액</label>
+                                            <input
+                                                type="number"
+                                                placeholder="금액 입력"
+                                                value={formData.amount}
+                                                onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                                            />
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>결제 방법</label>
+                                            <select
+                                                value={formData.payment_method}
+                                                onChange={(e) => setFormData({...formData, payment_method: e.target.value})}
+                                            >
+                                                <option value="카드">카드</option>
+                                                <option value="계좌이체">계좌이체</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>집행일</label>
+                                            <input
+                                                type="date"
+                                                value={formData.execution_date}
+                                                onChange={(e) => setFormData({...formData, execution_date: e.target.value})}
+                                            />
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>수취인</label>
+                                            <input
+                                                type="text"
+                                                placeholder="수취인 입력"
+                                                value={formData.recipient}
+                                                onChange={(e) => setFormData({...formData, recipient: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group" style={{ marginTop: '24px' }}>
+                                        <label>집행 내용</label>
+                                        <textarea
+                                            rows="3"
+                                            placeholder="집행 내용 상세 설명"
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                        />
+                                    </div>
+
+                                    {/* 필요 서류 안내 */}
+                                    {formData.type && (
+                                        <div style={{
+                                            background: '#F8F9FA',
+                                            border: '1px solid #E2E8F0',
+                                            borderRadius: '8px',
+                                            padding: '16px',
+                                            marginTop: '24px'
+                                        }}>
+                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
+                                                📄 필요 증빙서류
+                                            </h4>
+                                            <div>
+                                                {getRequiredDocuments(formData.type, formData.payment_method).map((doc, index) => (
+                                                    <div key={index} style={{
+                                                        padding: '4px 0',
+                                                        fontSize: '14px'
+                                                    }}>
+                                                        ✓ {doc}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {DOCUMENT_RULES[formData.type]?.notes && (
+                                                <div style={{
+                                                    marginTop: '12px',
+                                                    padding: '8px',
+                                                    background: 'rgba(27, 107, 90, 0.1)',
+                                                    borderRadius: '4px',
+                                                    fontSize: '13px',
+                                                    whiteSpace: 'pre-line'
+                                                }}>
+                                                    💡 {DOCUMENT_RULES[formData.type].notes}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div style={{
+                                        display: 'flex',
+                                        gap: '12px',
+                                        marginTop: '24px'
+                                    }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={() => {
+                                                alert('집행 등록이 완료되었습니다.');
+                                                setFormData({
+                                                    subcategory_id: '',
+                                                    subcategory_name: '',
+                                                    category_name: '',
+                                                    budget_item_id: '',
+                                                    budget_item_name: '',
+                                                    type: '',
+                                                    description: '',
+                                                    amount: '',
+                                                    payment_method: '카드',
+                                                    execution_date: new Date().toISOString().split('T')[0],
+                                                    recipient: ''
+                                                });
+                                            }}
+                                        >
+                                            💾 등록하기
+                                        </button>
+                                        <button
+                                            className="btn btn-secondary"
+                                            onClick={() => {
+                                                setFormData({
+                                                    subcategory_id: '',
+                                                    subcategory_name: '',
+                                                    category_name: '',
+                                                    budget_item_id: '',
+                                                    budget_item_name: '',
+                                                    type: '',
+                                                    description: '',
+                                                    amount: '',
+                                                    payment_method: '카드',
+                                                    execution_date: new Date().toISOString().split('T')[0],
+                                                    recipient: ''
+                                                });
+                                            }}
+                                        >
+                                            🔄 초기화
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'calculator' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        🧮 원천징수세 계산기
+                                    </h2>
+
+                                    <div className="form-grid" style={{ maxWidth: '500px' }}>
+                                        <div className="form-group">
+                                            <label>지급 금액</label>
+                                            <input
+                                                type="number"
+                                                placeholder="금액 입력 (원)"
+                                                value={calculatorAmount}
+                                                onChange={(e) => setCalculatorAmount(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div style={{
+                                        display: 'flex',
+                                        gap: '12px',
+                                        marginTop: '16px'
+                                    }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={() => {
+                                                if (calculatorAmount) {
+                                                    const result = calculateWithholdingTax(parseInt(calculatorAmount));
+                                                    setCalculationResult(result);
+                                                }
+                                            }}
+                                        >
+                                            📊 계산하기
+                                        </button>
+                                        <button
+                                            className="btn btn-secondary"
+                                            onClick={() => {
+                                                setCalculatorAmount('');
+                                                setCalculationResult(null);
+                                            }}
+                                        >
+                                            🔄 초기화
+                                        </button>
+                                    </div>
+
+                                    {calculationResult && (
+                                        <div className="calculation-result">
+                                            <h3 style={{ margin: '0 0 16px 0' }}>계산 결과</h3>
+                                            <div className="result-item">
+                                                <span>지급 금액:</span>
+                                                <span>{parseInt(calculatorAmount).toLocaleString()}원</span>
+                                            </div>
+                                            <div className="result-item">
+                                                <span>소득세 (8%):</span>
+                                                <span>{calculationResult.income.toLocaleString()}원</span>
+                                            </div>
+                                            <div className="result-item">
+                                                <span>지방소득세 (10%):</span>
+                                                <span>{calculationResult.local.toLocaleString()}원</span>
+                                            </div>
+                                            <div className="result-item">
+                                                <span>총 세액:</span>
+                                                <span>{calculationResult.total.toLocaleString()}원</span>
+                                            </div>
+                                            <div className="result-item">
+                                                <span>실수령액:</span>
+                                                <span>{calculationResult.net.toLocaleString()}원</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div style={{
+                                        marginTop: '24px',
+                                        padding: '16px',
+                                        background: '#F8F9FA',
+                                        borderRadius: '8px',
+                                        fontSize: '14px',
+                                        color: '#6B6560'
+                                    }}>
+                                        <h4 style={{ margin: '0 0 8px 0' }}>💡 원천징수 기준</h4>
+                                        <p>• 125,000원 이하: 원천징수 없음</p>
+                                        <p>• 125,001원 이상: 소득세 8% + 지방소득세 10% (소득세의 10%)</p>
+                                        <p>• 자문비, 사업인건비, 단순인건비에 적용</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'history' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        📋 예산 집행 내역
+                                    </h2>
+
+                                    {data.budgetExecutions.map(execution => (
+                                        <div key={execution.id} className="execution-item">
+                                            <div className="execution-header">
+                                                <div>
+                                                    <div className="execution-title">{execution.budget_item_name}</div>
+                                                    <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                        {execution.description}
+                                                    </div>
+                                                </div>
+                                                <div className="execution-amount">
+                                                    {execution.amount?.toLocaleString()}원
+                                                </div>
+                                            </div>
+                                            <div className="execution-meta">
+                                                <span>📅 {execution.execution_date}</span>
+                                                <span>💳 {execution.payment_method}</span>
+                                                <span>🏷️ {execution.category_name} > {execution.subcategory_name}</span>
+                                                {execution.recipient && <span>👤 {execution.recipient}</span>}
+                                            </div>
+                                            {DOCUMENT_RULES[execution.type] && (
+                                                <div className="documents-list">
+                                                    <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
+                                                    {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => (
+                                                        <div key={index} className="document-item">
+                                                            <span>📄 {doc}</span>
+                                                            <span style={{
+                                                                color: '#1B6B5A',
+                                                                fontSize: '12px'
+                                                            }}>
+                                                                미제출
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {data.budgetExecutions.length === 0 && (
+                                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                            등록된 집행 내역이 없습니다.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderContent = () => {
+                if (loading) {
+                    return (
+                        <div className="loading">
+                            <div className="loading-spinner"></div>
+                            <div>데이터를 불러오고 있습니다...</div>
+                        </div>
+                    );
+                }
+
+                if (error) {
+                    return (
+                        <div>
+                            <div className="error-message">
+                                {error}
+                            </div>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => window.location.reload()}
+                            >
+                                다시 시도
+                            </button>
+                        </div>
+                    );
+                }
+
+                switch(currentPage) {
+                    case "dashboard": return renderDashboard();
+                    case "budget": return renderBudget();
+                    case "schedule": return renderSchedule();
+                    case "gallery": return renderGallery();
+                    case "board": return renderBoard();
+                    default: return renderDashboard();
+                }
+            };
+
+            return (
+                <div>
+                    {/* Header */}
+                    <div className="header">
+                        <div className="container">
+                            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
+                                아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                            </h1>
+                            <p style={{ margin: '8px 0 0 0', fontSize: '15px', opacity: 0.9 }}>
+                                청년노동자인권센터 • 총 예산 7천만원 • Supabase 연동
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="container">
+                        {/* Navigation */}
+                        <div className="navigation">
+                            {[
+                                { id: 'dashboard', label: '🏠 대시보드', description: '전체 현황 보기' },
+                                {
+                                    id: 'budget',
+                                    label: '💰 예산관리',
+                                    description: '고급 예산 집행 시스템'
+                                },
+                                { id: 'schedule', label: '📅 일정관리', description: '사업 일정 및 참여자 관리' },
+                                { id: 'gallery', label: '📸 갤러리', description: '현장 사진 및 결과물' },
+                                { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' }
+                            ].map(nav => (
+                                <button
+                                    key={nav.id}
+                                    className={`nav-btn ${currentPage === nav.id ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setCurrentPage(nav.id);
+                                    }}
+                                    title={nav.description}
+                                >
+                                    {nav.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Content */}
+                        <div className="content-area">
+                            {renderContent()}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // 앱 렌더링
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ProjectManagementSystem />);
+    </script>
+</body>
+</html>
