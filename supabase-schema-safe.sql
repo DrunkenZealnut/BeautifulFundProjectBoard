@@ -282,6 +282,15 @@ BEGIN
     DROP POLICY IF EXISTS "Public delete access for galleries" ON public.galleries;
     CREATE POLICY "Public delete access for galleries" ON public.galleries
         FOR DELETE USING (true);
+
+    -- schedules UPDATE/DELETE 정책 추가
+    DROP POLICY IF EXISTS "Public update access for schedules" ON public.schedules;
+    CREATE POLICY "Public update access for schedules" ON public.schedules
+        FOR UPDATE USING (true) WITH CHECK (true);
+
+    DROP POLICY IF EXISTS "Public delete access for schedules" ON public.schedules;
+    CREATE POLICY "Public delete access for schedules" ON public.schedules
+        FOR DELETE USING (true);
 END
 $$;
 
