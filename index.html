@@ -3315,12 +3315,21 @@
                                     onClick={() => setCurrentPage('schedule')}>전체보기</button>
                             </div>
                             {data.schedules.slice(0, 5).map(schedule => (
-                                <div key={schedule.id} className="item-card" style={{ cursor: 'pointer' }}
+                                <div key={schedule.id} className="item-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }}
                                     onClick={() => {
                                         setSelectedDate(schedule.start_date);
                                         setSelectedSchedule(schedule);
                                         setScheduleModal('detail');
                                         setCurrentPage('schedule');
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedDate(schedule.start_date);
+                                            setSelectedSchedule(schedule);
+                                            setScheduleModal('detail');
+                                            setCurrentPage('schedule');
+                                        }
                                     }}>
                                     <div className="item-title">{schedule.title}</div>
                                     <div className="item-meta">
@@ -3385,7 +3394,7 @@
                         </div>
                     </div>
 
-                    {/* 최근 갤러리 */}
+                    {/* Recent gallery */}
                     {data.galleries.length > 0 && (
                         <div className="card" style={{ marginTop: '20px' }}>
                             <div className="card-header">
@@ -5740,9 +5749,14 @@
                                     {/* 사업별 집행률 - 실제 집행내역 기반 */}
                                     <h3 style={{ marginBottom: '16px' }}>사업별 집행률</h3>
                                     {(() => {
-                                        // subcategory_id별 실제 집행 합계 계산
+                                        // Filter executions by selected period, then sum by subcategory_id
+                                        const periodRange = PERIOD_DATE_RANGES[budgetPeriod];
+                                        const periodExecutions = periodRange
+                                            ? data.budgetExecutions.filter(ex =>
+                                                ex.execution_date >= periodRange.start && ex.execution_date <= periodRange.end)
+                                            : data.budgetExecutions;
                                         const execBySubcat = {};
-                                        data.budgetExecutions.forEach(ex => {
+                                        periodExecutions.forEach(ex => {
                                             const id = ex.subcategory_id;
                                             if (!id) return;
                                             execBySubcat[id] = (execBySubcat[id] || 0) + (ex.amount || 0);
