@@ -5667,7 +5667,7 @@
                                         </div>
                                     </div>
 
-                                    {/* 시기별 예산 요약 카드 3개 - 실제 집행액 포함 */}
+                                    {/* Period budget summary cards (3 items) - includes actual execution amounts */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
                                         {Object.entries(BUDGET_DATA.periods).map(([key, p]) => {
                                             const periodUsed = getPeriodUsed(data.budgetExecutions, key);
@@ -5696,7 +5696,7 @@
                                         })}
                                     </div>
 
-                                    {/* 선택된 시기 전체 집행률 */}
+                                    {/* Total execution rate for selected period */}
                                     {(() => {
                                         const selectedPeriod = BUDGET_DATA.periods[budgetPeriod];
                                         const selectedUsed = getPeriodUsed(data.budgetExecutions, budgetPeriod);
@@ -5746,7 +5746,7 @@
                                         );
                                     })()}
 
-                                    {/* 사업별 집행률 - 실제 집행내역 기반 */}
+                                    {/* Execution rate by project - based on actual execution records */}
                                     <h3 style={{ marginBottom: '16px' }}>사업별 집행률</h3>
                                     {(() => {
                                         // Filter executions by selected period, then sum by subcategory_id
@@ -5765,15 +5765,15 @@
                                         return BUDGET_DATA.categories.map(category => {
                                             const catBudget = getBudgetByPeriod(category, budgetPeriod);
 
-                                            // 카테고리 실제 집행액 (소속 subcategory 합산)
+                                            // Actual category execution (sum of subcategories)
                                             const catExecuted = category.subcategories.reduce((sum, sub) =>
                                                 sum + (execBySubcat[sub.id] || 0), 0);
-                                            const catExecRate = catBudget > 0 ? Math.min(100, Math.round(catExecuted / catBudget * 100)) : 0;
+                                            const catExecRate = pct(catExecuted, catBudget);
                                             const remaining = Math.max(0, catBudget - catExecuted);
 
                                             return (
                                                 <div key={category.id} style={{ marginBottom: '24px', background: '#FAFAF9', border: '1px solid #EBE8E1', borderRadius: '12px', padding: '16px' }}>
-                                                    {/* 카테고리 헤더 */}
+                                                    {/* Category header */}
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                                                         <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#134E42' }}>{category.name}</h4>
                                                         <div style={{ textAlign: 'right', fontSize: '13px' }}>
@@ -5785,7 +5785,7 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    {/* 카테고리 전체 진행바 */}
+                                                    {/* Category overall progress bar */}
                                                     <div style={{ height: '10px', background: '#E2E0DD', borderRadius: '5px', overflow: 'hidden', marginBottom: '14px' }}>
                                                         <div style={{
                                                             height: '100%',
@@ -5795,13 +5795,13 @@
                                                             transition: 'width 0.4s'
                                                         }} />
                                                     </div>
-                                                    {/* 소분류별 집행률 */}
+                                                    {/* Execution rate by subcategory */}
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                         {category.subcategories.map(sub => {
                                                             const subBudget = getBudgetByPeriod(sub, budgetPeriod);
                                                             if (subBudget === 0) return null;
                                                             const subExecuted = execBySubcat[sub.id] || 0;
-                                                            const subRate = Math.min(100, subBudget > 0 ? Math.round(subExecuted / subBudget * 100) : 0);
+                                                            const subRate = pct(subExecuted, subBudget);
                                                             const subRemaining = Math.max(0, subBudget - subExecuted);
                                                             const barColor = subRate >= 90 ? '#DC2626' : subRate >= 50 ? '#D97706' : '#3B82F6';
 
@@ -5821,18 +5821,18 @@
                                                                     </div>
                                                                     {subExecuted > 0 && (
                                                                         <div style={{ fontSize: '11px', color: '#9C9690', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
-                                                                            <span>집행: {subExecuted.toLocaleString()}원</span>
-                                                                            <span>잔액: {subRemaining.toLocaleString()}원</span>
+                                                                            <span>집행: {fmt(subExecuted)}원</span>
+                                                                            <span>잔액: {fmt(subRemaining)}원</span>
                                                                         </div>
                                                                     )}
                                                                 </div>
                                                             );
                                                         })}
                                                     </div>
-                                                    {/* 카테고리 잔액 요약 */}
+                                                    {/* Category remaining budget summary */}
                                                     <div style={{ marginTop: '10px', fontSize: '12px', color: '#9C9690', display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
-                                                        <span>집행액: <strong style={{ color: '#134E42' }}>{catExecuted.toLocaleString()}원</strong></span>
-                                                        <span>잔액: <strong style={{ color: remaining === 0 ? '#DC2626' : '#6B6560' }}>{remaining.toLocaleString()}원</strong></span>
+                                                        <span>집행액: <strong style={{ color: '#134E42' }}>{fmt(catExecuted)}원</strong></span>
+                                                        <span>잔액: <strong style={{ color: remaining === 0 ? '#DC2626' : '#6B6560' }}>{fmt(remaining)}원</strong></span>
                                                     </div>
                                                 </div>
                                             );
