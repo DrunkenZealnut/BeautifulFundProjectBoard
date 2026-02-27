@@ -2004,7 +2004,25 @@
         console.log('✅ Supabase 클라이언트 초기화됨:', supabase);
         console.log('🔑 API Key 상태:', supabaseKey ? '존재함' : '없음');
 
-        // 예산 구조 데이터 (청년노동자인권센터 2026년 실제 예산편성 현황)
+        // Utility functions for consistent number/percentage formatting
+        const fmt = (n) => Math.round(n).toLocaleString();
+        const pct = (spent, budget) => budget > 0 ? Math.min(100, Math.round(spent / budget * 100)) : 0;
+
+        // Date ranges for budget period filtering (h1 = Jan-Jun, h2 = Jul-Dec)
+        const PERIOD_DATE_RANGES = {
+            h1: { start: '2026-01-01', end: '2026-06-30' },
+            h2: { start: '2026-07-01', end: '2026-12-31' },
+            total: null
+        };
+        const getPeriodUsed = (executions, periodKey) => {
+            const range = PERIOD_DATE_RANGES[periodKey];
+            if (!range) return executions.reduce((s, e) => s + (e.amount || 0), 0);
+            return executions
+                .filter(e => e.execution_date >= range.start && e.execution_date <= range.end)
+                .reduce((s, e) => s + (e.amount || 0), 0);
+        };
+
+        // Budget structure data (청년노동자인권센터 2026년 실제 예산편성 현황)
         // h1 = 상반기, h2 = 하반기, total = 전체 (h1 + h2)
         const BUDGET_DATA = {
             projectName: "2026 공익단체 인큐베이팅 지원사업",
@@ -3199,7 +3217,7 @@
             }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
 
             // 페이지 렌더링 함수들
-            // 대시보드용 갤러리 썸네일 (첨부파일에서 이미지 자동 로드)
+            // Gallery thumbnails for dashboard (auto-load images from attachments)
             const DashboardGalleryThumb = ({ item, catInfo, onClick }) => {
                 const [thumbUrl, setThumbUrl] = React.useState(
                     item.image_path && item.image_path !== 'placeholder' ? item.image_path : null
@@ -3220,7 +3238,12 @@
                 }, [item.id, thumbUrl]);
 
                 return (
-                    <div onClick={onClick} style={{ cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid #EBE8E1', transition: 'box-shadow 0.2s' }}
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={onClick}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+                        style={{ cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid #EBE8E1', transition: 'box-shadow 0.2s' }}
                         onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)'}
                         onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                         <div style={{ height: 100, background: '#F8F6F1', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -3274,11 +3297,11 @@
                                 )}
                             </div>
                         </div>
-                        <div className="stat-card" onClick={() => setCurrentPage('gallery')} style={{ cursor: 'pointer' }}>
+                        <div className="stat-card" role="button" tabIndex={0} onClick={() => setCurrentPage('gallery')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('gallery'); } }} style={{ cursor: 'pointer' }}>
                             <div className="stat-value">{data.stats.totalGalleries || 0}</div>
                             <div className="stat-label">갤러리 사진</div>
                         </div>
-                        <div className="stat-card" onClick={() => setCurrentPage('board')} style={{ cursor: 'pointer' }}>
+                        <div className="stat-card" role="button" tabIndex={0} onClick={() => setCurrentPage('board')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('board'); } }} style={{ cursor: 'pointer' }}>
                             <div className="stat-value">{data.stats.totalBoards || 0}</div>
                             <div className="stat-label">게시글</div>
                         </div>
@@ -3375,8 +3398,9 @@
                                     const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
                                     return (
                                         <DashboardGalleryThumb key={item.id} item={item} catInfo={catInfo}
-                                            onClick={async () => {
-                                                await supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id);
+                                            onClick={() => {
+                                                // Fire-and-forget view count increment
+                                                supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id).catch(console.error);
                                                 setSelectedGalleryItem({ ...item, view_count: (item.view_count || 0) + 1 });
                                                 setGalleryView('detail');
                                                 setCurrentPage('gallery');
@@ -5637,7 +5661,8 @@
                                     {/* 시기별 예산 요약 카드 3개 - 실제 집행액 포함 */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
                                         {Object.entries(BUDGET_DATA.periods).map(([key, p]) => {
-                                            const periodExecRate = Math.min(100, Math.round((data.stats.usedBudget || 0) / p.budget * 100));
+                                            const periodUsed = getPeriodUsed(data.budgetExecutions, key);
+                                            const periodExecRate = pct(periodUsed, p.budget);
                                             const isActive = budgetPeriod === key;
                                             return (
                                                 <div key={key} style={{
@@ -5650,7 +5675,7 @@
                                                     border: isActive ? 'none' : '1px solid #E2E0DD'
                                                 }} onClick={() => setBudgetPeriod(key)}>
                                                     <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '4px' }}>{p.label}</div>
-                                                    <div style={{ fontSize: '20px', fontWeight: '700' }}>{(p.budget / 10000).toLocaleString()}만원</div>
+                                                    <div style={{ fontSize: '20px', fontWeight: '700' }}>{fmt(p.budget / 10000)}만원</div>
                                                     <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
                                                         집행률 {periodExecRate}%
                                                     </div>
@@ -5663,47 +5688,54 @@
                                     </div>
 
                                     {/* 선택된 시기 전체 집행률 */}
-                                    <div style={{
-                                        background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
-                                        color: 'white',
-                                        padding: '24px',
-                                        borderRadius: '12px',
-                                        marginBottom: '24px'
-                                    }}>
-                                        <h3 style={{ margin: '0 0 16px 0' }}>
-                                            {BUDGET_DATA.periods[budgetPeriod].label} 예산 집행률
-                                        </h3>
+                                    {(() => {
+                                        const selectedPeriod = BUDGET_DATA.periods[budgetPeriod];
+                                        const selectedUsed = getPeriodUsed(data.budgetExecutions, budgetPeriod);
+                                        const selectedRate = pct(selectedUsed, selectedPeriod.budget);
+                                        return (
                                         <div style={{
-                                            height: '32px',
-                                            background: 'rgba(255,255,255,0.2)',
-                                            borderRadius: '16px',
-                                            overflow: 'hidden',
-                                            marginBottom: '16px'
+                                            background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
+                                            color: 'white',
+                                            padding: '24px',
+                                            borderRadius: '12px',
+                                            marginBottom: '24px'
                                         }}>
+                                            <h3 style={{ margin: '0 0 16px 0' }}>
+                                                {selectedPeriod.label} 예산 집행률
+                                            </h3>
                                             <div style={{
-                                                height: '100%',
-                                                background: 'white',
-                                                width: `${Math.min(100, Math.round((data.stats.usedBudget || 0) / BUDGET_DATA.periods[budgetPeriod].budget * 100))}%`,
-                                                transition: 'width 0.3s'
-                                            }} />
+                                                height: '32px',
+                                                background: 'rgba(255,255,255,0.2)',
+                                                borderRadius: '16px',
+                                                overflow: 'hidden',
+                                                marginBottom: '16px'
+                                            }}>
+                                                <div style={{
+                                                    height: '100%',
+                                                    background: 'white',
+                                                    width: `${selectedRate}%`,
+                                                    transition: 'width 0.3s'
+                                                }} />
+                                            </div>
+                                            <div style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                fontSize: '16px'
+                                            }}>
+                                                <span>집행: {fmt(selectedUsed / 10000)}만원</span>
+                                                <span>예산: {fmt(selectedPeriod.budget / 10000)}만원</span>
+                                            </div>
+                                            <div style={{
+                                                textAlign: 'center',
+                                                fontSize: '32px',
+                                                fontWeight: '700',
+                                                marginTop: '16px'
+                                            }}>
+                                                {selectedRate}%
+                                            </div>
                                         </div>
-                                        <div style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            fontSize: '16px'
-                                        }}>
-                                            <span>집행: {Math.round((data.stats.usedBudget || 0) / 10000).toLocaleString()}만원</span>
-                                            <span>예산: {(BUDGET_DATA.periods[budgetPeriod].budget / 10000).toLocaleString()}만원</span>
-                                        </div>
-                                        <div style={{
-                                            textAlign: 'center',
-                                            fontSize: '32px',
-                                            fontWeight: '700',
-                                            marginTop: '16px'
-                                        }}>
-                                            {Math.round((data.stats.usedBudget || 0) / BUDGET_DATA.periods[budgetPeriod].budget * 100)}%
-                                        </div>
-                                    </div>
+                                        );
+                                    })()}
 
                                     {/* 사업별 집행률 - 실제 집행내역 기반 */}
                                     <h3 style={{ marginBottom: '16px' }}>사업별 집행률</h3>
@@ -5735,7 +5767,7 @@
                                                                 {catExecRate}%
                                                             </span>
                                                             <div style={{ color: '#9C9690', fontSize: '12px' }}>
-                                                                {Math.round(catExecuted / 10000).toLocaleString()}만 / {Math.round(catBudget / 10000).toLocaleString()}만원
+                                                                {fmt(catExecuted / 10000)}만 / {fmt(catBudget / 10000)}만원
                                                             </div>
                                                         </div>
                                                     </div>
@@ -5766,7 +5798,7 @@
                                                                         <div style={{ textAlign: 'right' }}>
                                                                             <span style={{ fontWeight: '700', color: barColor }}>{subRate}%</span>
                                                                             <span style={{ color: '#9C9690', marginLeft: '8px' }}>
-                                                                                {Math.round(subExecuted / 10000).toLocaleString()}만 / {Math.round(subBudget / 10000).toLocaleString()}만원
+                                                                                {fmt(subExecuted / 10000)}만 / {fmt(subBudget / 10000)}만원
                                                                             </span>
                                                                         </div>
                                                                     </div>
