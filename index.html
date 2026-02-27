@@ -4616,18 +4616,139 @@
                 const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
                 const isHtml = /<[a-z][\s\S]*>/i.test(item.description || '');
 
+                // 이미지 첨부파일 분리
+                const imageAttachments = (attachments || []).filter(a => a.file_type?.startsWith('image/'));
+                const otherAttachments = (attachments || []).filter(a => !a.file_type?.startsWith('image/'));
+
+                const [slideIdx, setSlideIdx] = React.useState(0);
+                const [lightbox, setLightbox] = React.useState(false);
+
+                // 슬라이드 이미지 목록: image_path가 유효하면 포함 + 이미지 첨부파일들
+                const slideImages = [];
+                if (item.image_path && item.image_path !== 'placeholder') {
+                    // image_path가 첨부파일과 중복되지 않도록 확인
+                    const isDuplicate = imageAttachments.some(a => {
+                        const url = getAttachmentUrl(a.file_path);
+                        return url === item.image_path;
+                    });
+                    if (!isDuplicate) {
+                        slideImages.push({ url: item.image_path, name: item.title });
+                    }
+                }
+                imageAttachments.forEach(a => {
+                    slideImages.push({ url: getAttachmentUrl(a.file_path), name: a.original_filename });
+                });
+
+                const safeSlideIdx = slideImages.length > 0 ? Math.min(slideIdx, slideImages.length - 1) : 0;
+
                 return (
                     <div className="board-detail">
-                        <div className="gallery-detail-image">
-                            {item.image_path && item.image_path !== 'placeholder' ? (
-                                <img src={item.image_path} alt={item.title} />
-                            ) : (
+                        {/* 이미지 슬라이드쇼 */}
+                        {slideImages.length > 0 ? (
+                            <div style={{ position: 'relative', marginBottom: 20 }}>
+                                <div className="gallery-detail-image" style={{ cursor: 'pointer', position: 'relative' }}
+                                    onClick={() => setLightbox(true)}>
+                                    <img src={slideImages[safeSlideIdx].url} alt={slideImages[safeSlideIdx].name}
+                                        style={{ width: '100%', maxHeight: '500px', objectFit: 'contain', background: '#1a1a1a', borderRadius: 12 }} />
+
+                                    {/* 슬라이드 카운터 */}
+                                    {slideImages.length > 1 && (
+                                        <div style={{
+                                            position: 'absolute', bottom: 12, right: 12,
+                                            background: 'rgba(0,0,0,0.6)', color: 'white',
+                                            padding: '4px 12px', borderRadius: 20, fontSize: 13
+                                        }}>
+                                            {safeSlideIdx + 1} / {slideImages.length}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 이전/다음 버튼 */}
+                                {slideImages.length > 1 && (
+                                    <>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i <= 0 ? slideImages.length - 1 : i - 1); }}
+                                            style={{
+                                                position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 40, height: 40, fontSize: 20,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>◀</button>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i >= slideImages.length - 1 ? 0 : i + 1); }}
+                                            style={{
+                                                position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 40, height: 40, fontSize: 20,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>▶</button>
+                                    </>
+                                )}
+
+                                {/* 썸네일 스트립 */}
+                                {slideImages.length > 1 && (
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', padding: '4px 0' }}>
+                                        {slideImages.map((img, idx) => (
+                                            <img key={idx} src={img.url} alt={img.name}
+                                                onClick={() => setSlideIdx(idx)}
+                                                style={{
+                                                    width: 72, height: 54, objectFit: 'cover', borderRadius: 8,
+                                                    cursor: 'pointer', border: idx === safeSlideIdx ? '3px solid #134E42' : '3px solid transparent',
+                                                    opacity: idx === safeSlideIdx ? 1 : 0.6, transition: 'all 0.2s',
+                                                    flexShrink: 0
+                                                }} />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="gallery-detail-image">
                                 <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
                                     <div style={{ fontSize: '64px', marginBottom: '12px' }}>📷</div>
                                     <div>이미지가 등록되지 않았습니다.</div>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
+
+                        {/* 라이트박스 (전체화면 보기) */}
+                        {lightbox && slideImages.length > 0 && (
+                            <div style={{
+                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                                background: 'rgba(0,0,0,0.92)', zIndex: 2000,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexDirection: 'column'
+                            }} onClick={() => setLightbox(false)}>
+                                <button onClick={() => setLightbox(false)}
+                                    style={{
+                                        position: 'absolute', top: 20, right: 20,
+                                        background: 'none', border: 'none', color: 'white',
+                                        fontSize: 32, cursor: 'pointer', zIndex: 2001
+                                    }}>&times;</button>
+                                <img src={slideImages[safeSlideIdx].url} alt=""
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8 }} />
+
+                                {slideImages.length > 1 && (
+                                    <>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i <= 0 ? slideImages.length - 1 : i - 1); }}
+                                            style={{
+                                                position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 50, height: 50, fontSize: 24,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>◀</button>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i >= slideImages.length - 1 ? 0 : i + 1); }}
+                                            style={{
+                                                position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 50, height: 50, fontSize: 24,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>▶</button>
+                                    </>
+                                )}
+                                <div style={{ color: 'white', marginTop: 12, fontSize: 14 }}>
+                                    {slideImages[safeSlideIdx].name} ({safeSlideIdx + 1}/{slideImages.length})
+                                </div>
+                            </div>
+                        )}
 
                         <div className="board-detail-header">
                             <span className="gallery-card-category" style={{ background: `${catInfo.color}15`, color: catInfo.color }}>
@@ -4650,8 +4771,8 @@
                             )
                         )}
 
-                        {/* 첨부파일 */}
-                        {AttachmentListDisplay({ attachments: attachments || [] })}
+                        {/* 이미지 외 첨부파일 */}
+                        {AttachmentListDisplay({ attachments: otherAttachments })}
 
                         <div className="board-detail-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <button className="btn btn-secondary" onClick={onBack}>← 목록으로</button>
@@ -4876,6 +4997,27 @@
 
                         if (galleryAttachments.length > 0 && inserted?.id) {
                             await uploadAttachments(galleryAttachments, 'gallery', inserted.id);
+
+                            // 첫 번째 이미지 첨부파일을 대표 이미지로 설정
+                            const firstImage = galleryAttachments.find(f => f.type?.startsWith('image/'));
+                            if (firstImage) {
+                                const timestamp = Date.now();
+                                const safeName = firstImage.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                                const thumbPath = `gallery/${inserted.id}/${timestamp}_${safeName}`;
+                                const { data: thumbUrl } = supabase.storage.from('attachments').getPublicUrl(thumbPath);
+                                // DB에 저장된 실제 파일 경로로 image_path 업데이트
+                                const { data: atts } = await supabase.from('attachments')
+                                    .select('file_path, file_type')
+                                    .eq('gallery_id', inserted.id)
+                                    .order('created_at', { ascending: true });
+                                const firstImgAtt = atts?.find(a => a.file_type?.startsWith('image/'));
+                                if (firstImgAtt) {
+                                    const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(firstImgAtt.file_path);
+                                    if (urlData?.publicUrl) {
+                                        await supabase.from('galleries').update({ image_path: urlData.publicUrl }).eq('id', inserted.id);
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -5123,6 +5265,61 @@
                 }
             };
 
+            // ===== 갤러리 카드 (첨부파일에서 썸네일 자동 로드) =====
+            const GalleryCardWithThumb = ({ item, catInfo, onClick }) => {
+                const [thumbUrl, setThumbUrl] = React.useState(
+                    item.image_path && item.image_path !== 'placeholder' ? item.image_path : null
+                );
+
+                React.useEffect(() => {
+                    // image_path가 유효하지 않으면 첨부파일에서 이미지 찾기
+                    if (!thumbUrl) {
+                        (async () => {
+                            try {
+                                const { data: atts } = await supabase.from('attachments')
+                                    .select('file_path, file_type')
+                                    .eq('gallery_id', item.id)
+                                    .order('created_at', { ascending: true });
+                                const imgAtt = atts?.find(a => a.file_type?.startsWith('image/'));
+                                if (imgAtt) {
+                                    const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(imgAtt.file_path);
+                                    if (urlData?.publicUrl) {
+                                        setThumbUrl(urlData.publicUrl);
+                                        // image_path도 업데이트 (다음 로드 시 빠르게 표시)
+                                        await supabase.from('galleries').update({ image_path: urlData.publicUrl }).eq('id', item.id);
+                                    }
+                                }
+                            } catch (err) {
+                                console.error('썸네일 로드 실패:', err);
+                            }
+                        })();
+                    }
+                }, [item.id, thumbUrl]);
+
+                return (
+                    <div className="gallery-card" onClick={onClick}>
+                        <div className="gallery-card-image">
+                            {thumbUrl ? (
+                                <img src={thumbUrl} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                                <span>📷 이미지 미리보기</span>
+                            )}
+                        </div>
+                        <div className="gallery-card-body">
+                            <span className="gallery-card-category" style={{ background: `${catInfo.color}15`, color: catInfo.color }}>
+                                {catInfo.icon} {item.category}
+                            </span>
+                            <div className="gallery-card-title">{item.title}</div>
+                            <div className="gallery-card-meta">
+                                <span>📅 {item.taken_date || new Date(item.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}</span>
+                                <span>📍 {item.location || '미지정'}</span>
+                                <span>👁️ {item.view_count || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
             // ===== 갤러리게시판 렌더링 (템플릿 활용) =====
             const renderGallery = () => {
                 const galleryCategories = Object.entries(GALLERY_CATEGORY_MAP).map(([key, val]) => ({
@@ -5205,35 +5402,13 @@
                                 {pageItems.map(item => {
                                     const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
                                     return (
-                                        <div
-                                            key={item.id}
-                                            className="gallery-card"
+                                        <GalleryCardWithThumb key={item.id} item={item} catInfo={catInfo}
                                             onClick={async () => {
                                                 await supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id);
                                                 setSelectedGalleryItem({ ...item, view_count: (item.view_count || 0) + 1 });
                                                 setGalleryView('detail');
                                                 loadAttachments('gallery', item.id).then(setDetailAttachments);
-                                            }}
-                                        >
-                                            <div className="gallery-card-image">
-                                                {item.image_path && item.image_path !== 'placeholder' ? (
-                                                    <img src={item.image_path} alt={item.title} />
-                                                ) : (
-                                                    <span>📷 이미지 미리보기</span>
-                                                )}
-                                            </div>
-                                            <div className="gallery-card-body">
-                                                <span className="gallery-card-category" style={{ background: `${catInfo.color}15`, color: catInfo.color }}>
-                                                    {catInfo.icon} {item.category}
-                                                </span>
-                                                <div className="gallery-card-title">{item.title}</div>
-                                                <div className="gallery-card-meta">
-                                                    <span>📅 {item.taken_date || new Date(item.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}</span>
-                                                    <span>📍 {item.location || '미지정'}</span>
-                                                    <span>👁️ {item.view_count || 0}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            }} />
                                     );
                                 })}
                             </div>
