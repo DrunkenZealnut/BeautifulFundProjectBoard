@@ -284,6 +284,8 @@ BEGIN
         FOR DELETE USING (true);
 
     -- schedules UPDATE/DELETE 정책 추가
+    -- 참고: 현재 anon key 기반 인증이므로 USING(true) 사용.
+    -- 프로덕션에서는 created_by = auth.uid() OR admin 역할 검사로 변경 필요.
     DROP POLICY IF EXISTS "Public update access for schedules" ON public.schedules;
     CREATE POLICY "Public update access for schedules" ON public.schedules
         FOR UPDATE USING (true) WITH CHECK (true);
@@ -291,6 +293,80 @@ BEGIN
     DROP POLICY IF EXISTS "Public delete access for schedules" ON public.schedules;
     CREATE POLICY "Public delete access for schedules" ON public.schedules
         FOR DELETE USING (true);
+
+    -- ===== 누락된 6개 테이블 RLS 정책 추가 (CodeRabbit 리뷰 반영) =====
+
+    -- documents
+    DROP POLICY IF EXISTS "Public read access for documents" ON public.documents;
+    CREATE POLICY "Public read access for documents" ON public.documents
+        FOR SELECT USING (true);
+    DROP POLICY IF EXISTS "Public insert access for documents" ON public.documents;
+    CREATE POLICY "Public insert access for documents" ON public.documents
+        FOR INSERT WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public update access for documents" ON public.documents;
+    CREATE POLICY "Public update access for documents" ON public.documents
+        FOR UPDATE USING (true) WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public delete access for documents" ON public.documents;
+    CREATE POLICY "Public delete access for documents" ON public.documents
+        FOR DELETE USING (true);
+
+    -- participants
+    DROP POLICY IF EXISTS "Public read access for participants" ON public.participants;
+    CREATE POLICY "Public read access for participants" ON public.participants
+        FOR SELECT USING (true);
+    DROP POLICY IF EXISTS "Public insert access for participants" ON public.participants;
+    CREATE POLICY "Public insert access for participants" ON public.participants
+        FOR INSERT WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public update access for participants" ON public.participants;
+    CREATE POLICY "Public update access for participants" ON public.participants
+        FOR UPDATE USING (true) WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public delete access for participants" ON public.participants;
+    CREATE POLICY "Public delete access for participants" ON public.participants
+        FOR DELETE USING (true);
+
+    -- attachments
+    DROP POLICY IF EXISTS "Public read access for attachments" ON public.attachments;
+    CREATE POLICY "Public read access for attachments" ON public.attachments
+        FOR SELECT USING (true);
+    DROP POLICY IF EXISTS "Public insert access for attachments" ON public.attachments;
+    CREATE POLICY "Public insert access for attachments" ON public.attachments
+        FOR INSERT WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public update access for attachments" ON public.attachments;
+    CREATE POLICY "Public update access for attachments" ON public.attachments
+        FOR UPDATE USING (true) WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public delete access for attachments" ON public.attachments;
+    CREATE POLICY "Public delete access for attachments" ON public.attachments
+        FOR DELETE USING (true);
+
+    -- comments
+    DROP POLICY IF EXISTS "Public read access for comments" ON public.comments;
+    CREATE POLICY "Public read access for comments" ON public.comments
+        FOR SELECT USING (true);
+    DROP POLICY IF EXISTS "Public insert access for comments" ON public.comments;
+    CREATE POLICY "Public insert access for comments" ON public.comments
+        FOR INSERT WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public update access for comments" ON public.comments;
+    CREATE POLICY "Public update access for comments" ON public.comments
+        FOR UPDATE USING (true) WITH CHECK (true);
+    DROP POLICY IF EXISTS "Public delete access for comments" ON public.comments;
+    CREATE POLICY "Public delete access for comments" ON public.comments
+        FOR DELETE USING (true);
+
+    -- activity_logs
+    DROP POLICY IF EXISTS "Public read access for activity_logs" ON public.activity_logs;
+    CREATE POLICY "Public read access for activity_logs" ON public.activity_logs
+        FOR SELECT USING (true);
+    DROP POLICY IF EXISTS "Public insert access for activity_logs" ON public.activity_logs;
+    CREATE POLICY "Public insert access for activity_logs" ON public.activity_logs
+        FOR INSERT WITH CHECK (true);
+
+    -- system_settings
+    DROP POLICY IF EXISTS "Public read access for system_settings" ON public.system_settings;
+    CREATE POLICY "Public read access for system_settings" ON public.system_settings
+        FOR SELECT USING (true);
+    DROP POLICY IF EXISTS "Public update access for system_settings" ON public.system_settings;
+    CREATE POLICY "Public update access for system_settings" ON public.system_settings
+        FOR UPDATE USING (true) WITH CHECK (true);
 END
 $$;
 
