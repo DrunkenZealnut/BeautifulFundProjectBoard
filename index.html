@@ -2695,6 +2695,16 @@
                         ? googleEvent.end.dateTime.split('T')[1].substring(0, 5)
                         : null;
 
+                    // Duplicate check: skip if same title + start date already exists in Supabase
+                    const title = googleEvent.summary || '(제목 없음)';
+                    const duplicate = data.schedules.some(s =>
+                        s.title === title && s.start_date === startDate
+                    );
+                    if (duplicate) {
+                        alert(`"${title}" 일정은 이미 등록되어 있습니다.`);
+                        return;
+                    }
+
                     const { data: newSchedule, error } = await supabase
                         .from('schedules')
                         .insert({
@@ -2728,25 +2738,34 @@
                     console.error('❌ Google 이벤트 가져오기 실패:', err);
                     alert('이벤트 가져오기에 실패했습니다.');
                 }
-            }, [currentUser]);
+            }, [currentUser, data.schedules]);
 
-            // 전체 동기화 (Supabase → Google)
+            // Sync all Supabase schedules to Google Calendar (skips already-synced items)
             const syncAllToGoogle = useCallback(async () => {
                 if (!googleConnected) return;
                 setGoogleSyncing(true);
                 try {
                     let synced = 0;
+                    let skipped = 0;
                     for (const schedule of data.schedules) {
+                        // Skip if an event with the same title + start date already exists in Google
+                        const alreadySynced = googleEvents.some(ge => {
+                            const geDate = ge.start.dateTime
+                                ? ge.start.dateTime.split('T')[0]
+                                : ge.start.date;
+                            return ge.summary === schedule.title && geDate === schedule.start_date;
+                        });
+                        if (alreadySynced) { skipped++; continue; }
                         await syncToGoogleCalendar(schedule);
                         synced++;
                     }
-                    alert(`${synced}개 일정이 Google Calendar에 동기화되었습니다.`);
+                    alert(`${synced}개 일정이 Google Calendar에 동기화되었습니다.${skipped > 0 ? `\n(${skipped}개 중복 건너뜀)` : ''}`);
                 } catch (err) {
                     console.error('❌ 전체 동기화 실패:', err);
                 } finally {
                     setGoogleSyncing(false);
                 }
-            }, [googleConnected, data.schedules, syncToGoogleCalendar]);
+            }, [googleConnected, data.schedules, googleEvents, syncToGoogleCalendar]);
 
             // 일정 저장 (신규/수정)
             const handleSaveSchedule = useCallback(async () => {
