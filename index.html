@@ -3149,8 +3149,7 @@
                     const { data: executions, error } = await supabase
                         .from('budget_executions')
                         .select('*')
-                        .order('execution_date', { ascending: false })
-                        .limit(10);
+                        .order('execution_date', { ascending: false });
 
                     if (error) throw error;
                     return executions || [];
@@ -5777,7 +5776,7 @@
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                                                         <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#134E42' }}>{category.name}</h4>
                                                         <div style={{ textAlign: 'right', fontSize: '13px' }}>
-                                                            <span style={{ fontWeight: '700', color: catExecRate >= 90 ? '#DC2626' : catExecRate >= 50 ? '#D97706' : '#1B6B5A', fontSize: '18px' }}>
+                                                            <span style={{ fontWeight: '700', color: catExecRate >= 90 ? '#DC2626' : catExecRate >= 50 ? '#D97706' : '#3B82F6', fontSize: '18px' }}>
                                                                 {catExecRate}%
                                                             </span>
                                                             <div style={{ color: '#9C9690', fontSize: '12px' }}>
@@ -5789,7 +5788,7 @@
                                                     <div style={{ height: '10px', background: '#E2E0DD', borderRadius: '5px', overflow: 'hidden', marginBottom: '14px' }}>
                                                         <div style={{
                                                             height: '100%',
-                                                            background: catExecRate >= 90 ? '#DC2626' : catExecRate >= 50 ? '#D97706' : '#1B6B5A',
+                                                            background: catExecRate >= 90 ? '#DC2626' : catExecRate >= 50 ? '#D97706' : '#3B82F6',
                                                             width: `${catExecRate}%`,
                                                             borderRadius: '5px',
                                                             transition: 'width 0.4s'
