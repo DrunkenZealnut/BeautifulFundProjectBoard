@@ -2022,8 +2022,8 @@
                 .reduce((s, e) => s + (e.amount || 0), 0);
         };
 
-        // Budget structure data (청년노동자인권센터 2026년 실제 예산편성 현황)
-        // h1 = 상반기, h2 = 하반기, total = 전체 (h1 + h2)
+        // Budget structure data (actual budget allocation for 2026)
+        // h1 = first half (Jan-Jun), h2 = second half (Jul-Dec), total = full year
         const BUDGET_DATA = {
             projectName: "2026 공익단체 인큐베이팅 지원사업",
             organization: "청년노동자인권센터",
@@ -5673,14 +5673,16 @@
                                             const periodExecRate = pct(periodUsed, p.budget);
                                             const isActive = budgetPeriod === key;
                                             return (
-                                                <div key={key} style={{
+                                                <button type="button" key={key} style={{
                                                     padding: '16px',
                                                     borderRadius: '12px',
                                                     background: isActive ? 'linear-gradient(135deg, #1B6B5A, #134E42)' : '#F8F9FA',
                                                     color: isActive ? 'white' : '#2D2B29',
                                                     cursor: 'pointer',
                                                     transition: 'all 0.2s',
-                                                    border: isActive ? 'none' : '1px solid #E2E0DD'
+                                                    border: isActive ? 'none' : '1px solid #E2E0DD',
+                                                    textAlign: 'left',
+                                                    width: '100%'
                                                 }} onClick={() => setBudgetPeriod(key)}>
                                                     <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '4px' }}>{p.label}</div>
                                                     <div style={{ fontSize: '20px', fontWeight: '700' }}>{fmt(p.budget / 10000)}만원</div>
@@ -5690,7 +5692,7 @@
                                                     <div style={{ height: '4px', background: isActive ? 'rgba(255,255,255,0.3)' : '#E2E0DD', borderRadius: '2px', marginTop: '8px', overflow: 'hidden' }}>
                                                         <div style={{ height: '100%', background: isActive ? 'white' : '#1B6B5A', width: `${periodExecRate}%`, borderRadius: '2px' }} />
                                                     </div>
-                                                </div>
+                                                </button>
                                             );
                                         })}
                                     </div>
