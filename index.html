@@ -4443,7 +4443,44 @@
                         />
                     </div>
 
-                    {/* 첨부파일 영역 */}
+                    {/* 기존 첨부파일 표시 (수정 모드) */}
+                    {isEdit && existingGalleryAttachments.length > 0 && (
+                        <div className="form-group">
+                            <label className="form-label">📎 기존 첨부파일 ({existingGalleryAttachments.length})</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                                {existingGalleryAttachments.filter(a => a.file_type?.startsWith('image/')).map(att => (
+                                    <div key={att.id} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid #EBE8E1' }}>
+                                        <img src={getAttachmentUrl(att.file_path)} alt={att.original_filename}
+                                            style={{ width: 120, height: 90, objectFit: 'cover', display: 'block' }} />
+                                        <button onClick={() => deleteExistingAttachment(att)}
+                                            style={{
+                                                position: 'absolute', top: 4, right: 4,
+                                                background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 22, height: 22, fontSize: 12,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>&times;</button>
+                                        <div style={{ fontSize: 11, padding: '4px 6px', color: '#6B6560', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: 120 }}>
+                                            {att.original_filename}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            {existingGalleryAttachments.filter(a => !a.file_type?.startsWith('image/')).map(att => (
+                                <div key={att.id} className="file-item" style={{ marginBottom: 6 }}>
+                                    <span className="file-item-icon">{getFileIcon(att.file_type)}</span>
+                                    <div className="file-item-info">
+                                        <div className="file-item-name">{att.original_filename}</div>
+                                        <div className="file-item-size">{formatFileSize(att.file_size)}</div>
+                                    </div>
+                                    <button className="btn btn-secondary"
+                                        style={{ padding: '4px 10px', fontSize: '11px', color: '#DC2626' }}
+                                        onClick={() => deleteExistingAttachment(att)}>삭제</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* 새 첨부파일 추가 영역 */}
                     {FileUploadArea({ attachments: galleryAttachments, setAttachments: setGalleryAttachments, fileInputRef: galleryFileInputRef })}
 
                     {!isEdit && (
@@ -5031,6 +5068,7 @@
                     setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' });
                     setEditingGalleryItem(null);
                     setGalleryAttachments([]);
+                    setExistingGalleryAttachments([]);
                     if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = '';
                 } catch (err) {
                     console.error('갤러리 저장 실패:', err);
@@ -5039,6 +5077,8 @@
             };
 
             // ===== 갤러리 수정 시작 =====
+            const [existingGalleryAttachments, setExistingGalleryAttachments] = useState([]);
+
             const startGalleryEdit = async (item) => {
                 const isAdmin = currentUser?.role === 'admin';
                 if (!isAdmin) {
@@ -5057,12 +5097,30 @@
                     taken_date: item.taken_date || '',
                     password: ''
                 });
+
+                // 기존 첨부파일 로드
+                const atts = await loadAttachments('gallery', item.id);
+                setExistingGalleryAttachments(atts);
+
                 setGalleryView('write');
                 setTimeout(() => {
                     if (galleryEditorRef.current) {
                         galleryEditorRef.current.innerHTML = item.description || '';
                     }
                 }, 100);
+            };
+
+            // 기존 첨부파일 삭제
+            const deleteExistingAttachment = async (att) => {
+                if (!confirm(`"${att.original_filename}" 파일을 삭제하시겠습니까?`)) return;
+                try {
+                    await supabase.storage.from('attachments').remove([att.file_path]);
+                    await supabase.from('attachments').delete().eq('id', att.id);
+                    setExistingGalleryAttachments(prev => prev.filter(a => a.id !== att.id));
+                } catch (err) {
+                    console.error('첨부파일 삭제 실패:', err);
+                    alert('파일 삭제에 실패했습니다.');
+                }
             };
 
             // ===== 갤러리 삭제 =====
@@ -5373,7 +5431,7 @@
                                 writeData: galleryWriteData,
                                 setWriteData: setGalleryWriteData,
                                 onSubmit: handleGallerySubmit,
-                                onCancel: () => { setGalleryView('list'); setEditingGalleryItem(null); setGalleryAttachments([]); setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' }); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; },
+                                onCancel: () => { setGalleryView('list'); setEditingGalleryItem(null); setGalleryAttachments([]); setExistingGalleryAttachments([]); setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' }); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; },
                                 isEdit: !!editingGalleryItem
                             })}
                         </div>
