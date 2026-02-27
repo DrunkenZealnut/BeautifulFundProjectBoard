@@ -3199,6 +3199,44 @@
             }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
 
             // 페이지 렌더링 함수들
+            // 대시보드용 갤러리 썸네일 (첨부파일에서 이미지 자동 로드)
+            const DashboardGalleryThumb = ({ item, catInfo, onClick }) => {
+                const [thumbUrl, setThumbUrl] = React.useState(
+                    item.image_path && item.image_path !== 'placeholder' ? item.image_path : null
+                );
+                React.useEffect(() => {
+                    if (!thumbUrl) {
+                        (async () => {
+                            const { data: atts } = await supabase.from('attachments')
+                                .select('file_path, file_type').eq('gallery_id', item.id)
+                                .order('created_at', { ascending: true });
+                            const img = atts?.find(a => a.file_type?.startsWith('image/'));
+                            if (img) {
+                                const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path);
+                                if (u?.publicUrl) setThumbUrl(u.publicUrl);
+                            }
+                        })();
+                    }
+                }, [item.id, thumbUrl]);
+
+                return (
+                    <div onClick={onClick} style={{ cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid #EBE8E1', transition: 'box-shadow 0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)'}
+                        onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                        <div style={{ height: 100, background: '#F8F6F1', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            {thumbUrl
+                                ? <img src={thumbUrl} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                : <span style={{ fontSize: 28 }}>📷</span>
+                            }
+                        </div>
+                        <div style={{ padding: '8px 10px' }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#2D2D2D', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                            <div style={{ fontSize: 11, color: catInfo.color, marginTop: 2 }}>{catInfo.icon} {item.category}</div>
+                        </div>
+                    </div>
+                );
+            };
+
             const renderDashboard = () => (
                 <div>
                     <h1 className="section-title">
@@ -3236,11 +3274,11 @@
                                 )}
                             </div>
                         </div>
-                        <div className="stat-card">
+                        <div className="stat-card" onClick={() => setCurrentPage('gallery')} style={{ cursor: 'pointer' }}>
                             <div className="stat-value">{data.stats.totalGalleries || 0}</div>
                             <div className="stat-label">갤러리 사진</div>
                         </div>
-                        <div className="stat-card">
+                        <div className="stat-card" onClick={() => setCurrentPage('board')} style={{ cursor: 'pointer' }}>
                             <div className="stat-value">{data.stats.totalBoards || 0}</div>
                             <div className="stat-label">게시글</div>
                         </div>
@@ -3250,9 +3288,17 @@
                         <div className="card">
                             <div className="card-header">
                                 <h2 className="card-title">📅 최근 일정</h2>
+                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => setCurrentPage('schedule')}>전체보기</button>
                             </div>
                             {data.schedules.slice(0, 5).map(schedule => (
-                                <div key={schedule.id} className="item-card">
+                                <div key={schedule.id} className="item-card" style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                        setSelectedDate(schedule.start_date);
+                                        setSelectedSchedule(schedule);
+                                        setScheduleModal('detail');
+                                        setCurrentPage('schedule');
+                                    }}>
                                     <div className="item-title">{schedule.title}</div>
                                     <div className="item-meta">
                                         📅 {schedule.start_date}<br/>
@@ -3272,6 +3318,8 @@
                         <div className="card">
                             <div className="card-header">
                                 <h2 className="card-title">📋 최근 게시글</h2>
+                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => setCurrentPage('board')}>전체보기</button>
                             </div>
                             {data.boards.slice(0, 5).map(board => {
                                 const typeInfo = BOARD_TYPE_MAP[board.board_type] || { label: board.board_type, badge: 'badge-info', icon: '📄' };
@@ -3313,6 +3361,32 @@
                             )}
                         </div>
                     </div>
+
+                    {/* 최근 갤러리 */}
+                    {data.galleries.length > 0 && (
+                        <div className="card" style={{ marginTop: '20px' }}>
+                            <div className="card-header">
+                                <h2 className="card-title">📸 최근 갤러리</h2>
+                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => setCurrentPage('gallery')}>전체보기</button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', padding: '4px 0' }}>
+                                {data.galleries.slice(0, 6).map(item => {
+                                    const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
+                                    return (
+                                        <DashboardGalleryThumb key={item.id} item={item} catInfo={catInfo}
+                                            onClick={async () => {
+                                                await supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id);
+                                                setSelectedGalleryItem({ ...item, view_count: (item.view_count || 0) + 1 });
+                                                setGalleryView('detail');
+                                                setCurrentPage('gallery');
+                                                loadAttachments('gallery', item.id).then(setDetailAttachments);
+                                            }} />
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
 
