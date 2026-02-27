@@ -5350,13 +5350,13 @@
                 if (galleryView === 'detail') {
                     return (
                         <div>
-                            {GalleryDetailView({
-                                item: selectedGalleryItem,
-                                onBack: () => { setGalleryView('list'); setSelectedGalleryItem(null); setDetailAttachments([]); },
-                                attachments: detailAttachments,
-                                onEdit: startGalleryEdit,
-                                onDelete: handleGalleryDelete
-                            })}
+                            <GalleryDetailView
+                                item={selectedGalleryItem}
+                                onBack={() => { setGalleryView('list'); setSelectedGalleryItem(null); setDetailAttachments([]); }}
+                                attachments={detailAttachments}
+                                onEdit={startGalleryEdit}
+                                onDelete={handleGalleryDelete}
+                            />
                         </div>
                     );
                 }
