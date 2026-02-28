@@ -3988,6 +3988,7 @@
                 '교육자료': { icon: '📚', color: '#7C3AED' },
                 '캠페인': { icon: '📣', color: '#DC2626' },
                 '행사': { icon: '🎉', color: '#2563EB' },
+                '영수증': { icon: '🧾', color: '#059669' },
                 '기타': { icon: '📌', color: '#6B7280' }
             };
 
@@ -5143,12 +5144,17 @@
 
                     if (editingGalleryItem) {
                         // 수정 모드
-                        const { error: updateError } = await supabase
-                            .from('galleries').update(postData).eq('id', editingGalleryItem.id);
+                        const { data: updatedRow, error: updateError } = await supabase
+                            .from('galleries').update(postData).eq('id', editingGalleryItem.id).select().single();
                         if (updateError) throw updateError;
 
                         if (galleryAttachments.length > 0) {
                             await uploadAttachments(galleryAttachments, 'gallery', editingGalleryItem.id);
+                        }
+
+                        // 수정 후 selectedGalleryItem도 갱신
+                        if (updatedRow) {
+                            setSelectedGalleryItem(prev => prev?.id === editingGalleryItem.id ? { ...prev, ...updatedRow } : prev);
                         }
                     } else {
                         // 새글 작성

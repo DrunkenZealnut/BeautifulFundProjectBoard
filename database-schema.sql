@@ -112,7 +112,7 @@ CREATE TABLE galleries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title VARCHAR(200) NOT NULL,
     description TEXT,
-    category ENUM('현장사진', '결과물', '교육자료', '캠페인', '행사', '기타') NOT NULL,
+    category ENUM('현장사진', '결과물', '교육자료', '캠페인', '행사', '영수증', '기타') NOT NULL,
     subcategory VARCHAR(100), -- 세부 분류
     image_path VARCHAR(500) NOT NULL,
     thumbnail_path VARCHAR(500),
