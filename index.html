@@ -2947,6 +2947,10 @@
             // { [execId]: { [docName]: { file_path, file_name, file_size } } }
             const docUploadFileInputRef = useRef(null);
             const activeDocUploadRef = useRef(null); // { execId, docName }
+            const [formDocFiles, setFormDocFiles] = useState({});
+            // { [docName]: File } — 등록 폼 서류 첨부 (등록 완료 후 업로드)
+            const formDocFileInputRef = useRef(null);
+            const activeFormDocNameRef = useRef(null);
             const boardEditorRef = useRef(null);
             const galleryEditorRef = useRef(null);
 
@@ -2968,7 +2972,7 @@
                 type: '',
                 description: '',
                 amount: '',
-                payment_method: '카드',
+                payment_method: '',
                 execution_date: new Date().toISOString().split('T')[0],
                 recipient: ''
             });
@@ -6222,6 +6226,7 @@
                                                 value={formData.payment_method}
                                                 onChange={(e) => setFormData({...formData, payment_method: e.target.value})}
                                             >
+                                                <option value="">결제 방법 선택</option>
                                                 <option value="카드">카드</option>
                                                 <option value="계좌이체">계좌이체</option>
                                             </select>
@@ -6257,8 +6262,8 @@
                                         />
                                     </div>
 
-                                    {/* 필요 서류 안내 */}
-                                    {formData.type && (
+                                    {/* 필요 서류 첨부 */}
+                                    {formData.type && formData.payment_method && (
                                         <div style={{
                                             background: '#F8F9FA',
                                             border: '1px solid #E2E8F0',
@@ -6269,15 +6274,41 @@
                                             <h4 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
                                                 📄 필요 증빙서류
                                             </h4>
-                                            <div>
-                                                {getRequiredDocuments(formData.type, formData.payment_method).map((doc, index) => (
-                                                    <div key={index} style={{
-                                                        padding: '4px 0',
-                                                        fontSize: '14px'
-                                                    }}>
-                                                        ✓ {doc}
-                                                    </div>
-                                                ))}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {getRequiredDocuments(formData.type, formData.payment_method).map((doc, index) => {
+                                                    const attachedFile = formDocFiles[doc];
+                                                    return (
+                                                        <div key={index} style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            padding: '6px 10px',
+                                                            background: '#fff',
+                                                            border: '1px solid #E2E8F0',
+                                                            borderRadius: '6px',
+                                                            fontSize: '14px'
+                                                        }}>
+                                                            <span>📄 {doc}</span>
+                                                            {attachedFile ? (
+                                                                <span style={{ color: '#1B6B5A', fontSize: '12px', fontWeight: '500' }}>
+                                                                    ✅ {attachedFile.name}
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-secondary"
+                                                                    style={{ fontSize: '12px', padding: '3px 10px' }}
+                                                                    onClick={() => {
+                                                                        activeFormDocNameRef.current = doc;
+                                                                        formDocFileInputRef.current?.click();
+                                                                    }}
+                                                                >
+                                                                    📎 첨부하기
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                             {DOCUMENT_RULES[formData.type]?.notes && (
                                                 <div style={{
@@ -6294,7 +6325,20 @@
                                         </div>
                                     )}
 
-                                    {FileUploadArea({ attachments: budgetAttachments, setAttachments: setBudgetAttachments, fileInputRef: budgetFileInputRef })}
+                                    {/* 등록 폼 서류 첨부용 hidden file input */}
+                                    <input
+                                        ref={formDocFileInputRef}
+                                        type="file"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            e.target.value = '';
+                                            const docName = activeFormDocNameRef.current;
+                                            activeFormDocNameRef.current = null;
+                                            if (!file || !docName) return;
+                                            setFormDocFiles(prev => ({ ...prev, [docName]: file }));
+                                        }}
+                                    />
 
                                     <div style={{
                                         display: 'flex',
@@ -6308,8 +6352,8 @@
                                                     console.log('📝 예산 집행 등록 시작...');
 
                                                     // 필수 필드 검증
-                                                    if (!formData.subcategory_id || !formData.budget_item_id || !formData.description || !formData.amount) {
-                                                        alert('필수 필드를 모두 입력해주세요.');
+                                                    if (!formData.subcategory_id || !formData.budget_item_id || !formData.description || !formData.amount || !formData.payment_method) {
+                                                        alert('필수 필드를 모두 입력해주세요. (결제 방법 포함)');
                                                         return;
                                                     }
 
@@ -6354,9 +6398,29 @@
                                                         return;
                                                     }
 
-                                                    // 첨부파일 업로드
-                                                    if (budgetAttachments.length > 0 && inserted?.id) {
-                                                        await uploadAttachments(budgetAttachments, 'execution', inserted.id);
+                                                    // 서류 첨부파일 업로드
+                                                    if (inserted?.id && Object.keys(formDocFiles).length > 0) {
+                                                        for (const [docName, file] of Object.entries(formDocFiles)) {
+                                                            try {
+                                                                const timestamp = Date.now();
+                                                                const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                                                                const filePath = `execution/${inserted.id}/${timestamp}_${safeName}`;
+                                                                const { data: storageData, error: storageError } = await supabase.storage
+                                                                    .from('attachments').upload(filePath, file);
+                                                                if (storageError) throw storageError;
+                                                                await supabase.from('documents').insert([{
+                                                                    execution_id: inserted.id,
+                                                                    document_name: docName,
+                                                                    document_type: 'required',
+                                                                    file_path: storageData?.path || filePath,
+                                                                    file_name: file.name,
+                                                                    file_size: file.size,
+                                                                    uploaded_by: currentUser.id
+                                                                }]);
+                                                            } catch (uploadErr) {
+                                                                console.error(`서류 첨부 실패 (${docName}):`, uploadErr);
+                                                            }
+                                                        }
                                                     }
 
                                                     alert('예산 집행이 성공적으로 등록되었습니다.');
@@ -6371,10 +6435,11 @@
                                                         type: '',
                                                         description: '',
                                                         amount: '',
-                                                        payment_method: '카드',
+                                                        payment_method: '',
                                                         execution_date: new Date().toISOString().split('T')[0],
                                                         recipient: ''
                                                     });
+                                                    setFormDocFiles({});
                                                     // 데이터 새로고침
                                                     window.location.reload();
 
@@ -6398,10 +6463,11 @@
                                                     type: '',
                                                     description: '',
                                                     amount: '',
-                                                    payment_method: '카드',
+                                                    payment_method: '',
                                                     execution_date: new Date().toISOString().split('T')[0],
                                                     recipient: ''
                                                 });
+                                                setFormDocFiles({});
                                             }}
                                         >
                                             🔄 초기화
