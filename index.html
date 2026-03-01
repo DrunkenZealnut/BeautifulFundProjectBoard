@@ -2295,28 +2295,40 @@
         };
 
         // ────────────────────────────────────────────────────────────
-        // 회의진행일지 자동생성
-        // HWP 서식(0[서식]_회의진행일지.hwp)의 구조를 반영한
-        // 인쇄 가능한 HTML 문서를 생성합니다.
-        // 대상 집행 유형: 사업인건비(자문비 등), 사업회의비(회의비), 교육훈련비
+        // Meeting minutes (회의진행일지) HTML generator
+        // Reflects the structure of HWP template 0[서식]_회의진행일지.hwp
+        // Applicable execution types: 사업인건비, 사업회의비, 교육훈련비
         // ────────────────────────────────────────────────────────────
-        const generateMeetingMinutesHTML = (execution, orgSettings = {}) => {
+        // formData: { title, date, location, content, participants: string[] }
+        const generateMeetingMinutesHTML = (formData, orgSettings = {}) => {
             const today = new Date();
             const y = today.getFullYear();
             const m = String(today.getMonth() + 1).padStart(2, '0');
             const d = String(today.getDate()).padStart(2, '0');
 
-            const orgName = orgSettings.org_name || '청년노동자인권센터';
-            const orgRep = orgSettings.org_representative || '';
+            // Escape user-supplied values to prevent XSS via document.write
+            const esc = (s) => String(s || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            // Preserve line breaks in free-text content after escaping
+            const escMultiline = (s) => esc(s).replace(/\n/g, '<br>');
 
-            const meetingTitle = execution.description || execution.subcategory_name || '';
-            const meetingDate = execution.execution_date || '';
-            const meetingContent = execution.description || '';
+            const orgName = esc(orgSettings.org_name || '청년노동자인권센터');
+            const orgRep = esc(orgSettings.org_representative || '');
 
-            // 참석자 행: recipient가 있으면 첫 번째 행에 표시, 나머지 공란
-            const ROWS = 12;
+            const meetingTitle = esc(formData.title || '');
+            const meetingDate = esc(formData.date || '');
+            const meetingLocation = esc(formData.location || '');
+            const meetingContent = escMultiline(formData.content || '');
+
+            // Generate attendee rows (entered names + remaining empty rows, minimum 12 rows)
+            const names = formData.participants || [];
+            const ROWS = Math.max(12, names.length);
             const participantRows = Array.from({ length: ROWS }, (_, i) => {
-                const name = (i === 0 && execution.recipient) ? execution.recipient : '';
+                const name = esc(names[i] || '');
                 return `<tr>
                     <td style="border:1px solid #000;padding:7px 10px;min-height:28px;">${name}</td>
                     <td style="border:1px solid #000;padding:7px 10px;"> </td>
@@ -2363,7 +2375,7 @@
             <td class="lbl">일&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;시</td>
             <td style="width:35%">${meetingDate}</td>
             <td class="lbl" style="width:90px;">장&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소</td>
-            <td></td>
+            <td>${meetingLocation}</td>
         </tr>
         <tr>
             <td class="lbl">내&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;용</td>
@@ -2406,8 +2418,9 @@
 </html>`;
         };
 
-        const openMeetingMinutes = (execution, orgSettings) => {
-            const html = generateMeetingMinutesHTML(execution, orgSettings || {});
+        // formData: { title, date, location, content, participants: string[] }
+        const openMeetingMinutes = (formData, orgSettings) => {
+            const html = generateMeetingMinutesHTML(formData, orgSettings || {});
             const win = window.open('', '_blank', 'width=900,height=750');
             if (!win) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
             win.document.write(html);
@@ -7358,7 +7371,16 @@
                                                     <button
                                                         className="btn btn-secondary"
                                                         style={{ fontSize: '12px', padding: '4px 12px', color: '#2B6CB0', borderColor: '#2B6CB0' }}
-                                                        onClick={() => openMeetingMinutes(execution, orgSettings)}
+                                                        onClick={() => {
+                                                            setMeetingMinutesForm({
+                                                                title: execution.description || execution.subcategory_name || '',
+                                                                date: execution.execution_date || '',
+                                                                location: '',
+                                                                content: '',
+                                                                participants: ''
+                                                            });
+                                                            setMeetingMinutesModal({ execution });
+                                                        }}
                                                     >
                                                         📋 회의진행일지 생성
                                                     </button>
@@ -7513,6 +7535,12 @@
 
             // ── 관리자 탭 ─────────────────────────────────────────────────
             const [adminTab, setAdminTab] = useState('users'); // 'users'|'recipients'|'orgSettings'
+
+            // ── 회의진행일지 입력 모달 ─────────────────────────────────────
+            const [meetingMinutesModal, setMeetingMinutesModal] = useState(null); // null | { execution }
+            const [meetingMinutesForm, setMeetingMinutesForm] = useState({
+                title: '', date: '', location: '', content: '', participants: ''
+            });
 
             // ── 기관 정보 저장 ────────────────────────────────────────────
             const saveOrgSettings = async () => {
@@ -8869,6 +8897,75 @@
                             {renderContent()}
                         </div>
                     </div>
+
+                    {/* 회의진행일지 입력 모달 */}
+                    {meetingMinutesModal && (
+                        <div className="schedule-modal-overlay" onClick={() => setMeetingMinutesModal(null)}>
+                            <div className="schedule-modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+                                <div className="schedule-modal-header">
+                                    <h3>📋 회의진행일지 생성</h3>
+                                    <button className="schedule-modal-close" onClick={() => setMeetingMinutesModal(null)}>&times;</button>
+                                </div>
+                                <div className="schedule-modal-body">
+                                    <div className="schedule-form-group">
+                                        <label>회의 제목</label>
+                                        <input type="text" value={meetingMinutesForm.title}
+                                            onChange={e => setMeetingMinutesForm(p => ({ ...p, title: e.target.value }))}
+                                            placeholder="예: 2026년 청년노동권리교육 자문 회의" />
+                                    </div>
+                                    <div className="schedule-form-row">
+                                        <div className="schedule-form-group">
+                                            <label>일시</label>
+                                            <input type="text" value={meetingMinutesForm.date}
+                                                onChange={e => setMeetingMinutesForm(p => ({ ...p, date: e.target.value }))}
+                                                placeholder="예: 2026-03-10 14:00" />
+                                        </div>
+                                        <div className="schedule-form-group">
+                                            <label>장소</label>
+                                            <input type="text" value={meetingMinutesForm.location}
+                                                onChange={e => setMeetingMinutesForm(p => ({ ...p, location: e.target.value }))}
+                                                placeholder="예: 청년노동자인권센터 사무실" />
+                                        </div>
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>회의 내용 / 안건</label>
+                                        <textarea rows="4" value={meetingMinutesForm.content}
+                                            onChange={e => setMeetingMinutesForm(p => ({ ...p, content: e.target.value }))}
+                                            placeholder="회의에서 다룬 안건, 논의 내용, 결정 사항 등을 입력하세요." />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>참석자 명단 <span style={{ fontWeight: 'normal', color: '#9C9690', fontSize: '12px' }}>(한 줄에 한 명씩 입력)</span></label>
+                                        <textarea rows="5" value={meetingMinutesForm.participants}
+                                            onChange={e => setMeetingMinutesForm(p => ({ ...p, participants: e.target.value }))}
+                                            placeholder={'홍길동\n김영희\n이철수'} />
+                                    </div>
+                                </div>
+                                <div className="schedule-modal-footer">
+                                    <button className="btn" style={{ background: '#F8F6F1', border: '1px solid #EBE8E1', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                        onClick={() => setMeetingMinutesModal(null)}>
+                                        취소
+                                    </button>
+                                    <button className="btn btn-primary"
+                                        onClick={() => {
+                                            const participantList = meetingMinutesForm.participants
+                                                .split('\n')
+                                                .map(s => s.trim())
+                                                .filter(Boolean);
+                                            openMeetingMinutes({
+                                                title: meetingMinutesForm.title,
+                                                date: meetingMinutesForm.date,
+                                                location: meetingMinutesForm.location,
+                                                content: meetingMinutesForm.content,
+                                                participants: participantList
+                                            }, orgSettings);
+                                            setMeetingMinutesModal(null);
+                                        }}>
+                                        📋 문서 생성
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
