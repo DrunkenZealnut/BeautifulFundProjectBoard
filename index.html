@@ -2295,10 +2295,9 @@
         };
 
         // ────────────────────────────────────────────────────────────
-        // 회의진행일지 자동생성
-        // HWP 서식(0[서식]_회의진행일지.hwp)의 구조를 반영한
-        // 인쇄 가능한 HTML 문서를 생성합니다.
-        // 대상 집행 유형: 사업인건비(자문비 등), 사업회의비(회의비), 교육훈련비
+        // Meeting minutes (회의진행일지) HTML generator
+        // Reflects the structure of HWP template 0[서식]_회의진행일지.hwp
+        // Applicable execution types: 사업인건비, 사업회의비, 교육훈련비
         // ────────────────────────────────────────────────────────────
         // formData: { title, date, location, content, participants: string[] }
         const generateMeetingMinutesHTML = (formData, orgSettings = {}) => {
@@ -2307,19 +2306,29 @@
             const m = String(today.getMonth() + 1).padStart(2, '0');
             const d = String(today.getDate()).padStart(2, '0');
 
-            const orgName = orgSettings.org_name || '청년노동자인권센터';
-            const orgRep = orgSettings.org_representative || '';
+            // Escape user-supplied values to prevent XSS via document.write
+            const esc = (s) => String(s || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            // Preserve line breaks in free-text content after escaping
+            const escMultiline = (s) => esc(s).replace(/\n/g, '<br>');
 
-            const meetingTitle = formData.title || '';
-            const meetingDate = formData.date || '';
-            const meetingLocation = formData.location || '';
-            const meetingContent = formData.content || '';
+            const orgName = esc(orgSettings.org_name || '청년노동자인권센터');
+            const orgRep = esc(orgSettings.org_representative || '');
 
-            // 참석자 행 생성 (입력된 이름 + 남은 공란, 최소 12행)
+            const meetingTitle = esc(formData.title || '');
+            const meetingDate = esc(formData.date || '');
+            const meetingLocation = esc(formData.location || '');
+            const meetingContent = escMultiline(formData.content || '');
+
+            // Generate attendee rows (entered names + remaining empty rows, minimum 12 rows)
             const names = formData.participants || [];
             const ROWS = Math.max(12, names.length);
             const participantRows = Array.from({ length: ROWS }, (_, i) => {
-                const name = names[i] || '';
+                const name = esc(names[i] || '');
                 return `<tr>
                     <td style="border:1px solid #000;padding:7px 10px;min-height:28px;">${name}</td>
                     <td style="border:1px solid #000;padding:7px 10px;"> </td>
