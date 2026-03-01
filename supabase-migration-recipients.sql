@@ -30,7 +30,12 @@ DROP POLICY IF EXISTS "recipients_update" ON public.recipients;
 CREATE POLICY "recipients_update" ON public.recipients
     FOR UPDATE USING (true) WITH CHECK (true);
 
--- 2. 기관 정보용 system_settings 초기 삽입 (있으면 무시)
+-- 2. system_settings INSERT 정책 추가 (upsert 신규 행 삽입 허용)
+DROP POLICY IF EXISTS "Public insert access for system_settings" ON public.system_settings;
+CREATE POLICY "Public insert access for system_settings" ON public.system_settings
+    FOR INSERT WITH CHECK (true);
+
+-- 3. 기관 정보용 system_settings 초기 삽입 (있으면 무시)
 INSERT INTO public.system_settings (setting_key, setting_value, description) VALUES
     ('org_representative',      '', '대표자명'),
     ('org_address',             '', '기관주소'),
