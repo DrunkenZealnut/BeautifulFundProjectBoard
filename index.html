@@ -2147,8 +2147,19 @@
             const recipientName = targetExecution.recipient || '';
 
             // 같은 수급자의 운영인건비 집행 전체를 날짜순 정렬
+            // ID 중복 및 동일 날짜+금액 중복 제거 (이중 등록 방어)
+            const seenIds = new Set();
+            const seenDateAmount = new Set();
             const recipientExecutions = allExecutions
-                .filter(e => e.recipient === recipientName && e.type === '운영인건비')
+                .filter(e => {
+                    if (e.recipient !== recipientName || e.type !== '운영인건비') return false;
+                    if (seenIds.has(e.id)) return false;
+                    seenIds.add(e.id);
+                    const key = `${e.execution_date}|${e.amount}`;
+                    if (seenDateAmount.has(key)) return false;
+                    seenDateAmount.add(key);
+                    return true;
+                })
                 .sort((a, b) => a.execution_date.localeCompare(b.execution_date));
 
             const totalAmount = recipientExecutions.reduce((sum, e) => sum + (e.amount || 0), 0);
@@ -2324,13 +2335,12 @@
             const meetingLocation = esc(formData.location || '');
             const meetingContent = escMultiline(formData.content || '');
 
-            // Generate attendee rows (entered names + remaining empty rows, minimum 12 rows)
-            const names = formData.participants || [];
-            const ROWS = Math.max(12, names.length);
-            const participantRows = Array.from({ length: ROWS }, (_, i) => {
-                const name = esc(names[i] || '');
+            // Generate attendee rows — only rows with names, center-aligned
+            const names = (formData.participants || []).filter(n => n && String(n).trim());
+            const participantRows = names.map(n => {
+                const name = esc(n);
                 return `<tr>
-                    <td style="border:1px solid #000;padding:7px 10px;min-height:28px;">${name}</td>
+                    <td style="border:1px solid #000;padding:7px 10px;min-height:28px;text-align:center;">${name}</td>
                     <td style="border:1px solid #000;padding:7px 10px;"> </td>
                 </tr>`;
             }).join('');
@@ -2392,21 +2402,6 @@
             </tr>
             ${participantRows}
         </table>
-    </div>
-
-    <div class="sign-area">
-        <p style="margin-top:28px;">
-            <span style="font-weight:bold;">단체명</span>
-            &nbsp;&nbsp;${orgName}&nbsp;&nbsp;
-            <span style="font-size:10pt;color:#555;">(단체직인 또는 대표자서명)</span>
-        </p>
-        <p style="margin-top:16px;">
-            <span style="font-weight:bold;">대표자</span>
-            &nbsp;&nbsp;${orgRep}
-            <span class="sign-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-            <span style="font-size:10pt;">(서명)</span>
-        </p>
-        <p style="margin-top:16px;font-size:10pt;color:#555;">작성일: ${y}년 ${m}월 ${d}일</p>
     </div>
 
     <div class="no-print" style="text-align:center">
