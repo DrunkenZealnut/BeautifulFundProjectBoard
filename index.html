@@ -2129,6 +2129,14 @@
         const fmt = (n) => Math.round(n).toLocaleString();
         const pct = (spent, budget) => budget > 0 ? Math.min(100, Math.round(spent / budget * 100)) : 0;
 
+        // 비밀번호 SHA-256 해시 유틸리티 (최상위 스코프 - LoginPage·ProjectManagementSystem 공유)
+        const hashPassword = async (password) => {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hash = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
         // Date ranges for budget period filtering (h1 = Jan-Jun, h2 = Jul-Dec)
         const PERIOD_DATE_RANGES = {
             h1: { start: '2026-01-01', end: '2026-06-30' },
