@@ -2938,6 +2938,11 @@
             const [detailAttachments, setDetailAttachments] = useState([]);
             const boardFileInputRef = useRef(null);
             const galleryFileInputRef = useRef(null);
+            const [budgetAttachments, setBudgetAttachments] = useState([]);
+            const budgetFileInputRef = useRef(null);
+            const [executionAttachmentsMap, setExecutionAttachmentsMap] = useState({});
+            const executionFileInputRef = useRef(null);
+            const activeUploadExecutionIdRef = useRef(null);
             const boardEditorRef = useRef(null);
             const galleryEditorRef = useRef(null);
 
@@ -3233,6 +3238,32 @@
 
                 loadAllData();
             }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
+
+            // 집행 내역 탭이 열릴 때 첨부파일 로드 (이미 로드된 경우 재조회 생략)
+            useEffect(() => {
+                if (budgetTab !== 'history') return;
+                if (Object.keys(executionAttachmentsMap).length > 0) return;
+                const loadExecutionAttachments = async () => {
+                    try {
+                        const { data: atts } = await supabase
+                            .from('attachments')
+                            .select('*')
+                            .not('execution_id', 'is', null)
+                            .order('created_at', { ascending: true });
+                        if (atts) {
+                            const map = {};
+                            atts.forEach(a => {
+                                if (!map[a.execution_id]) map[a.execution_id] = [];
+                                map[a.execution_id].push(a);
+                            });
+                            setExecutionAttachmentsMap(map);
+                        }
+                    } catch (err) {
+                        console.error('Error loading execution attachments:', err);
+                    }
+                };
+                loadExecutionAttachments();
+            }, [budgetTab]);
 
             // 페이지 렌더링 함수들
             // Gallery thumbnails for dashboard (auto-load images from attachments)
@@ -6236,6 +6267,8 @@
                                         </div>
                                     )}
 
+                                    {FileUploadArea({ attachments: budgetAttachments, setAttachments: setBudgetAttachments, fileInputRef: budgetFileInputRef })}
+
                                     <div style={{
                                         display: 'flex',
                                         gap: '12px',
@@ -6273,11 +6306,13 @@
                                                     console.log('📊 삽입할 데이터:', insertData);
 
                                                     // 데이터베이스에 저장
-                                                    const { data, error } = await supabase
+                                                    const { data: inserted, error } = await supabase
                                                         .from('budget_executions')
-                                                        .insert([insertData]);
+                                                        .insert([insertData])
+                                                        .select()
+                                                        .single();
 
-                                                    console.log('📊 Supabase INSERT 응답:', { data, error });
+                                                    console.log('📊 Supabase INSERT 응답:', { data: inserted, error });
 
                                                     if (error) {
                                                         console.error('❌ 예산 집행 등록 오류:', error);
@@ -6290,6 +6325,11 @@
                                                             alert('예산 집행 등록 중 오류가 발생했습니다: ' + error.message);
                                                         }
                                                         return;
+                                                    }
+
+                                                    // 첨부파일 업로드
+                                                    if (budgetAttachments.length > 0 && inserted?.id) {
+                                                        await uploadAttachments(budgetAttachments, 'execution', inserted.id);
                                                     }
 
                                                     alert('예산 집행이 성공적으로 등록되었습니다.');
@@ -6308,7 +6348,6 @@
                                                         execution_date: new Date().toISOString().split('T')[0],
                                                         recipient: ''
                                                     });
-
                                                     // 데이터 새로고침
                                                     window.location.reload();
 
@@ -6755,21 +6794,67 @@
                                             {DOCUMENT_RULES[execution.type] && (
                                                 <div className="documents-list">
                                                     <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
-                                                    {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => (
-                                                        <div key={index} className="document-item">
-                                                            <span>📄 {doc}</span>
-                                                            <span style={{
-                                                                color: '#1B6B5A',
-                                                                fontSize: '12px'
-                                                            }}>
-                                                                미제출
-                                                            </span>
-                                                        </div>
-                                                    ))}
+                                                    {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => {
+                                                        const hasAtt = (executionAttachmentsMap[execution.id] || []).length > 0;
+                                                        return (
+                                                            <div key={index} className="document-item">
+                                                                <span>📄 {doc}</span>
+                                                                <span style={{
+                                                                    color: hasAtt ? '#1B6B5A' : '#C53030',
+                                                                    fontSize: '12px',
+                                                                    fontWeight: '500'
+                                                                }}>
+                                                                    {hasAtt ? '✅ 업로드됨' : '❌ 미제출'}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
+                                            <div style={{ marginTop: '12px', borderTop: '1px solid #E2E0DD', paddingTop: '12px' }}>
+                                                {AttachmentListDisplay({ attachments: executionAttachmentsMap[execution.id] || [] })}
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    style={{ fontSize: '13px', padding: '6px 14px', marginTop: '8px' }}
+                                                    onClick={() => {
+                                                        activeUploadExecutionIdRef.current = execution.id;
+                                                        executionFileInputRef.current?.click();
+                                                    }}
+                                                >
+                                                    📎 파일 첨부
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
+
+                                    <input
+                                        ref={executionFileInputRef}
+                                        type="file"
+                                        multiple
+                                        style={{ display: 'none' }}
+                                        onChange={async (e) => {
+                                            const files = Array.from(e.target.files);
+                                            e.target.value = '';
+                                            const execId = activeUploadExecutionIdRef.current;
+                                            activeUploadExecutionIdRef.current = null;
+                                            if (!files.length || !execId) return;
+                                            try {
+                                                await uploadAttachments(files, 'execution', execId);
+                                                const { data: atts } = await supabase
+                                                    .from('attachments')
+                                                    .select('*')
+                                                    .eq('execution_id', execId)
+                                                    .order('created_at', { ascending: true });
+                                                setExecutionAttachmentsMap(prev => ({
+                                                    ...prev,
+                                                    [execId]: atts || []
+                                                }));
+                                            } catch (err) {
+                                                console.error('파일 첨부 실패:', err);
+                                                alert('파일 첨부 중 오류가 발생했습니다.');
+                                            }
+                                        }}
+                                    />
 
                                     {data.budgetExecutions.length === 0 && (
                                         <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
