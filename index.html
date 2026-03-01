@@ -6398,17 +6398,18 @@
                                                         return;
                                                     }
 
-                                                    // 서류 첨부파일 업로드
-                                                    if (inserted?.id && Object.keys(formDocFiles).length > 0) {
-                                                        for (const [docName, file] of Object.entries(formDocFiles)) {
-                                                            try {
-                                                                const timestamp = Date.now();
+                                                    // 서류 첨부파일 병렬 업로드
+                                                    const docEntries = Object.entries(formDocFiles);
+                                                    if (inserted?.id && docEntries.length > 0) {
+                                                        const baseTs = Date.now();
+                                                        const uploadResults = await Promise.allSettled(
+                                                            docEntries.map(async ([docName, file], i) => {
                                                                 const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
-                                                                const filePath = `execution/${inserted.id}/${timestamp}_${safeName}`;
+                                                                const filePath = `execution/${inserted.id}/${baseTs}_${i}_${safeName}`;
                                                                 const { data: storageData, error: storageError } = await supabase.storage
                                                                     .from('attachments').upload(filePath, file);
                                                                 if (storageError) throw storageError;
-                                                                await supabase.from('documents').insert([{
+                                                                return {
                                                                     execution_id: inserted.id,
                                                                     document_name: docName,
                                                                     document_type: 'required',
@@ -6416,10 +6417,21 @@
                                                                     file_name: file.name,
                                                                     file_size: file.size,
                                                                     uploaded_by: currentUser.id
-                                                                }]);
-                                                            } catch (uploadErr) {
-                                                                console.error(`서류 첨부 실패 (${docName}):`, uploadErr);
-                                                            }
+                                                                };
+                                                            })
+                                                        );
+                                                        const docsToInsert = uploadResults
+                                                            .filter(r => r.status === 'fulfilled')
+                                                            .map(r => r.value);
+                                                        if (docsToInsert.length > 0) {
+                                                            await supabase.from('documents').insert(docsToInsert);
+                                                        }
+                                                        const failed = uploadResults
+                                                            .map((r, i) => r.status === 'rejected' ? docEntries[i][0] : null)
+                                                            .filter(Boolean);
+                                                        if (failed.length > 0) {
+                                                            console.error('서류 첨부 실패:', failed);
+                                                            alert(`⚠️ 일부 서류 첨부 실패:\n${failed.join('\n')}\n\n집행내역은 등록되었으니 나중에 다시 첨부해주세요.`);
                                                         }
                                                     }
 
@@ -6440,6 +6452,7 @@
                                                         recipient: ''
                                                     });
                                                     setFormDocFiles({});
+                                                    activeFormDocNameRef.current = null;
                                                     // 데이터 새로고침
                                                     window.location.reload();
 
@@ -6468,6 +6481,7 @@
                                                     recipient: ''
                                                 });
                                                 setFormDocFiles({});
+                                                activeFormDocNameRef.current = null;
                                             }}
                                         >
                                             🔄 초기화
