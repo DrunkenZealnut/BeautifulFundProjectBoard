@@ -1644,11 +1644,13 @@
         /* 캘린더 그리드 */
         .calendar-grid {
             display: grid;
-            grid-template-columns: repeat(7, 1fr);
+            grid-template-columns: repeat(7, minmax(0, 1fr));
             border: 1px solid #EBE8E1;
             border-radius: 12px;
             overflow: hidden;
             background: white;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .calendar-day-header {
@@ -1659,6 +1661,7 @@
             color: #6B6560;
             background: #F8F6F1;
             border-bottom: 1px solid #EBE8E1;
+            min-width: 0;
         }
 
         .calendar-day-header:nth-child(1) { color: #e74c3c; }
@@ -1672,6 +1675,8 @@
             cursor: pointer;
             transition: background 0.15s;
             position: relative;
+            min-width: 0;
+            overflow: hidden;
         }
 
         .calendar-day:nth-child(7n) {
@@ -1955,15 +1960,22 @@
 
         @media (max-width: 768px) {
             .calendar-grid {
-                font-size: 12px;
+                font-size: 11px;
             }
             .calendar-day {
                 min-height: 70px;
-                padding: 4px;
+                padding: 3px 2px;
+            }
+            .calendar-day-header {
+                padding: 8px 2px;
+                font-size: 11px;
             }
             .calendar-event {
-                font-size: 10px;
-                padding: 1px 4px;
+                font-size: 9px;
+                padding: 1px 3px;
+            }
+            .calendar-day-number {
+                font-size: 12px;
             }
             .calendar-header {
                 flex-direction: column;
