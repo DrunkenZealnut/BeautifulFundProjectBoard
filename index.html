@@ -6893,20 +6893,23 @@
                                                             <div key={index} className="document-item">
                                                                 <span>📄 {doc}</span>
                                                                 {docRecord?.file_name ? (
-                                                                    <span style={{
-                                                                        color: '#1B6B5A',
-                                                                        fontSize: '12px',
-                                                                        fontWeight: '500',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '4px',
-                                                                        maxWidth: '200px',
-                                                                        overflow: 'hidden',
-                                                                        textOverflow: 'ellipsis',
-                                                                        whiteSpace: 'nowrap'
-                                                                    }}>
-                                                                        ✅ {docRecord.file_name}
-                                                                    </span>
+                                                                    <button
+                                                                        className="btn btn-secondary"
+                                                                        style={{
+                                                                            fontSize: '12px',
+                                                                            padding: '3px 10px',
+                                                                            color: '#1B6B5A',
+                                                                            borderColor: '#1B6B5A',
+                                                                            maxWidth: '200px',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis',
+                                                                            whiteSpace: 'nowrap'
+                                                                        }}
+                                                                        onClick={() => downloadFile(docRecord.file_path, docRecord.file_name)}
+                                                                        title={docRecord.file_name}
+                                                                    >
+                                                                        ⬇️ {docRecord.file_name}
+                                                                    </button>
                                                                 ) : (
                                                                     <button
                                                                         className="btn btn-secondary"
