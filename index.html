@@ -2137,6 +2137,163 @@
             return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
         };
 
+        // ────────────────────────────────────────────────────────────
+        // 급여지급명세서 자동생성
+        // HWP 서식(0[서식]_급여지급명세서.hwp)의 구조를 그대로 반영한
+        // 인쇄 가능한 HTML 문서를 생성해 새 창에 출력합니다.
+        // 수급자(recipient)가 동일한 '운영인건비' 집행 전체를 집계합니다.
+        // ────────────────────────────────────────────────────────────
+        const generateSalaryStatementHTML = (targetExecution, allExecutions, orgSettings = {}, recipientProfile = null) => {
+            const recipientName = targetExecution.recipient || '';
+
+            // 같은 수급자의 운영인건비 집행 전체를 날짜순 정렬
+            const recipientExecutions = allExecutions
+                .filter(e => e.recipient === recipientName && e.type === '운영인건비')
+                .sort((a, b) => a.execution_date.localeCompare(b.execution_date));
+
+            const totalAmount = recipientExecutions.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+            // 2열 배치 행 생성 (좌·우), 최소 6행 보장
+            const pairs = [];
+            for (let i = 0; i < recipientExecutions.length; i += 2) {
+                pairs.push({ left: recipientExecutions[i], right: recipientExecutions[i + 1] || null });
+            }
+            while (pairs.length < 6) pairs.push({ left: null, right: null });
+
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = String(today.getMonth() + 1).padStart(2, '0');
+            const d = String(today.getDate()).padStart(2, '0');
+
+            const rowsHTML = pairs.map(({ left, right }) => `
+                <tr>
+                    <td style="text-align:center">${left ? left.execution_date : ''}</td>
+                    <td style="text-align:right">${left ? left.amount.toLocaleString() : ''}</td>
+                    <td style="text-align:right">${left ? '0' : ''}</td>
+                    <td style="text-align:center">${right ? right.execution_date : ''}</td>
+                    <td style="text-align:right">${right ? right.amount.toLocaleString() : ''}</td>
+                    <td style="text-align:right">${right ? '0' : ''}</td>
+                </tr>`).join('');
+
+            return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>급여지급명세서 - ${recipientName}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: '맑은 고딕', '나눔고딕', Arial, sans-serif; font-size: 10pt; background: #fff; color: #000; }
+        .container { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 20mm 15mm; }
+        h2 { text-align: center; font-size: 18pt; letter-spacing: 6px; margin-bottom: 20px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        th, td { border: 1px solid #000; padding: 5px 7px; font-size: 10pt; vertical-align: middle; }
+        th { background: #e8e8e8; font-weight: bold; text-align: center; }
+        .section-title { background: #c8c8c8; font-weight: bold; text-align: left; font-size: 10pt; }
+        .lbl { background: #f2f2f2; font-weight: bold; width: 110px; white-space: nowrap; }
+        .total-row { background: #f2f2f2; font-weight: bold; }
+        .sign-area { margin-top: 24px; text-align: center; line-height: 2; }
+        .attach-note { margin-top: 14px; font-size: 9pt; border-top: 1px solid #000; padding-top: 8px; }
+        .btn-print { display: inline-block; margin: 20px 6px 0; padding: 10px 28px; font-size: 13px; cursor: pointer; border: none; border-radius: 6px; }
+        @media print {
+            body { margin: 0; }
+            .container { padding: 12mm 10mm; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>급 여 지 급 명 세 서</h2>
+
+    <table>
+        <tr><td colspan="4" class="section-title">1. 지급받는사람</td></tr>
+        <tr>
+            <td class="lbl">성&nbsp;&nbsp;&nbsp;&nbsp;명</td>
+            <td>${recipientName}</td>
+            <td class="lbl">생 년 월 일</td>
+            <td>${recipientProfile?.birth_date || ''}</td>
+        </tr>
+        <tr>
+            <td class="lbl">주&nbsp;&nbsp;&nbsp;&nbsp;소</td>
+            <td colspan="3">${recipientProfile?.address || ''}</td>
+        </tr>
+    </table>
+
+    <table>
+        <tr><td colspan="4" class="section-title">2. 지급자</td></tr>
+        <tr>
+            <td class="lbl">기&nbsp;&nbsp;관&nbsp;&nbsp;명</td>
+            <td>청년노동자인권센터</td>
+            <td class="lbl">사업자등록번호</td>
+            <td>${orgSettings.org_registration_number || '<span style="font-size:9pt;color:#555">(고유번호가 없는 경우 생략)</span>'}</td>
+        </tr>
+        <tr>
+            <td class="lbl">대 표 자 명</td>
+            <td>${orgSettings.org_representative || ''}</td>
+            <td class="lbl">대표자생년월일</td>
+            <td style="font-size:9pt;color:#555">(고유번호가 있는 경우 생략)</td>
+        </tr>
+        <tr>
+            <td class="lbl">기 관 주 소</td>
+            <td colspan="3">${orgSettings.org_address || ''}</td>
+        </tr>
+        <tr>
+            <td class="lbl">사 용 목 적</td>
+            <td colspan="3">아름다운재단 지원사업 인건비 지급 증명</td>
+        </tr>
+    </table>
+
+    <table>
+        <tr><td colspan="6" class="section-title">3. 지급내역</td></tr>
+        <tr>
+            <th rowspan="2" style="width:17%">지급일자</th>
+            <th colspan="2">지급액(원)</th>
+            <th rowspan="2" style="width:17%">지급일자</th>
+            <th colspan="2">지급액(원)</th>
+        </tr>
+        <tr>
+            <th style="width:16%">지원금</th>
+            <th style="width:16%">자부담</th>
+            <th style="width:16%">지원금</th>
+            <th style="width:16%">자부담</th>
+        </tr>
+        ${rowsHTML}
+        <tr class="total-row">
+            <td colspan="3" style="text-align:center">지급 합계액(원)</td>
+            <td colspan="2" style="text-align:right">지원금: ${totalAmount.toLocaleString()}원</td>
+            <td style="text-align:right">자부담: 0원</td>
+        </tr>
+    </table>
+
+    <div class="sign-area">
+        <p>위 금액을 지급하였음을 증명합니다.</p>
+        <p style="margin-top:10px">${y}년 &nbsp;&nbsp; ${m}월 &nbsp;&nbsp; ${d}일</p>
+        <p style="margin-top:20px">단체(기관)명 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (단체직인 또는 대표자 서명)</p>
+    </div>
+
+    <div class="attach-note">
+        <strong>첨부서류</strong> : 이체확인증, 급여 수령자 계좌사본
+    </div>
+
+    <div class="no-print" style="text-align:center">
+        <button class="btn-print" style="background:#1B6B5A;color:#fff" onclick="window.print()">🖨️ 인쇄 / PDF 저장</button>
+        <button class="btn-print" style="background:#888;color:#fff" onclick="window.close()">✕ 닫기</button>
+    </div>
+</div>
+</body>
+</html>`;
+        };
+
+        const openSalaryStatement = (execution, allExecutions, orgSettings, recipients) => {
+            const recipientProfile =
+                recipients?.find(r => r.name === (execution.recipient || '').trim()) || null;
+            const html = generateSalaryStatementHTML(execution, allExecutions, orgSettings || {}, recipientProfile);
+            const win = window.open('', '_blank', 'width=900,height=700');
+            if (!win) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+            win.document.write(html);
+            win.document.close();
+        };
+
         // Date ranges for budget period filtering (h1 = Jan-Jun, h2 = Jul-Dec)
         const PERIOD_DATE_RANGES = {
             h1: { start: '2026-01-01', end: '2026-06-30' },
@@ -3349,12 +3506,22 @@
                         setLoading(true);
                         setError(null);
 
-                        const [schedules, galleries, boards, executions] = await Promise.all([
+                        const [schedules, galleries, boards, executions, recipientsData, settingsData] = await Promise.all([
                             loadSchedules(),
                             loadGalleries(),
                             loadBoards(),
-                            loadBudgetExecutions()
+                            loadBudgetExecutions(),
+                            supabase.from('recipients').select('id,name,birth_date,address,phone')
+                                .eq('is_active', true).order('name').then(r => r.data || []),
+                            supabase.from('system_settings').select('setting_key,setting_value')
+                                .in('setting_key', ['org_representative', 'org_address', 'org_registration_number'])
+                                .then(r => r.data || [])
                         ]);
+
+                        setRecipients(recipientsData);
+                        const merged = { org_representative: '', org_address: '', org_registration_number: '' };
+                        settingsData.forEach(row => { merged[row.setting_key] = row.setting_value || ''; });
+                        setOrgSettings(merged);
 
                         const stats = calculateStats(schedules, galleries, boards, executions);
 
@@ -6393,10 +6560,19 @@
                                             <label>수취인</label>
                                             <input
                                                 type="text"
-                                                placeholder="수취인 입력"
+                                                placeholder="수취인 입력 또는 목록에서 선택"
                                                 value={formData.recipient}
                                                 onChange={(e) => setFormData({...formData, recipient: e.target.value})}
+                                                list="recipient-datalist"
                                             />
+                                            <datalist id="recipient-datalist">
+                                                {recipients.map(r => <option key={r.id} value={r.name} />)}
+                                            </datalist>
+                                            {recipients.length > 0 && (
+                                                <span style={{ fontSize: '12px', color: '#9C9690' }}>
+                                                    등록된 수급자 선택 시 급여지급명세서에 정보가 자동 채워집니다.
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
@@ -7046,6 +7222,17 @@
                                                 <span>🏷️ {execution.category_name} > {execution.subcategory_name}</span>
                                                 {execution.recipient && <span>👤 {execution.recipient}</span>}
                                             </div>
+                                            {execution.type === '운영인건비' && execution.recipient && (
+                                                <div style={{ marginTop: '8px' }}>
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        style={{ fontSize: '12px', padding: '4px 12px', color: '#1B6B5A', borderColor: '#1B6B5A' }}
+                                                        onClick={() => openSalaryStatement(execution, data.budgetExecutions, orgSettings, recipients)}
+                                                    >
+                                                        📄 급여지급명세서 생성
+                                                    </button>
+                                                </div>
+                                            )}
                                             {DOCUMENT_RULES[execution.type] && (
                                                 <div className="documents-list">
                                                     <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
@@ -7174,6 +7361,119 @@
                 });
                 setEditingUser(null);
                 setShowUserForm(false);
+            };
+
+            // ── 기관 정보 (system_settings) ──────────────────────────────
+            const [orgSettings, setOrgSettings] = useState({
+                org_representative: '', org_address: '', org_registration_number: ''
+            });
+            const [orgSettingsSaving, setOrgSettingsSaving] = useState(false);
+            const [orgSettingsMsg, setOrgSettingsMsg] = useState({ type: '', text: '' });
+
+            // ── 수급자 목록 ───────────────────────────────────────────────
+            const [recipients, setRecipients] = useState([]);
+            const [recipientsLoading, setRecipientsLoading] = useState(false);
+            const [showRecipientForm, setShowRecipientForm] = useState(false);
+            const [editingRecipient, setEditingRecipient] = useState(null);
+            const [recipientForm, setRecipientForm] = useState({
+                name: '', birth_date: '', address: '', phone: '', notes: ''
+            });
+            const [recipientMsg, setRecipientMsg] = useState({ type: '', text: '' });
+
+            // ── 관리자 탭 ─────────────────────────────────────────────────
+            const [adminTab, setAdminTab] = useState('users'); // 'users'|'recipients'|'orgSettings'
+
+            // ── 기관 정보 저장 ────────────────────────────────────────────
+            const saveOrgSettings = async () => {
+                setOrgSettingsSaving(true);
+                setOrgSettingsMsg({ type: '', text: '' });
+                try {
+                    const rows = [
+                        { setting_key: 'org_representative',      setting_value: orgSettings.org_representative },
+                        { setting_key: 'org_address',             setting_value: orgSettings.org_address },
+                        { setting_key: 'org_registration_number', setting_value: orgSettings.org_registration_number }
+                    ];
+                    const { error } = await supabase
+                        .from('system_settings')
+                        .upsert(rows, { onConflict: 'setting_key' });
+                    if (error) throw error;
+                    setOrgSettingsMsg({ type: 'success', text: '기관 정보가 저장되었습니다.' });
+                } catch (err) {
+                    console.error('Error saving org settings:', err);
+                    setOrgSettingsMsg({ type: 'error', text: '저장 중 오류가 발생했습니다.' });
+                } finally {
+                    setOrgSettingsSaving(false);
+                }
+            };
+
+            // ── 수급자 목록 로딩 ─────────────────────────────────────────
+            const loadRecipients = async () => {
+                setRecipientsLoading(true);
+                try {
+                    const { data, error } = await supabase
+                        .from('recipients')
+                        .select('id, name, birth_date, address, phone, notes, is_active, created_at')
+                        .eq('is_active', true)
+                        .order('name');
+                    if (error) throw error;
+                    setRecipients(data || []);
+                } catch (err) {
+                    console.error('Error loading recipients:', err);
+                    setRecipientMsg({ type: 'error', text: '수급자 목록을 불러오는 중 오류가 발생했습니다.' });
+                } finally {
+                    setRecipientsLoading(false);
+                }
+            };
+
+            // ── 수급자 저장 (추가/수정) ──────────────────────────────────
+            const handleSaveRecipient = async (e) => {
+                e.preventDefault();
+                setRecipientMsg({ type: '', text: '' });
+                if (!recipientForm.name.trim()) {
+                    setRecipientMsg({ type: 'error', text: '성명은 필수 입력 항목입니다.' });
+                    return;
+                }
+                try {
+                    if (editingRecipient) {
+                        const { error } = await supabase
+                            .from('recipients')
+                            .update({ ...recipientForm, updated_at: new Date().toISOString() })
+                            .eq('id', editingRecipient.id);
+                        if (error) throw error;
+                        setRecipientMsg({ type: 'success', text: `'${recipientForm.name}' 정보가 수정되었습니다.` });
+                    } else {
+                        const { error } = await supabase
+                            .from('recipients')
+                            .insert([{ ...recipientForm, is_active: true }]);
+                        if (error) throw error;
+                        setRecipientMsg({ type: 'success', text: `'${recipientForm.name}' 수급자가 등록되었습니다.` });
+                    }
+                    setRecipientForm({ name: '', birth_date: '', address: '', phone: '', notes: '' });
+                    setEditingRecipient(null);
+                    setShowRecipientForm(false);
+                    await loadRecipients();
+                } catch (err) {
+                    console.error('Error saving recipient:', err);
+                    setRecipientMsg({ type: 'error', text: '저장 중 오류가 발생했습니다.' });
+                }
+            };
+
+            // ── 수급자 삭제 (소프트 삭제) ────────────────────────────────
+            const handleDeleteRecipient = async (r) => {
+                if (!window.confirm(`'${r.name}' 수급자를 삭제하시겠습니까?`)) return;
+                setRecipientMsg({ type: '', text: '' });
+                try {
+                    const { error } = await supabase
+                        .from('recipients')
+                        .update({ is_active: false, updated_at: new Date().toISOString() })
+                        .eq('id', r.id);
+                    if (error) throw error;
+                    setRecipientMsg({ type: 'success', text: `'${r.name}' 수급자가 삭제되었습니다.` });
+                    await loadRecipients();
+                } catch (err) {
+                    console.error('Error deleting recipient:', err);
+                    setRecipientMsg({ type: 'error', text: '삭제 중 오류가 발생했습니다.' });
+                }
             };
 
             // 사용자 목록 로딩
@@ -7894,8 +8194,251 @@
                 return (
                     <div>
                         <h1 className="section-title">⚙️ 관리자</h1>
-                        <p className="section-subtitle">사용자 계정을 관리합니다. 아이디 추가, 수정, 삭제가 가능합니다.</p>
+                        <p className="section-subtitle">사용자 계정, 수급자 정보, 기관 정보를 관리합니다.</p>
 
+                        {/* 탭 바 */}
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #E2E8F0', paddingBottom: '0' }}>
+                            {[
+                                { key: 'users', label: '👤 사용자 관리' },
+                                { key: 'recipients', label: '📋 수급자 관리' },
+                                { key: 'orgSettings', label: '🏢 기관 정보' }
+                            ].map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setAdminTab(tab.key)}
+                                    style={{
+                                        padding: '10px 20px',
+                                        border: 'none',
+                                        borderBottom: adminTab === tab.key ? '3px solid #1B6B5A' : '3px solid transparent',
+                                        background: 'none',
+                                        color: adminTab === tab.key ? '#1B6B5A' : '#6B6560',
+                                        fontWeight: adminTab === tab.key ? '700' : '400',
+                                        fontSize: '14px',
+                                        cursor: 'pointer',
+                                        marginBottom: '-2px'
+                                    }}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* ── 수급자 관리 탭 ─────────────────────────────────────── */}
+                        {adminTab === 'recipients' && (
+                            <div>
+                                {recipientMsg.text && (
+                                    <div className={recipientMsg.type === 'success' ? 'success-message' : 'error-message'}>
+                                        {recipientMsg.text}
+                                    </div>
+                                )}
+                                <div style={{ marginBottom: '24px' }}>
+                                    {!showRecipientForm ? (
+                                        <button className="btn btn-primary" onClick={() => {
+                                            setShowRecipientForm(true);
+                                            setEditingRecipient(null);
+                                            setRecipientForm({ name: '', birth_date: '', address: '', phone: '', notes: '' });
+                                            setRecipientMsg({ type: '', text: '' });
+                                        }}>
+                                            + 수급자 등록
+                                        </button>
+                                    ) : (
+                                        <div className="admin-form-card">
+                                            <h3>{editingRecipient ? `✏️ '${editingRecipient.name}' 정보 수정` : '➕ 수급자 등록'}</h3>
+                                            <form onSubmit={handleSaveRecipient}>
+                                                <div className="form-grid">
+                                                    <div className="form-group">
+                                                        <label>성명 *</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.name}
+                                                            onChange={e => setRecipientForm({...recipientForm, name: e.target.value})}
+                                                            placeholder="수급자 성명"
+                                                            required
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>생년월일</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.birth_date}
+                                                            onChange={e => setRecipientForm({...recipientForm, birth_date: e.target.value})}
+                                                            placeholder="예: 850101 또는 1985-01-01"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>전화번호</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.phone}
+                                                            onChange={e => setRecipientForm({...recipientForm, phone: e.target.value})}
+                                                            placeholder="010-0000-0000"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                                        <label>주소</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.address}
+                                                            onChange={e => setRecipientForm({...recipientForm, address: e.target.value})}
+                                                            placeholder="도로명 주소"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                                        <label>비고</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.notes}
+                                                            onChange={e => setRecipientForm({...recipientForm, notes: e.target.value})}
+                                                            placeholder="메모 (선택)"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                                                    <button type="submit" className="btn btn-primary">
+                                                        {editingRecipient ? '수정 저장' : '수급자 등록'}
+                                                    </button>
+                                                    <button type="button" className="btn btn-secondary" onClick={() => {
+                                                        setShowRecipientForm(false);
+                                                        setEditingRecipient(null);
+                                                        setRecipientForm({ name: '', birth_date: '', address: '', phone: '', notes: '' });
+                                                    }}>
+                                                        취소
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {recipientsLoading ? (
+                                    <div className="loading">
+                                        <div className="loading-spinner"></div>
+                                        <div>수급자 목록을 불러오고 있습니다...</div>
+                                    </div>
+                                ) : (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table className="user-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>성명</th>
+                                                    <th>생년월일</th>
+                                                    <th>전화번호</th>
+                                                    <th>주소</th>
+                                                    <th>비고</th>
+                                                    <th>관리</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {recipients.map(r => (
+                                                    <tr key={r.id}>
+                                                        <td style={{ fontWeight: '500' }}>{r.name}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.birth_date || '-'}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.phone || '-'}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.address || '-'}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.notes || '-'}</td>
+                                                        <td>
+                                                            <div className="admin-actions">
+                                                                <button
+                                                                    className="btn btn-secondary btn-sm"
+                                                                    onClick={() => {
+                                                                        setEditingRecipient(r);
+                                                                        setRecipientForm({
+                                                                            name: r.name,
+                                                                            birth_date: r.birth_date || '',
+                                                                            address: r.address || '',
+                                                                            phone: r.phone || '',
+                                                                            notes: r.notes || ''
+                                                                        });
+                                                                        setShowRecipientForm(true);
+                                                                        setRecipientMsg({ type: '', text: '' });
+                                                                    }}
+                                                                >
+                                                                    수정
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-danger btn-sm"
+                                                                    onClick={() => handleDeleteRecipient(r)}
+                                                                >
+                                                                    삭제
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {recipients.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#A0AEC0' }}>
+                                                            등록된 수급자가 없습니다.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ marginTop: '16px', fontSize: '13px', color: '#A0AEC0' }}>
+                                            총 {recipients.length}명
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── 기관 정보 탭 ──────────────────────────────────────── */}
+                        {adminTab === 'orgSettings' && (
+                            <div>
+                                {orgSettingsMsg.text && (
+                                    <div className={orgSettingsMsg.type === 'success' ? 'success-message' : 'error-message'}>
+                                        {orgSettingsMsg.text}
+                                    </div>
+                                )}
+                                <div className="admin-form-card">
+                                    <h3>🏢 기관 정보 설정</h3>
+                                    <p style={{ fontSize: '13px', color: '#6B6560', marginBottom: '16px' }}>
+                                        급여지급명세서의 "지급자" 항목에 자동으로 채워집니다.
+                                    </p>
+                                    <div className="form-grid">
+                                        <div className="form-group">
+                                            <label>대표자명</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_representative}
+                                                onChange={e => setOrgSettings({...orgSettings, org_representative: e.target.value})}
+                                                placeholder="대표자 이름"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>사업자등록번호 (고유번호)</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_registration_number}
+                                                onChange={e => setOrgSettings({...orgSettings, org_registration_number: e.target.value})}
+                                                placeholder="000-00-00000"
+                                            />
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label>기관주소</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_address}
+                                                onChange={e => setOrgSettings({...orgSettings, org_address: e.target.value})}
+                                                placeholder="도로명 주소"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: '16px' }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={saveOrgSettings}
+                                            disabled={orgSettingsSaving}
+                                        >
+                                            {orgSettingsSaving ? '저장 중...' : '💾 저장'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── 사용자 관리 탭 ─────────────────────────────────────── */}
+                        {adminTab === 'users' && (<div>
                         {adminError && <div className="error-message">{adminError}</div>}
                         {adminSuccess && <div className="success-message">{adminSuccess}</div>}
 
@@ -8085,6 +8628,7 @@
                                 </div>
                             </div>
                         )}
+                        </div>)}
                     </div>
                 );
             };
