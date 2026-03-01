@@ -2943,6 +2943,10 @@
             const [executionAttachmentsMap, setExecutionAttachmentsMap] = useState({});
             const executionFileInputRef = useRef(null);
             const activeUploadExecutionIdRef = useRef(null);
+            const [executionDocsMap, setExecutionDocsMap] = useState({});
+            // { [execId]: { [docName]: { file_path, file_name, file_size } } }
+            const docUploadFileInputRef = useRef(null);
+            const activeDocUploadRef = useRef(null); // { execId, docName }
             const boardEditorRef = useRef(null);
             const galleryEditorRef = useRef(null);
 
@@ -3238,6 +3242,29 @@
 
                 loadAllData();
             }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
+
+            // 집행 내역 탭: 증빙서류 업로드 현황 로드
+            useEffect(() => {
+                if (budgetTab !== 'history') return;
+                if (Object.keys(executionDocsMap).length > 0) return;
+                const loadDocs = async () => {
+                    try {
+                        const { data: docs } = await supabase
+                            .from('documents')
+                            .select('*')
+                            .order('created_at', { ascending: true });
+                        const map = {};
+                        (docs || []).forEach(d => {
+                            if (!map[d.execution_id]) map[d.execution_id] = {};
+                            map[d.execution_id][d.document_name] = d;
+                        });
+                        setExecutionDocsMap(map);
+                    } catch (err) {
+                        console.error('Error loading execution documents:', err);
+                    }
+                };
+                loadDocs();
+            }, [budgetTab]);
 
             // 집행 내역 탭이 열릴 때 첨부파일 로드 (이미 로드된 경우 재조회 생략)
             useEffect(() => {
@@ -6795,62 +6822,84 @@
                                                 <div className="documents-list">
                                                     <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
                                                     {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => {
-                                                        const hasAtt = (executionAttachmentsMap[execution.id] || []).length > 0;
+                                                        const docRecord = executionDocsMap[execution.id]?.[doc];
                                                         return (
                                                             <div key={index} className="document-item">
                                                                 <span>📄 {doc}</span>
-                                                                <span style={{
-                                                                    color: hasAtt ? '#1B6B5A' : '#C53030',
-                                                                    fontSize: '12px',
-                                                                    fontWeight: '500'
-                                                                }}>
-                                                                    {hasAtt ? '✅ 업로드됨' : '❌ 미제출'}
-                                                                </span>
+                                                                {docRecord?.file_name ? (
+                                                                    <span style={{
+                                                                        color: '#1B6B5A',
+                                                                        fontSize: '12px',
+                                                                        fontWeight: '500',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px',
+                                                                        maxWidth: '200px',
+                                                                        overflow: 'hidden',
+                                                                        textOverflow: 'ellipsis',
+                                                                        whiteSpace: 'nowrap'
+                                                                    }}>
+                                                                        ✅ {docRecord.file_name}
+                                                                    </span>
+                                                                ) : (
+                                                                    <button
+                                                                        className="btn btn-secondary"
+                                                                        style={{ fontSize: '12px', padding: '3px 10px', flexShrink: 0 }}
+                                                                        onClick={() => {
+                                                                            activeDocUploadRef.current = { execId: execution.id, docName: doc };
+                                                                            docUploadFileInputRef.current?.click();
+                                                                        }}
+                                                                    >
+                                                                        📎 첨부하기
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         );
                                                     })}
                                                 </div>
                                             )}
-                                            <div style={{ marginTop: '12px', borderTop: '1px solid #E2E0DD', paddingTop: '12px' }}>
-                                                {AttachmentListDisplay({ attachments: executionAttachmentsMap[execution.id] || [] })}
-                                                <button
-                                                    className="btn btn-secondary"
-                                                    style={{ fontSize: '13px', padding: '6px 14px', marginTop: '8px' }}
-                                                    onClick={() => {
-                                                        activeUploadExecutionIdRef.current = execution.id;
-                                                        executionFileInputRef.current?.click();
-                                                    }}
-                                                >
-                                                    📎 파일 첨부
-                                                </button>
-                                            </div>
                                         </div>
                                     ))}
 
                                     <input
-                                        ref={executionFileInputRef}
+                                        ref={docUploadFileInputRef}
                                         type="file"
-                                        multiple
                                         style={{ display: 'none' }}
                                         onChange={async (e) => {
-                                            const files = Array.from(e.target.files);
+                                            const file = e.target.files[0];
                                             e.target.value = '';
-                                            const execId = activeUploadExecutionIdRef.current;
-                                            activeUploadExecutionIdRef.current = null;
-                                            if (!files.length || !execId) return;
+                                            const { execId, docName } = activeDocUploadRef.current || {};
+                                            activeDocUploadRef.current = null;
+                                            if (!file || !execId || !docName) return;
                                             try {
-                                                await uploadAttachments(files, 'execution', execId);
-                                                const { data: atts } = await supabase
+                                                const timestamp = Date.now();
+                                                const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                                                const filePath = `execution/${execId}/${timestamp}_${safeName}`;
+                                                const { data: storageData, error: storageError } = await supabase.storage
                                                     .from('attachments')
-                                                    .select('*')
-                                                    .eq('execution_id', execId)
-                                                    .order('created_at', { ascending: true });
-                                                setExecutionAttachmentsMap(prev => ({
+                                                    .upload(filePath, file);
+                                                if (storageError) throw storageError;
+                                                const { error: dbError } = await supabase
+                                                    .from('documents')
+                                                    .insert([{
+                                                        execution_id: execId,
+                                                        document_name: docName,
+                                                        document_type: 'required',
+                                                        file_path: storageData?.path || filePath,
+                                                        file_name: file.name,
+                                                        file_size: file.size,
+                                                        uploaded_by: currentUser.id
+                                                    }]);
+                                                if (dbError) throw dbError;
+                                                setExecutionDocsMap(prev => ({
                                                     ...prev,
-                                                    [execId]: atts || []
+                                                    [execId]: {
+                                                        ...(prev[execId] || {}),
+                                                        [docName]: { file_path: storageData?.path || filePath, file_name: file.name, file_size: file.size }
+                                                    }
                                                 }));
                                             } catch (err) {
-                                                console.error('파일 첨부 실패:', err);
+                                                console.error('문서 첨부 실패:', err);
                                                 alert('파일 첨부 중 오류가 발생했습니다.');
                                             }
                                         }}
