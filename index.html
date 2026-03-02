@@ -2146,6 +2146,12 @@
         const generateSalaryStatementHTML = (targetExecution, allExecutions, orgSettings = {}, recipientProfile = null) => {
             const recipientName = targetExecution.recipient || '';
 
+            // Seal image — only accept data: URLs to prevent XSS
+            const sealDataUrl = (orgSettings.org_seal || '').startsWith('data:image/') ? orgSettings.org_seal : '';
+            const sealHTML = sealDataUrl
+                ? `<img src="${sealDataUrl}" style="height:70px;vertical-align:middle;margin-left:12px;" alt="단체직인">`
+                : '(단체직인 또는 대표자 서명)';
+
             // 같은 수급자의 운영인건비 집행 전체를 날짜순 정렬
             // ID 중복 및 동일 날짜+금액 중복 제거 (이중 등록 방어)
             const seenIds = new Set();
@@ -2279,7 +2285,7 @@
     <div class="sign-area">
         <p>위 금액을 지급하였음을 증명합니다.</p>
         <p style="margin-top:10px">${y}년 &nbsp;&nbsp; ${m}월 &nbsp;&nbsp; ${d}일</p>
-        <p style="margin-top:20px">단체(기관)명 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (단체직인 또는 대표자 서명)</p>
+        <p style="margin-top:20px">단체(기관)명 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${sealHTML}</p>
     </div>
 
     <div class="attach-note">
@@ -2329,6 +2335,12 @@
 
             const orgName = esc(orgSettings.org_name || '청년노동자인권센터');
             const orgRep = esc(orgSettings.org_representative || '');
+
+            // Seal image — only accept data: URLs to prevent XSS
+            const sealDataUrl = (orgSettings.org_seal || '').startsWith('data:image/') ? orgSettings.org_seal : '';
+            const sealHTML = sealDataUrl
+                ? `<img src="${sealDataUrl}" style="height:70px;vertical-align:middle;margin-left:8px;" alt="단체직인">`
+                : '<span style="font-size:10pt;color:#555;">(단체직인 또는 대표자서명)</span>';
 
             const meetingTitle = esc(formData.title || '');
             const meetingDate = esc(formData.date || '');
@@ -2403,6 +2415,10 @@
             ${participantRows}
         </table>
     </div>
+
+    <p style="margin-top:24px;text-align:right;font-size:11pt;">
+        ${orgName}&nbsp;&nbsp;${sealHTML}
+    </p>
 
     <div class="no-print" style="text-align:center">
         <button class="btn-print" style="background:#1B6B5A;color:#fff" onclick="window.print()">🖨️ 인쇄 / PDF 저장</button>
@@ -3642,12 +3658,12 @@
                             supabase.from('recipients').select('id,name,birth_date,address,phone')
                                 .eq('is_active', true).order('name').then(r => r.data || []),
                             supabase.from('system_settings').select('setting_key,setting_value')
-                                .in('setting_key', ['org_representative', 'org_address', 'org_registration_number'])
+                                .in('setting_key', ['org_representative', 'org_address', 'org_registration_number', 'org_seal'])
                                 .then(r => r.data || [])
                         ]);
 
                         setRecipients(recipientsData);
-                        const merged = { org_representative: '', org_address: '', org_registration_number: '' };
+                        const merged = { org_representative: '', org_address: '', org_registration_number: '', org_seal: '' };
                         settingsData.forEach(row => { merged[row.setting_key] = row.setting_value || ''; });
                         setOrgSettings(merged);
 
@@ -7513,7 +7529,7 @@
 
             // ── 기관 정보 (system_settings) ──────────────────────────────
             const [orgSettings, setOrgSettings] = useState({
-                org_representative: '', org_address: '', org_registration_number: ''
+                org_representative: '', org_address: '', org_registration_number: '', org_seal: ''
             });
             const [orgSettingsSaving, setOrgSettingsSaving] = useState(false);
             const [orgSettingsMsg, setOrgSettingsMsg] = useState({ type: '', text: '' });
@@ -7545,7 +7561,8 @@
                     const rows = [
                         { setting_key: 'org_representative',      setting_value: orgSettings.org_representative },
                         { setting_key: 'org_address',             setting_value: orgSettings.org_address },
-                        { setting_key: 'org_registration_number', setting_value: orgSettings.org_registration_number }
+                        { setting_key: 'org_registration_number', setting_value: orgSettings.org_registration_number },
+                        { setting_key: 'org_seal',                setting_value: orgSettings.org_seal }
                     ];
                     const { error } = await supabase
                         .from('system_settings')
@@ -8576,6 +8593,42 @@
                                                 onChange={e => setOrgSettings({...orgSettings, org_address: e.target.value})}
                                                 placeholder="도로명 주소"
                                             />
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label>단체직인 이미지</label>
+                                            {orgSettings.org_seal && (
+                                                <div style={{ marginBottom: '8px' }}>
+                                                    <img
+                                                        src={orgSettings.org_seal}
+                                                        alt="등록된 단체직인"
+                                                        style={{ maxHeight: '80px', border: '1px solid #ddd', borderRadius: '4px', padding: '4px', background: '#f9f9f9' }}
+                                                    />
+                                                </div>
+                                            )}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={e => {
+                                                    const file = e.target.files[0];
+                                                    if (!file) return;
+                                                    const reader = new FileReader();
+                                                    reader.onload = ev => setOrgSettings({...orgSettings, org_seal: ev.target.result});
+                                                    reader.readAsDataURL(file);
+                                                }}
+                                            />
+                                            {orgSettings.org_seal && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary"
+                                                    style={{ marginTop: '6px', fontSize: '12px' }}
+                                                    onClick={() => setOrgSettings({...orgSettings, org_seal: ''})}
+                                                >
+                                                    🗑 직인 삭제
+                                                </button>
+                                            )}
+                                            <p style={{ fontSize: '12px', color: '#9C9690', marginTop: '4px' }}>
+                                                PNG/JPG 권장. 배경이 투명한 PNG 사용 시 가장 자연스럽습니다.
+                                            </p>
                                         </div>
                                     </div>
                                     <div style={{ marginTop: '16px' }}>
