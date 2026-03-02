@@ -110,18 +110,47 @@ CREATE POLICY "Public read access for boards" ON public.boards
 
 ## 🔐 보안 설정
 
+### ⚠️ API 키 노출 완화 조치 (필수)
+
+이 앱은 no-build SPA로, Supabase anon key가 클라이언트 코드에 포함됩니다.
+키 자체를 숨길 수 없으므로, **Supabase 대시보드에서 접근 허용 도메인을 반드시 제한하세요.**
+
+#### Allowed Origins 설정 (최우선)
+
+1. [Supabase Dashboard](https://supabase.com/dashboard) 로그인
+2. 해당 프로젝트 선택
+3. 좌측 메뉴 **Authentication** → **URL Configuration**
+4. **Allowed Origins** 항목에 실제 배포 도메인만 입력:
+   ```
+   https://yourdomain.com
+   http://localhost:8000   (개발 환경만 허용 시)
+   ```
+5. 저장 후, 허용되지 않은 도메인에서의 API 호출이 차단되는지 확인
+
+> **주의**: 배포 시 `localhost`는 반드시 Allowed Origins에서 제거하세요.
+
 ### Row Level Security (RLS)
-모든 테이블에 RLS가 활성화되어 있습니다:
 
-**공개 데이터:**
-- 공개 설정된 일정, 갤러리, 게시글은 인증 없이 조회 가능
+모든 테이블에 RLS가 활성화되어 있습니다.
 
-**제한된 데이터:**
-- 예산 집행, 개인정보 등은 인증된 사용자만 접근 가능
+#### 현재 상태 (anon key 기반 커스텀 인증)
+- `USING(true)` 정책 사용 — Supabase Auth 미사용으로 사용자별 접근 제어 불가
+- `supabase-migration-rls-improved.sql` 실행 시 추가 제약 적용:
+  - `users` 테이블 DELETE 차단 (소프트 삭제만 허용)
+  - `budget_executions` 음수 금액 입력 차단
+  - `activity_logs` UPDATE/DELETE 차단 (로그 불변성)
+
+#### 장기 보안 목표 (Supabase Auth 마이그레이션)
+Supabase Auth로 마이그레이션 시 `auth.uid()`를 활용한 사용자별 RLS 정책 적용 가능:
+```sql
+-- 예시: 본인이 작성한 데이터만 수정 가능
+CREATE POLICY "Users update own data" ON public.budget_executions
+    FOR UPDATE USING (created_by = auth.uid());
+```
 
 ### API 키 관리
-- **Public Key**: 클라이언트에서 사용 (읽기 전용)
-- **Service Key**: 서버에서 사용 (관리자 권한)
+- **Public Key (anon key)**: 클라이언트 노출됨 → Allowed Origins로 완화
+- **Service Key**: 절대 클라이언트 코드에 포함 금지, 서버에서만 사용
 
 ## 📱 사용 방법
 

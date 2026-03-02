@@ -2118,12 +2118,28 @@
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
 
-        // Supabase 설정 (SUPABASE_SETUP.md에서 가져온 올바른 키)
+        // Supabase 설정
+        // ⚠️  보안 주의: anon key는 no-build SPA 특성상 클라이언트에 노출됩니다.
+        //    완화 조치: Supabase Dashboard → Authentication → URL Configuration
+        //              → Allowed Origins에 실제 배포 도메인만 등록하세요.
+        //    자세한 설정 방법: SUPABASE_SETUP.md → 보안 설정 섹션 참고
         const supabaseUrl = 'https://exnloiyzmdzbhljwwxrs.supabase.co';
         const supabaseKey = 'sb_publishable_6EjqM_6qP_wFQGD54P2M9Q_eULAJHnJ';
 
         // Supabase 클라이언트 초기화
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        // ===== 프로젝트 전역 설정 상수 =====
+        const CONFIG = {
+            TOTAL_BUDGET: 70000000,           // 총 사업비 7천만원
+            WITHHOLDING_THRESHOLD: 125000,    // 원천징수 기준액 (이하 면세)
+            INCOME_TAX_RATE: 0.08,            // 기타소득세율 8%
+            LOCAL_TAX_RATE: 0.1,              // 지방소득세율 (기타소득세의 10%)
+            PERIODS: {
+                h1: { start: '2026-01-01', end: '2026-06-30' },
+                h2: { start: '2026-07-01', end: '2026-12-31' }
+            }
+        };
 
         // Utility functions for consistent number/percentage formatting
         const fmt = (n) => Math.round(n).toLocaleString();
@@ -2457,10 +2473,10 @@
         const BUDGET_DATA = {
             projectName: "2026 공익단체 인큐베이팅 지원사업",
             organization: "청년노동자인권센터",
-            totalBudget: 70000000,
+            totalBudget: CONFIG.TOTAL_BUDGET,
             period: "2026.01 ~ 2026.12",
             periods: {
-                total: { label: "1차년도 전체", budget: 70000000 },
+                total: { label: "1차년도 전체", budget: CONFIG.TOTAL_BUDGET },
                 h1: { label: "상반기 (1~6월)", budget: 35410000 },
                 h2: { label: "하반기 (7~12월)", budget: 34590000 }
             },
@@ -2605,8 +2621,8 @@
                     "기타소득지급명세서 소득자별 연간집계표 (해당 시에만 제출)"
                 ],
                 withholding: true,
-                withholdingThreshold: 125000,
-                withholdingRate: { income: 8, local: 1 },
+                withholdingThreshold: CONFIG.WITHHOLDING_THRESHOLD,
+                withholdingRate: { income: CONFIG.INCOME_TAX_RATE * 100, local: 1 }, // 지방세: 기타소득세의 10% ≈ 0.8%를 1%로 표시
                 notes: "단체 내부인에는 지급 불가. 계좌입금 원칙, 원천징수금액은 운영통장으로 이체 후 집행. 주민번호 취합 필요 (연말 기타소득지급명세서 제출용)."
             },
             "운영인건비": {
@@ -2688,8 +2704,8 @@
                     "이력서, 포트폴리오, 사유서 (개인용역계약의 경우)"
                 ],
                 withholding: true,
-                withholdingThreshold: 125000,
-                withholdingRate: { income: 8, local: 1 },
+                withholdingThreshold: CONFIG.WITHHOLDING_THRESHOLD,
+                withholdingRate: { income: CONFIG.INCOME_TAX_RATE * 100, local: 1 }, // 지방세: 기타소득세의 10% ≈ 0.8%를 1%로 표시
                 notes: "개인용역계약시 추가 서류 필요. 원천징수 대상인 경우 세무처리 필요."
             },
             "여비교통비": {
@@ -2751,6 +2767,13 @@
             const [loginError, setLoginError] = useState('');
             const [isLoading, setIsLoading] = useState(false);
 
+            // 기본 비밀번호 강제 변경 모달 state
+            const [forceChangeUser, setForceChangeUser] = useState(null); // 로그인 성공한 user 임시 보관
+            const [newPassword, setNewPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            const [changeError, setChangeError] = useState('');
+            const [changeSaving, setChangeSaving] = useState(false);
+
             const handleLogin = async (e) => {
                 e.preventDefault();
                 setLoginError('');
@@ -2783,6 +2806,14 @@
                         return;
                     }
 
+                    // 기본 비밀번호(admin1234) 사용 중이면 강제 변경 모달 표시
+                    const defaultHash = await hashPassword('admin1234');
+                    if (user.password_hash === defaultHash) {
+                        setForceChangeUser(user); // 세션 생성 전에 user 임시 보관
+                        setIsLoading(false);
+                        return;
+                    }
+
                     // 로그인 성공 - localStorage에 세션 저장 (password_hash 제외, 만료시간 포함)
                     const sessionData = {
                         id: user.id,
@@ -2803,6 +2834,102 @@
                     setIsLoading(false);
                 }
             };
+
+            // 기본 비밀번호 강제 변경 핸들러
+            const handleForcePasswordChange = async (e) => {
+                e.preventDefault();
+                setChangeError('');
+                if (newPassword.length < 8) {
+                    setChangeError('새 비밀번호는 8자 이상이어야 합니다.');
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    setChangeError('비밀번호 확인이 일치하지 않습니다.');
+                    return;
+                }
+                setChangeSaving(true);
+                try {
+                    const hashed = await hashPassword(newPassword);
+                    const { error } = await supabase
+                        .from('users')
+                        .update({ password_hash: hashed, updated_at: new Date().toISOString() })
+                        .eq('id', forceChangeUser.id);
+                    if (error) throw error;
+
+                    // 비밀번호 변경 성공 후 세션 생성
+                    const sessionData = {
+                        id: forceChangeUser.id,
+                        username: forceChangeUser.username,
+                        name: forceChangeUser.name,
+                        role: forceChangeUser.role,
+                        email: forceChangeUser.email,
+                        organization: forceChangeUser.organization,
+                        position: forceChangeUser.position,
+                        expiresAt: Date.now() + (24 * 60 * 60 * 1000)
+                    };
+                    localStorage.setItem('bf_user_session', JSON.stringify(sessionData));
+                    onLogin(sessionData);
+                } catch (err) {
+                    console.error('비밀번호 변경 오류:', err);
+                    setChangeError('비밀번호 변경 중 오류가 발생했습니다: ' + err.message);
+                } finally {
+                    setChangeSaving(false);
+                }
+            };
+
+            // 기본 비밀번호 강제 변경 모달 (닫기 불가)
+            if (forceChangeUser) {
+                return (
+                    <div className="login-overlay">
+                        <div className="login-card">
+                            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                                <div style={{ fontSize: '36px', marginBottom: '8px' }}>🔐</div>
+                                <h2 style={{ margin: 0, color: '#1B6B5A' }}>비밀번호 변경 필요</h2>
+                            </div>
+                            <p style={{ color: '#6B7280', fontSize: '14px', textAlign: 'center', marginBottom: '20px' }}>
+                                기본 비밀번호를 사용 중입니다.<br/>
+                                보안을 위해 반드시 새 비밀번호로 변경하세요.
+                            </p>
+                            <form onSubmit={handleForcePasswordChange}>
+                                <div className="form-group">
+                                    <label>새 비밀번호 <span style={{ color: '#EF4444' }}>*</span></label>
+                                    <input
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                        placeholder="8자 이상 입력"
+                                        required
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>비밀번호 확인 <span style={{ color: '#EF4444' }}>*</span></label>
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                        placeholder="비밀번호 재입력"
+                                        required
+                                    />
+                                </div>
+                                {changeError && (
+                                    <div style={{ color: '#EF4444', fontSize: '13px', marginBottom: '12px', padding: '8px', background: '#FEF2F2', borderRadius: '6px' }}>
+                                        {changeError}
+                                    </div>
+                                )}
+                                <button
+                                    type="submit"
+                                    className="login-btn"
+                                    disabled={changeSaving}
+                                    style={{ width: '100%' }}
+                                >
+                                    {changeSaving ? '저장 중...' : '비밀번호 변경 후 로그인'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
 
             return (
                 <div className="login-overlay">
@@ -3417,11 +3544,11 @@
             // 예산관리 helper functions
             // 원천징수 계산: 원단위 절사 (국세, 지방세 따로 계산 후 절사)
             const calculateWithholdingTax = (amount) => {
-                if (amount <= 125000) {
+                if (amount <= CONFIG.WITHHOLDING_THRESHOLD) {
                     return { income: 0, local: 0, total: 0, net: amount, taxable: false };
                 }
-                const incomeTax = Math.floor(amount * 0.08);   // 국세: 8% 후 원단위 절사
-                const localTax = Math.floor(incomeTax * 0.1);   // 지방세: 국세의 10% 후 원단위 절사
+                const incomeTax = Math.floor(amount * CONFIG.INCOME_TAX_RATE);   // 국세: 8% 후 원단위 절사
+                const localTax = Math.floor(incomeTax * CONFIG.LOCAL_TAX_RATE);  // 지방세: 국세의 10% 후 원단위 절사
                 return {
                     income: incomeTax,
                     local: localTax,
@@ -3624,7 +3751,7 @@
 
             // 통계 계산
             const calculateStats = useCallback((schedules, galleries, boards, executions) => {
-                const totalBudget = 70000000; // 7천만원
+                const totalBudget = CONFIG.TOTAL_BUDGET;
                 const usedBudget = executions.reduce((sum, exec) => sum + (exec.amount || 0), 0);
                 const usageRate = Math.round((usedBudget / totalBudget) * 100);
 
@@ -3744,6 +3871,9 @@
                     item.image_path && item.image_path !== 'placeholder' ? item.image_path : null
                 );
                 React.useEffect(() => {
+                    // thumbUrl이 없을 때만 첨부파일에서 이미지 로드
+                    // thumbUrl을 deps에서 제거: if(!thumbUrl)로 이미 방어되어 있으므로
+                    // 포함하면 setThumbUrl 후 effect가 불필요하게 재실행됨
                     if (!thumbUrl) {
                         (async () => {
                             const { data: atts } = await supabase.from('attachments')
@@ -3756,7 +3886,7 @@
                             }
                         })();
                     }
-                }, [item.id, thumbUrl]);
+                }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
                 return (
                     <div
@@ -3881,7 +4011,7 @@
                                         key={board.id}
                                         className="item-card"
                                         onClick={() => {
-                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).then(() => {});
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
                                             setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
                                             setBoardView('detail');
                                             setCurrentPage('board');
@@ -5596,10 +5726,10 @@
                     password: ''
                 });
                 setBoardView('write');
-                // 에디터 내용 설정 (다음 렌더 후)
+                // 에디터 내용 설정 (다음 렌더 후) - XSS 방어: DOMPurify로 sanitize
                 setTimeout(() => {
                     if (boardEditorRef.current) {
-                        boardEditorRef.current.innerHTML = post.content || '';
+                        boardEditorRef.current.innerHTML = DOMPurify.sanitize(post.content || '');
                     }
                 }, 100);
                 // 기존 링크 미리보기 복원
@@ -5763,7 +5893,8 @@
                 setGalleryView('write');
                 setTimeout(() => {
                     if (galleryEditorRef.current) {
-                        galleryEditorRef.current.innerHTML = item.description || '';
+                        // XSS 방어: DOMPurify로 sanitize
+                        galleryEditorRef.current.innerHTML = DOMPurify.sanitize(item.description || '');
                     }
                 }, 100);
             };
@@ -5922,7 +6053,7 @@
                                         key={board.id}
                                         className={`board-list-item ${board.is_pinned ? 'pinned' : ''}`}
                                         onClick={() => {
-                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).then(() => {});
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
                                             setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
                                             setBoardView('detail');
                                             loadAttachments('board', board.id).then(setDetailAttachments);
@@ -5989,6 +6120,8 @@
 
                 React.useEffect(() => {
                     // image_path가 유효하지 않으면 첨부파일에서 이미지 찾기
+                    // thumbUrl을 deps에서 제거: if(!thumbUrl)로 이미 방어되어 있으므로
+                    // 포함하면 setThumbUrl 후 effect가 불필요하게 재실행됨
                     if (!thumbUrl) {
                         (async () => {
                             try {
@@ -6010,7 +6143,7 @@
                             }
                         })();
                     }
-                }, [item.id, thumbUrl]);
+                }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
                 return (
                     <div className="gallery-card" onClick={onClick}>
@@ -7684,7 +7817,7 @@
                             username: userForm.username,
                             name: userForm.name,
                             email: userForm.email || `${userForm.username}@younglabor.org`,
-                            password_hash: userForm.password,
+                            password_hash: await hashPassword(userForm.password), // SHA-256 해시 후 저장
                             role: userForm.role,
                             phone: userForm.phone,
                             organization: userForm.organization,
@@ -7730,9 +7863,9 @@
                         updated_at: new Date().toISOString()
                     };
 
-                    // 비밀번호가 입력된 경우에만 변경
+                    // 비밀번호가 입력된 경우에만 변경 (SHA-256 해시 후 저장)
                     if (userForm.password) {
-                        updateData.password_hash = userForm.password;
+                        updateData.password_hash = await hashPassword(userForm.password);
                     }
 
                     const { error } = await supabase
