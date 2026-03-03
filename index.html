@@ -8041,11 +8041,13 @@
                                     ? data.budgetExecutions.filter(ex =>
                                         ex.execution_date >= periodRange.start && ex.execution_date <= periodRange.end)
                                     : data.budgetExecutions;
+                                // 소분류별 집계
                                 const execBySubcat = {};
+                                // 세부항목별 집계
+                                const execByItem = {};
                                 periodExecutions.forEach(ex => {
-                                    const id = ex.subcategory_id;
-                                    if (!id) return;
-                                    execBySubcat[id] = (execBySubcat[id] || 0) + (ex.amount || 0);
+                                    if (ex.subcategory_id) execBySubcat[ex.subcategory_id] = (execBySubcat[ex.subcategory_id] || 0) + (ex.amount || 0);
+                                    if (ex.budget_item_id) execByItem[ex.budget_item_id] = (execByItem[ex.budget_item_id] || 0) + (ex.amount || 0);
                                 });
                                 const categoryName = ratioTab === 'project' ? '사업비' : '운영비';
                                 const category = BUDGET_DATA.categories.find(c => c.name === categoryName);
@@ -8102,7 +8104,7 @@
                                             </div>
                                         </div>
 
-                                        {/* 소분류별 세부 집행률 */}
+                                        {/* 소분류별 + 세부항목 집행률 */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                             {(category?.subcategories || []).map(sub => {
                                                 const subBudget = getBudgetByPeriod(sub, budgetPeriod);
@@ -8111,8 +8113,10 @@
                                                 const subRate = pct(subExecuted, subBudget);
                                                 const remaining = Math.max(0, subBudget - subExecuted);
                                                 const barColor = subRate >= 90 ? '#DC2626' : subRate >= 70 ? '#D97706' : '#3B82F6';
+                                                const itemsWithBudget = (sub.items || []).filter(item => getBudgetByPeriod(item, budgetPeriod) > 0);
                                                 return (
                                                     <div key={sub.id} className="card">
+                                                        {/* 소분류 헤더 */}
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                                 <div style={{ fontWeight: '600', marginBottom: '3px', color: '#1A1814', fontSize: '14px' }}>{sub.name}</div>
@@ -8130,10 +8134,46 @@
                                                                 height: '100%', borderRadius: '6px', transition: 'width 0.3s ease'
                                                             }} />
                                                         </div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6B6560' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6B6560', marginBottom: itemsWithBudget.length > 0 ? '14px' : '0' }}>
                                                             <span>집행 <strong style={{ color: '#1A1814' }}>{fmt(subExecuted)}원</strong></span>
                                                             <span>잔액 <strong style={{ color: remaining === 0 && subExecuted > 0 ? '#DC2626' : '#1A1814' }}>{fmt(remaining)}원</strong></span>
                                                         </div>
+
+                                                        {/* 세부항목 테이블 */}
+                                                        {itemsWithBudget.length > 0 && (
+                                                            <div style={{ borderTop: '1px solid #EBE8E1', paddingTop: '12px' }}>
+                                                                <div style={{ fontSize: '11px', color: '#9C9690', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>세부 항목</div>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    {itemsWithBudget.map(item => {
+                                                                        const itemBudget = getBudgetByPeriod(item, budgetPeriod);
+                                                                        const itemExecuted = execByItem[item.id] || 0;
+                                                                        const itemRate = pct(itemExecuted, itemBudget);
+                                                                        const itemColor = itemRate >= 90 ? '#DC2626' : itemRate >= 70 ? '#D97706' : '#134E42';
+                                                                        return (
+                                                                            <div key={item.id} style={{ background: '#F9F8F6', borderRadius: '8px', padding: '10px 12px' }}>
+                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                                                        <div style={{ fontSize: '13px', fontWeight: '500', color: '#1A1814', marginBottom: '1px' }}>{item.name}</div>
+                                                                                        <div style={{ fontSize: '11px', color: '#9C9690' }}>{item.type} · 예산 {fmt(itemBudget)}원</div>
+                                                                                    </div>
+                                                                                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '10px' }}>
+                                                                                        <div style={{ fontSize: '15px', fontWeight: '700', color: itemColor }}>{itemRate}%</div>
+                                                                                        <div style={{ fontSize: '10px', color: '#9C9690' }}>{fmt(itemExecuted)}원</div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div style={{ background: '#E5E3DF', borderRadius: '4px', height: '5px', overflow: 'hidden' }}>
+                                                                                    <div style={{
+                                                                                        background: itemColor,
+                                                                                        width: `${Math.min(100, itemRate)}%`,
+                                                                                        height: '100%', borderRadius: '4px', transition: 'width 0.3s ease'
+                                                                                    }} />
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
