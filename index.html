@@ -6064,7 +6064,10 @@
                         const { data: updatedRows, error: updateError } = await supabase
                             .from('galleries').update(postData).eq('id', editingGalleryItem.id).select();
                         if (updateError) throw updateError;
-                        const updatedRow = updatedRows?.[0];
+                        if (!updatedRows || updatedRows.length === 0) {
+                            throw new Error('수정 권한이 없거나 항목을 찾을 수 없습니다. Supabase 대시보드에서 galleries 테이블의 UPDATE RLS 정책을 확인하세요.');
+                        }
+                        const updatedRow = updatedRows[0];
 
                         if (galleryAttachments.length > 0) {
                             await uploadAttachments(galleryAttachments, 'gallery', editingGalleryItem.id);
