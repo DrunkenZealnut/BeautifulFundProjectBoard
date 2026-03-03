@@ -6061,9 +6061,10 @@
 
                     if (editingGalleryItem) {
                         // 수정 모드
-                        const { data: updatedRow, error: updateError } = await supabase
-                            .from('galleries').update(postData).eq('id', editingGalleryItem.id).select().single();
+                        const { data: updatedRows, error: updateError } = await supabase
+                            .from('galleries').update(postData).eq('id', editingGalleryItem.id).select();
                         if (updateError) throw updateError;
+                        const updatedRow = updatedRows?.[0];
 
                         if (galleryAttachments.length > 0) {
                             await uploadAttachments(galleryAttachments, 'gallery', editingGalleryItem.id);
@@ -6082,9 +6083,10 @@
                             postData.post_password = await hashPassword(galleryWriteData.password.trim());
                         }
 
-                        const { data: inserted, error: insertError } = await supabase
-                            .from('galleries').insert([postData]).select().single();
+                        const { data: insertedRows, error: insertError } = await supabase
+                            .from('galleries').insert([postData]).select();
                         if (insertError) throw insertError;
+                        const inserted = insertedRows?.[0];
 
                         if (galleryAttachments.length > 0 && inserted?.id) {
                             await uploadAttachments(galleryAttachments, 'gallery', inserted.id);
