@@ -3548,6 +3548,7 @@
             // 예산관리 상태
             const [budgetTab, setBudgetTab] = useState("dashboard");
             const [budgetPeriod, setBudgetPeriod] = useState("total"); // total | h1 | h2
+            const [ratioTab, setRatioTab] = useState('project'); // 비용비율 내부 탭: 'project' | 'operating'
             const [formData, setFormData] = useState({
                 subcategory_id: '',
                 subcategory_name: '',
@@ -6597,6 +6598,12 @@
                             >
                                 📋 집행내역
                             </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'ratio' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('ratio')}
+                            >
+                                📊 비용비율
+                            </button>
                         </div>
 
                         {/* 탭 내용 */}
@@ -8011,6 +8018,114 @@
                                     )}
                                 </div>
                             )}
+
+                            {/* ── 비용비율 탭 ──────────────────────────────── */}
+                            {budgetTab === 'ratio' && (() => {
+                                const periodRange = PERIOD_DATE_RANGES[budgetPeriod];
+                                const periodExecutions = periodRange
+                                    ? data.budgetExecutions.filter(ex =>
+                                        ex.execution_date >= periodRange.start && ex.execution_date <= periodRange.end)
+                                    : data.budgetExecutions;
+                                const execBySubcat = {};
+                                periodExecutions.forEach(ex => {
+                                    const id = ex.subcategory_id;
+                                    if (!id) return;
+                                    execBySubcat[id] = (execBySubcat[id] || 0) + (ex.amount || 0);
+                                });
+                                const categoryName = ratioTab === 'project' ? '사업비' : '운영비';
+                                const category = BUDGET_DATA.categories.find(c => c.name === categoryName);
+                                const catBudget = category ? getBudgetByPeriod(category, budgetPeriod) : 0;
+                                const catExecuted = category
+                                    ? category.subcategories.reduce((sum, sub) => sum + (execBySubcat[sub.id] || 0), 0)
+                                    : 0;
+                                const catRate = pct(catExecuted, catBudget);
+                                return (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <h2 style={{ fontSize: '20px', fontWeight: '600' }}>📊 비용 사용비율</h2>
+                                        </div>
+
+                                        {/* 내부 탭: 사업비 / 운영비 */}
+                                        <div className="tab-navigation" style={{ marginBottom: '20px' }}>
+                                            <button
+                                                className={`tab-btn ${ratioTab === 'project' ? 'active' : ''}`}
+                                                onClick={() => setRatioTab('project')}
+                                            >💼 사업비</button>
+                                            <button
+                                                className={`tab-btn ${ratioTab === 'operating' ? 'active' : ''}`}
+                                                onClick={() => setRatioTab('operating')}
+                                            >🏢 운영비</button>
+                                        </div>
+
+                                        {/* 카테고리 전체 요약 */}
+                                        <div className="card" style={{ marginBottom: '16px' }}>
+                                            <div className="card-header">
+                                                <h2 className="card-title">{categoryName} 전체 집행현황</h2>
+                                                <span style={{
+                                                    fontSize: '13px', fontWeight: '600', padding: '3px 10px',
+                                                    borderRadius: '10px',
+                                                    background: catRate >= 90 ? '#FEE2E2' : catRate >= 70 ? '#FEF3C7' : '#DCFCE7',
+                                                    color: catRate >= 90 ? '#DC2626' : catRate >= 70 ? '#D97706' : '#15803D'
+                                                }}>{catRate}%</span>
+                                            </div>
+                                            <div style={{ padding: '6px 0 2px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6B6560', marginBottom: '10px' }}>
+                                                    <span>집행: <strong style={{ color: '#1A1814' }}>{fmt(catExecuted)}원</strong></span>
+                                                    <span>예산: <strong style={{ color: '#1A1814' }}>{fmt(catBudget)}원</strong></span>
+                                                </div>
+                                                <div style={{ background: '#F0EFED', borderRadius: '8px', height: '14px', overflow: 'hidden' }}>
+                                                    <div style={{
+                                                        background: catRate >= 90 ? '#DC2626' : catRate >= 70 ? '#D97706' : '#134E42',
+                                                        width: `${Math.min(100, catRate)}%`,
+                                                        height: '100%', borderRadius: '8px', transition: 'width 0.4s ease'
+                                                    }} />
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '12px', color: '#6B6560' }}>
+                                                    <span>잔액: {fmt(Math.max(0, catBudget - catExecuted))}원</span>
+                                                    <span>{catExecuted > catBudget ? <span style={{ color: '#DC2626' }}>초과: {fmt(catExecuted - catBudget)}원</span> : '—'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 소분류별 세부 집행률 */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                            {(category?.subcategories || []).map(sub => {
+                                                const subBudget = getBudgetByPeriod(sub, budgetPeriod);
+                                                if (subBudget === 0) return null;
+                                                const subExecuted = execBySubcat[sub.id] || 0;
+                                                const subRate = pct(subExecuted, subBudget);
+                                                const remaining = Math.max(0, subBudget - subExecuted);
+                                                const barColor = subRate >= 90 ? '#DC2626' : subRate >= 70 ? '#D97706' : '#3B82F6';
+                                                return (
+                                                    <div key={sub.id} className="card">
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ fontWeight: '600', marginBottom: '3px', color: '#1A1814', fontSize: '14px' }}>{sub.name}</div>
+                                                                <div style={{ fontSize: '12px', color: '#6B6560' }}>예산 {fmt(subBudget)}원</div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
+                                                                <div style={{ fontSize: '22px', fontWeight: '700', color: barColor, lineHeight: 1.1 }}>{subRate}%</div>
+                                                                <div style={{ fontSize: '10px', color: '#9C9690', marginTop: '2px' }}>집행률</div>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ background: '#F0EFED', borderRadius: '6px', height: '8px', overflow: 'hidden', marginBottom: '10px' }}>
+                                                            <div style={{
+                                                                background: barColor,
+                                                                width: `${Math.min(100, subRate)}%`,
+                                                                height: '100%', borderRadius: '6px', transition: 'width 0.3s ease'
+                                                            }} />
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6B6560' }}>
+                                                            <span>집행 <strong style={{ color: '#1A1814' }}>{fmt(subExecuted)}원</strong></span>
+                                                            <span>잔액 <strong style={{ color: remaining === 0 && subExecuted > 0 ? '#DC2626' : '#1A1814' }}>{fmt(remaining)}원</strong></span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 );
