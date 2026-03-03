@@ -3538,9 +3538,7 @@
             const galleryEditorRef = useRef(null);
             // ── 대시보드 차트 refs ────────────────────────────────────────
             const monthlyChartRef = useRef(null);
-            const categoryChartRef = useRef(null);
             const monthlyChartInst = useRef(null);
-            const categoryChartInst = useRef(null);
 
             // 회계가이드 상태
             const [guideTab, setGuideTab] = useState('principles');
@@ -3862,48 +3860,55 @@
             // ── 대시보드 차트 ─────────────────────────────────────────────
             useEffect(() => {
                 if (!data?.budgetExecutions?.length) return;
-                if (!monthlyChartRef.current || !categoryChartRef.current) return;
+                if (!monthlyChartRef.current) return;
 
-                const monthly = Array(12).fill(0);
-                const byCategory = {};
+                // 카테고리별 월별 집계 (누적 바차트용)
+                const CATEGORY_COLORS = { '사업비': '#134E42', '운영비': '#D97706' };
+                const FALLBACK_COLORS = ['#7C3AED', '#0891B2', '#E53E3E', '#38A169'];
+                const categoriesFound = [...new Set(data.budgetExecutions.map(e => e.category_name).filter(Boolean))];
+                const monthlyByCategory = {};
+                categoriesFound.forEach(cat => { monthlyByCategory[cat] = Array(12).fill(0); });
                 data.budgetExecutions.forEach(e => {
                     const m = parseInt((e.execution_date || '').slice(5, 7)) - 1;
-                    if (m >= 0 && m < 12) monthly[m] += e.amount || 0;
-                    if (e.category_name) {
-                        byCategory[e.category_name] = (byCategory[e.category_name] || 0) + (e.amount || 0);
-                    }
+                    if (m >= 0 && m < 12 && e.category_name) monthlyByCategory[e.category_name][m] += e.amount || 0;
                 });
+                const datasets = categoriesFound.map((cat, i) => ({
+                    label: cat,
+                    data: monthlyByCategory[cat],
+                    backgroundColor: CATEGORY_COLORS[cat] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+                    borderRadius: 4,
+                    stack: 'stack0'
+                }));
 
                 if (monthlyChartInst.current) monthlyChartInst.current.destroy();
                 monthlyChartInst.current = new window.Chart(monthlyChartRef.current.getContext('2d'), {
                     type: 'bar',
                     data: {
                         labels: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
-                        datasets: [{ label: '집행액', data: monthly, backgroundColor: '#134E42', borderRadius: 4 }]
+                        datasets
                     },
                     options: {
                         responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { ticks: { callback: v => (v >= 10000 ? Math.floor(v / 10000) + '만' : v) + '원' } } }
-                    }
-                });
-
-                if (categoryChartInst.current) categoryChartInst.current.destroy();
-                categoryChartInst.current = new window.Chart(categoryChartRef.current.getContext('2d'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: Object.keys(byCategory),
-                        datasets: [{ data: Object.values(byCategory), backgroundColor: ['#134E42','#D97706','#7C3AED','#0891B2','#E53E3E','#38A169'] }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+                        plugins: {
+                            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+                            tooltip: {
+                                callbacks: {
+                                    footer: items => {
+                                        const total = items.reduce((s, i) => s + i.parsed.y, 0);
+                                        return '합계: ' + (total >= 10000 ? Math.floor(total / 10000) + '만' : total) + '원';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { stacked: true },
+                            y: { stacked: true, ticks: { callback: v => (v >= 10000 ? Math.floor(v / 10000) + '만' : v) + '원' } }
+                        }
                     }
                 });
 
                 return () => {
                     if (monthlyChartInst.current) { monthlyChartInst.current.destroy(); monthlyChartInst.current = null; }
-                    if (categoryChartInst.current) { categoryChartInst.current.destroy(); categoryChartInst.current = null; }
                 };
             }, [data?.budgetExecutions]);
 
@@ -4210,19 +4215,11 @@
 
                     {/* 집행 추이 차트 */}
                     {data.budgetExecutions && data.budgetExecutions.length > 0 && (
-                        <div className="grid-2" style={{ marginBottom: '24px' }}>
-                            <div className="card">
-                                <div className="card-header">
-                                    <h2 className="card-title">📈 월별 집행 추이</h2>
-                                </div>
-                                <canvas ref={monthlyChartRef} />
+                        <div className="card" style={{ marginBottom: '24px' }}>
+                            <div className="card-header">
+                                <h2 className="card-title">📈 월별 집행 추이 (카테고리별)</h2>
                             </div>
-                            <div className="card">
-                                <div className="card-header">
-                                    <h2 className="card-title">🍩 예산 구성 비율</h2>
-                                </div>
-                                <canvas ref={categoryChartRef} />
-                            </div>
+                            <canvas ref={monthlyChartRef} />
                         </div>
                     )}
 
