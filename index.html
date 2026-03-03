@@ -19,6 +19,12 @@
     <!-- DOMPurify: XSS 방어용 HTML 새니타이저 -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 
+    <!-- JSZip: 파일 압축 (갤러리 ZIP 다운로드) -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+    <!-- SheetJS: Excel 내보내기 -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
     <!-- Google Calendar API -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
@@ -765,9 +771,7 @@
 
             .navigation {
                 padding: 10px 12px;
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
+                flex-wrap: wrap;
                 gap: 6px;
             }
 
@@ -801,7 +805,7 @@
 
             .tab-navigation {
                 padding: 10px 12px;
-                flex-wrap: nowrap;
+                flex-wrap: wrap;
                 gap: 6px;
             }
 
@@ -2059,11 +2063,21 @@
             .tab-navigation {
                 padding: 8px 10px;
                 margin-bottom: 16px;
+                flex-wrap: wrap;
+                gap: 4px;
             }
 
             .tab-btn {
                 padding: 7px 10px;
                 font-size: 12px;
+            }
+
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                padding: 16px;
             }
 
             .gallery-grid {
@@ -3511,6 +3525,11 @@
             const activeFormDocNameRef = useRef(null);
             const boardEditorRef = useRef(null);
             const galleryEditorRef = useRef(null);
+            // ── 대시보드 차트 refs ────────────────────────────────────────
+            const monthlyChartRef = useRef(null);
+            const categoryChartRef = useRef(null);
+            const monthlyChartInst = useRef(null);
+            const categoryChartInst = useRef(null);
 
             // 회계가이드 상태
             const [guideTab, setGuideTab] = useState('principles');
@@ -3827,6 +3846,56 @@
                 loadAllData();
             }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
 
+            // ── 대시보드 차트 ─────────────────────────────────────────────
+            useEffect(() => {
+                if (!data?.budgetExecutions?.length) return;
+                if (!monthlyChartRef.current || !categoryChartRef.current) return;
+
+                const monthly = Array(12).fill(0);
+                data.budgetExecutions.forEach(e => {
+                    const m = parseInt((e.execution_date || '').slice(5, 7)) - 1;
+                    if (m >= 0 && m < 12) monthly[m] += e.amount || 0;
+                });
+                const byCategory = {};
+                data.budgetExecutions.forEach(e => {
+                    if (e.category_name) {
+                        byCategory[e.category_name] = (byCategory[e.category_name] || 0) + (e.amount || 0);
+                    }
+                });
+
+                if (monthlyChartInst.current) monthlyChartInst.current.destroy();
+                monthlyChartInst.current = new window.Chart(monthlyChartRef.current.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+                        datasets: [{ label: '집행액', data: monthly, backgroundColor: '#134E42', borderRadius: 4 }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { ticks: { callback: v => (v >= 10000 ? Math.floor(v / 10000) + '만' : v) + '원' } } }
+                    }
+                });
+
+                if (categoryChartInst.current) categoryChartInst.current.destroy();
+                categoryChartInst.current = new window.Chart(categoryChartRef.current.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(byCategory),
+                        datasets: [{ data: Object.values(byCategory), backgroundColor: ['#134E42','#D97706','#7C3AED','#0891B2','#E53E3E','#38A169'] }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
+                    }
+                });
+
+                return () => {
+                    if (monthlyChartInst.current) { monthlyChartInst.current.destroy(); monthlyChartInst.current = null; }
+                    if (categoryChartInst.current) { categoryChartInst.current.destroy(); categoryChartInst.current = null; }
+                };
+            }, [data?.budgetExecutions]);
+
             // 집행 내역 탭: 증빙서류 업로드 현황 로드
             useEffect(() => {
                 if (budgetTab !== 'history') return;
@@ -4127,6 +4196,24 @@
                             <div style={{ fontSize: '13px', color: perfMsg.includes('오류') ? '#dc3545' : '#28a745', marginTop: '8px' }}>{perfMsg}</div>
                         )}
                     </div>
+
+                    {/* 집행 추이 차트 */}
+                    {data.budgetExecutions && data.budgetExecutions.length > 0 && (
+                        <div className="grid-2" style={{ marginBottom: '24px' }}>
+                            <div className="card">
+                                <div className="card-header">
+                                    <h2 className="card-title">📈 월별 집행 추이</h2>
+                                </div>
+                                <canvas ref={monthlyChartRef} />
+                            </div>
+                            <div className="card">
+                                <div className="card-header">
+                                    <h2 className="card-title">🍩 예산 구성 비율</h2>
+                                </div>
+                                <canvas ref={categoryChartRef} />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid-2">
                         <div className="card">
@@ -6415,6 +6502,20 @@
                             onSearchChange: (q) => { setGallerySearchQuery(q); setGalleryCurrentPage(1); }
                         })}
 
+                        {/* ZIP 다운로드 버튼 */}
+                        {filteredGalleries.length > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: '13px', padding: '6px 14px' }}
+                                    onClick={handleGalleryZipDownload}
+                                    disabled={galleryZipping}
+                                >
+                                    {galleryZipping ? '⏳ 압축 중...' : '📦 전체 다운로드'}
+                                </button>
+                            </div>
+                        )}
+
                         {/* 갤러리 그리드 */}
                         {pageItems.length > 0 ? (
                             <div className="gallery-grid">
@@ -7646,30 +7747,143 @@
 
                             {budgetTab === 'history' && (
                                 <div>
-                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
-                                        📋 예산 집행 내역
-                                    </h2>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '8px' }}>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '600' }}>
+                                            📋 예산 집행 내역
+                                        </h2>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            {executionMsg && <span style={{ fontSize: '12px', color: executionMsg.includes('오류') ? '#dc3545' : '#28a745' }}>{executionMsg}</span>}
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={handleExportExcel}
+                                            >📊 Excel 내보내기</button>
+                                        </div>
+                                    </div>
 
-                                    {data.budgetExecutions.map(execution => (
+                                    {(() => {
+                                        const STATUS_INFO = {
+                                            pending:   { label: '대기',   bg: '#FFF3CD', color: '#856404' },
+                                            approved:  { label: '승인',   bg: '#D1ECF1', color: '#0C5460' },
+                                            executed:  { label: '집행',   bg: '#D4EDDA', color: '#155724' },
+                                            completed: { label: '완료',   bg: '#E2E3E5', color: '#383D41' }
+                                        };
+                                        return data.budgetExecutions.map(execution => {
+                                            const si = STATUS_INFO[execution.status] || STATUS_INFO.pending;
+                                            const isEditing = editingExecution?.id === execution.id;
+                                            const isDeleteConfirm = executionDeleteId === execution.id;
+                                            return (
                                         <div key={execution.id} className="execution-item">
-                                            <div className="execution-header">
+                                            {isEditing ? (
                                                 <div>
-                                                    <div className="execution-title">{execution.budget_item_name}</div>
-                                                    <div style={{ fontSize: '14px', color: '#6B6560' }}>
-                                                        {execution.description}
+                                                    <div style={{ fontWeight: '600', marginBottom: '12px', color: '#134E42' }}>✏️ 집행내역 수정</div>
+                                                    <div className="form-grid" style={{ marginBottom: '12px' }}>
+                                                        <div className="form-group">
+                                                            <label className="form-label">금액 (원)</label>
+                                                            <input className="form-input" type="number" value={executionEditForm.amount}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, amount: e.target.value }))} />
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">집행일</label>
+                                                            <input className="form-input" type="date" value={executionEditForm.execution_date}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, execution_date: e.target.value }))} />
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">결제방법</label>
+                                                            <select className="form-input" value={executionEditForm.payment_method}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, payment_method: e.target.value }))}>
+                                                                <option value="계좌이체">계좌이체</option>
+                                                                <option value="카드결제">카드결제</option>
+                                                                <option value="현금">현금</option>
+                                                            </select>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">수급자</label>
+                                                            <input className="form-input" type="text" value={executionEditForm.recipient}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, recipient: e.target.value }))} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="form-group" style={{ marginBottom: '12px' }}>
+                                                        <label className="form-label">설명</label>
+                                                        <input className="form-input" type="text" value={executionEditForm.description}
+                                                            onChange={e => setExecutionEditForm(f => ({ ...f, description: e.target.value }))} />
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <button className="btn btn-primary" style={{ fontSize: '13px' }}
+                                                            onClick={handleUpdateExecution} disabled={executionSaving}>
+                                                            {executionSaving ? '저장 중...' : '저장'}
+                                                        </button>
+                                                        <button className="btn btn-secondary" style={{ fontSize: '13px' }}
+                                                            onClick={() => setEditingExecution(null)} disabled={executionSaving}>
+                                                            취소
+                                                        </button>
                                                     </div>
                                                 </div>
-                                                <div className="execution-amount">
-                                                    {execution.amount?.toLocaleString()}원
+                                            ) : (
+                                                <React.Fragment>
+                                                <div className="execution-header">
+                                                    <div>
+                                                        <div className="execution-title">{execution.budget_item_name}</div>
+                                                        <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                            {execution.description}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                        <span style={{ fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '10px', background: si.bg, color: si.color }}>{si.label}</span>
+                                                        <div className="execution-amount">
+                                                            {execution.amount?.toLocaleString()}원
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div className="execution-meta">
-                                                <span>📅 {execution.execution_date}</span>
-                                                <span>💳 {execution.payment_method}</span>
-                                                <span>🏷️ {execution.category_name} > {execution.subcategory_name}</span>
-                                                {execution.recipient && <span>👤 {execution.recipient}</span>}
-                                            </div>
-                                            {execution.type === '운영인건비' && execution.recipient && (
+                                                <div className="execution-meta">
+                                                    <span>📅 {execution.execution_date}</span>
+                                                    <span>💳 {execution.payment_method}</span>
+                                                    <span>🏷️ {execution.category_name} > {execution.subcategory_name}</span>
+                                                    {execution.recipient && <span>👤 {execution.recipient}</span>}
+                                                </div>
+                                                {/* 수정/삭제/승인 버튼 */}
+                                                <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}
+                                                        onClick={() => { setEditingExecution(execution); setExecutionEditForm({ amount: execution.amount, payment_method: execution.payment_method, execution_date: execution.execution_date, recipient: execution.recipient || '', description: execution.description || '' }); }}>
+                                                        ✏️ 수정
+                                                    </button>
+                                                    {currentUser?.role === 'admin' && (
+                                                        isDeleteConfirm ? (
+                                                            <React.Fragment>
+                                                                <span style={{ fontSize: '12px', color: '#dc3545' }}>정말 삭제하시겠습니까?</span>
+                                                                <button className="btn" style={{ fontSize: '11px', padding: '3px 10px', background: '#dc3545', color: 'white', border: 'none' }}
+                                                                    onClick={() => handleDeleteExecution(execution.id)}>확인</button>
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}
+                                                                    onClick={() => setExecutionDeleteId(null)}>취소</button>
+                                                            </React.Fragment>
+                                                        ) : (
+                                                            <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#dc3545', borderColor: '#dc3545' }}
+                                                                onClick={() => setExecutionDeleteId(execution.id)}>
+                                                                🗑️ 삭제
+                                                            </button>
+                                                        )
+                                                    )}
+                                                    {currentUser?.role === 'admin' && (
+                                                        <React.Fragment>
+                                                            {execution.status === 'pending' && (
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#0C5460', borderColor: '#0C5460' }}
+                                                                    onClick={() => handleChangeExecutionStatus(execution.id, 'approved')}>✅ 승인</button>
+                                                            )}
+                                                            {execution.status === 'approved' && (
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#155724', borderColor: '#155724' }}
+                                                                    onClick={() => handleChangeExecutionStatus(execution.id, 'executed')}>💼 집행완료</button>
+                                                            )}
+                                                            {execution.status === 'executed' && (
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#383D41', borderColor: '#6C757D' }}
+                                                                    onClick={() => handleChangeExecutionStatus(execution.id, 'completed')}>🏁 완료처리</button>
+                                                            )}
+                                                        </React.Fragment>
+                                                    )}
+                                                </div>
+                                                </React.Fragment>
+                                            )}
+
+                                            {!isEditing && execution.type === '운영인건비' && execution.recipient && (
                                                 <div style={{ marginTop: '8px' }}>
                                                     <button
                                                         className="btn btn-secondary"
@@ -7680,7 +7894,7 @@
                                                     </button>
                                                 </div>
                                             )}
-                                            {['사업인건비', '사업회의비', '교육훈련비'].includes(execution.type) && (
+                                            {!isEditing && ['사업인건비', '사업회의비', '교육훈련비'].includes(execution.type) && (
                                                 <div style={{ marginTop: '8px' }}>
                                                     <button
                                                         className="btn btn-secondary"
@@ -7700,7 +7914,7 @@
                                                     </button>
                                                 </div>
                                             )}
-                                            {DOCUMENT_RULES[execution.type] && (
+                                            {!isEditing && DOCUMENT_RULES[execution.type] && (
                                                 <div className="documents-list">
                                                     <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
                                                     {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => {
@@ -7744,7 +7958,9 @@
                                                 </div>
                                             )}
                                         </div>
-                                    ))}
+                                        );
+                                    });
+                                })()}
 
                                     <input
                                         ref={docUploadFileInputRef}
@@ -7830,6 +8046,15 @@
                 setShowUserForm(false);
             };
 
+            // ── 집행내역 수정/삭제/승인 ────────────────────────────────────
+            const [editingExecution, setEditingExecution] = useState(null);
+            const [executionEditForm, setExecutionEditForm] = useState({});
+            const [executionDeleteId, setExecutionDeleteId] = useState(null);
+            const [executionSaving, setExecutionSaving] = useState(false);
+            const [executionMsg, setExecutionMsg] = useState('');
+            // ── 갤러리 ZIP 다운로드 ───────────────────────────────────────
+            const [galleryZipping, setGalleryZipping] = useState(false);
+
             // ── 성과지표 (system_settings) ────────────────────────────────
             const [perfIndicators, setPerfIndicators] = useState({
                 perf_textbook_team: '0', perf_textbook_report: '0',
@@ -7910,6 +8135,123 @@
                     setPerfMsg('저장 중 오류가 발생했습니다.');
                 } finally {
                     setPerfSaving(false);
+                }
+            };
+
+            // ── 집행내역 수정/삭제/승인 핸들러 ───────────────────────────────
+            const refreshExecutions = async () => {
+                const fresh = await loadBudgetExecutions();
+                setData(prev => ({ ...prev, budgetExecutions: fresh }));
+            };
+
+            const handleUpdateExecution = async () => {
+                if (!editingExecution) return;
+                setExecutionSaving(true);
+                setExecutionMsg('');
+                try {
+                    const { error } = await supabase.from('budget_executions').update({
+                        amount: parseInt(executionEditForm.amount) || 0,
+                        payment_method: executionEditForm.payment_method,
+                        execution_date: executionEditForm.execution_date,
+                        recipient: executionEditForm.recipient || '',
+                        description: executionEditForm.description || ''
+                    }).eq('id', editingExecution.id);
+                    if (error) throw error;
+                    setEditingExecution(null);
+                    await refreshExecutions();
+                    setExecutionMsg('수정되었습니다.');
+                    setTimeout(() => setExecutionMsg(''), 3000);
+                } catch (err) {
+                    console.error('집행내역 수정 오류:', err);
+                    setExecutionMsg('수정 중 오류가 발생했습니다.');
+                } finally {
+                    setExecutionSaving(false);
+                }
+            };
+
+            const handleDeleteExecution = async (id) => {
+                try {
+                    await supabase.from('attachments').delete().eq('execution_id', id);
+                    const { error } = await supabase.from('budget_executions').delete().eq('id', id);
+                    if (error) throw error;
+                    setExecutionDeleteId(null);
+                    await refreshExecutions();
+                } catch (err) {
+                    console.error('집행내역 삭제 오류:', err);
+                }
+            };
+
+            const handleChangeExecutionStatus = async (id, newStatus) => {
+                try {
+                    const { error } = await supabase.from('budget_executions')
+                        .update({ status: newStatus }).eq('id', id);
+                    if (error) throw error;
+                    await refreshExecutions();
+                } catch (err) {
+                    console.error('상태 변경 오류:', err);
+                }
+            };
+
+            const handleExportExcel = () => {
+                if (!window.XLSX) { alert('Excel 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return; }
+                const STATUS_KO = { pending: '대기', approved: '승인', executed: '집행', completed: '완료' };
+                const executions = data.budgetExecutions || [];
+                const rows = executions.map(e => ({
+                    '집행일': e.execution_date || '',
+                    '대분류': e.category_name || '',
+                    '소분류': e.subcategory_name || '',
+                    '항목명': e.budget_item_name || '',
+                    '유형': e.type || '',
+                    '금액(원)': e.amount || 0,
+                    '결제방법': e.payment_method || '',
+                    '수급자': e.recipient || '',
+                    '상태': STATUS_KO[e.status] || e.status || ''
+                }));
+                const ws = window.XLSX.utils.json_to_sheet(rows);
+                const wb = window.XLSX.utils.book_new();
+                window.XLSX.utils.book_append_sheet(wb, ws, '집행내역');
+                window.XLSX.writeFile(wb, `집행내역_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            };
+
+            const handleGalleryZipDownload = async () => {
+                if (!window.JSZip) { alert('JSZip 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return; }
+                setGalleryZipping(true);
+                try {
+                    const zip = new window.JSZip();
+                    const galleries = data.galleries || [];
+                    for (const item of galleries) {
+                        const { data: atts } = await supabase.from('attachments')
+                            .select('file_path, file_name')
+                            .eq('gallery_id', item.id)
+                            .not('file_type', 'eq', 'document');
+                        for (const att of (atts || [])) {
+                            try {
+                                const { data: blob } = await supabase.storage
+                                    .from('attachments').download(att.file_path);
+                                if (blob) {
+                                    const safeTitle = (item.title || '기타').replace(/[/\\:*?"<>|]/g, '_');
+                                    const safeFilename = (att.file_name || 'image').replace(/[/\\:*?"<>|]/g, '_');
+                                    zip.file(`${safeTitle}/${safeFilename}`, blob);
+                                }
+                            } catch (e) {
+                                console.warn('파일 다운로드 실패:', att.file_path, e);
+                            }
+                        }
+                    }
+                    const blob = await zip.generateAsync({ type: 'blob' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `갤러리_${new Date().toISOString().slice(0, 10)}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error('ZIP 생성 오류:', err);
+                    alert('ZIP 생성 중 오류가 발생했습니다.');
+                } finally {
+                    setGalleryZipping(false);
                 }
             };
 
