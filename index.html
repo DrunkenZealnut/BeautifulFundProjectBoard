@@ -3815,6 +3815,7 @@
                                 .eq('is_active', true).order('name').then(r => r.data || []),
                             supabase.from('system_settings').select('setting_key,setting_value')
                                 .in('setting_key', [
+                                    'org_name', 'org_phone',
                                     'org_representative', 'org_address', 'org_registration_number', 'org_seal',
                                     'perf_textbook_team', 'perf_textbook_report',
                                     'perf_campaign_count', 'perf_app_released', 'perf_committee_count'
@@ -3823,7 +3824,7 @@
                         ]);
 
                         setRecipients(recipientsData);
-                        const merged = { org_representative: '', org_address: '', org_registration_number: '', org_seal: '' };
+                        const merged = { org_name: '', org_phone: '', org_representative: '', org_address: '', org_registration_number: '', org_seal: '' };
                         const perfMerged = {
                             perf_textbook_team: '0', perf_textbook_report: '0',
                             perf_campaign_count: '0', perf_app_released: '0', perf_committee_count: '0'
@@ -8181,6 +8182,7 @@
 
             // ── 기관 정보 (system_settings) ──────────────────────────────
             const [orgSettings, setOrgSettings] = useState({
+                org_name: '', org_phone: '',
                 org_representative: '', org_address: '', org_registration_number: '', org_seal: ''
             });
             const [orgSettingsSaving, setOrgSettingsSaving] = useState(false);
@@ -8211,6 +8213,8 @@
                 setOrgSettingsMsg({ type: '', text: '' });
                 try {
                     const rows = [
+                        { setting_key: 'org_name',                setting_value: orgSettings.org_name },
+                        { setting_key: 'org_phone',               setting_value: orgSettings.org_phone },
                         { setting_key: 'org_representative',      setting_value: orgSettings.org_representative },
                         { setting_key: 'org_address',             setting_value: orgSettings.org_address },
                         { setting_key: 'org_registration_number', setting_value: orgSettings.org_registration_number },
@@ -9364,6 +9368,24 @@
                                         급여지급명세서의 "지급자" 항목에 자동으로 채워집니다.
                                     </p>
                                     <div className="form-grid">
+                                        <div className="form-group">
+                                            <label>기관명</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_name}
+                                                onChange={e => setOrgSettings({...orgSettings, org_name: e.target.value})}
+                                                placeholder="기관(단체) 이름"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>기관 전화번호</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_phone}
+                                                onChange={e => setOrgSettings({...orgSettings, org_phone: e.target.value})}
+                                                placeholder="000-000-0000"
+                                            />
+                                        </div>
                                         <div className="form-group">
                                             <label>대표자명</label>
                                             <input
