@@ -3785,14 +3785,26 @@
                             supabase.from('recipients').select('id,name,birth_date,address,phone')
                                 .eq('is_active', true).order('name').then(r => r.data || []),
                             supabase.from('system_settings').select('setting_key,setting_value')
-                                .in('setting_key', ['org_representative', 'org_address', 'org_registration_number', 'org_seal'])
+                                .in('setting_key', [
+                                    'org_representative', 'org_address', 'org_registration_number', 'org_seal',
+                                    'perf_textbook_team', 'perf_textbook_report',
+                                    'perf_campaign_count', 'perf_app_released', 'perf_committee_count'
+                                ])
                                 .then(r => r.data || [])
                         ]);
 
                         setRecipients(recipientsData);
                         const merged = { org_representative: '', org_address: '', org_registration_number: '', org_seal: '' };
-                        settingsData.forEach(row => { merged[row.setting_key] = row.setting_value || ''; });
+                        const perfMerged = {
+                            perf_textbook_team: '0', perf_textbook_report: '0',
+                            perf_campaign_count: '0', perf_app_released: '0', perf_committee_count: '0'
+                        };
+                        settingsData.forEach(row => {
+                            if (row.setting_key in merged) merged[row.setting_key] = row.setting_value || '';
+                            if (row.setting_key in perfMerged) perfMerged[row.setting_key] = row.setting_value || '0';
+                        });
                         setOrgSettings(merged);
+                        setPerfIndicators(perfMerged);
 
                         const stats = calculateStats(schedules, galleries, boards, executions);
 
@@ -3956,6 +3968,164 @@
                             <div className="stat-value">{data.stats.totalBoards || 0}</div>
                             <div className="stat-label">게시글</div>
                         </div>
+                    </div>
+
+                    {/* 성과지표 달성현황 */}
+                    <div className="card" style={{ marginBottom: '24px' }}>
+                        <div className="card-header">
+                            <h2 className="card-title">🎯 성과지표 달성현황</h2>
+                            {currentUser && currentUser.role === 'admin' && !perfEditing && (
+                                <button
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => { setPerfEditing(true); setPerfDraft({ ...perfIndicators }); setPerfMsg(''); }}
+                                >수정</button>
+                            )}
+                            {perfEditing && (
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                                        onClick={() => { setPerfEditing(false); setPerfDraft(null); setPerfMsg(''); }}
+                                        disabled={perfSaving}
+                                    >취소</button>
+                                    <button
+                                        className="btn btn-primary"
+                                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                                        onClick={handleSavePerfIndicators}
+                                        disabled={perfSaving}
+                                    >{perfSaving ? '저장 중...' : '저장'}</button>
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', padding: '8px 0' }}>
+                            {/* 교과서기초연구 */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>📚 교과서기초연구</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6B6560' }}>팀 구성</span>
+                                        {perfEditing ? (
+                                            <select
+                                                value={perfDraft.perf_textbook_team}
+                                                onChange={e => setPerfDraft(d => ({ ...d, perf_textbook_team: e.target.value }))}
+                                                style={{ fontSize: '12px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9' }}
+                                            >
+                                                <option value="0">❌ 미완료</option>
+                                                <option value="1">✅ 완료</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`badge ${perfIndicators.perf_textbook_team === '1' ? 'badge-success' : 'badge-warning'}`}>
+                                                {perfIndicators.perf_textbook_team === '1' ? '✅ 완료' : '❌ 미완료'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6B6560' }}>보고서 완료</span>
+                                        {perfEditing ? (
+                                            <select
+                                                value={perfDraft.perf_textbook_report}
+                                                onChange={e => setPerfDraft(d => ({ ...d, perf_textbook_report: e.target.value }))}
+                                                style={{ fontSize: '12px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9' }}
+                                            >
+                                                <option value="0">❌ 미완료</option>
+                                                <option value="1">✅ 완료</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`badge ${perfIndicators.perf_textbook_report === '1' ? 'badge-success' : 'badge-warning'}`}>
+                                                {perfIndicators.perf_textbook_report === '1' ? '✅ 완료' : '❌ 미완료'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {/* 캠페인 */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>📣 캠페인</div>
+                                {(() => {
+                                    const count = perfEditing ? parseInt(perfDraft.perf_campaign_count, 10) || 0 : parseInt(perfIndicators.perf_campaign_count, 10) || 0;
+                                    const pct = Math.min(100, Math.round(count / 30 * 100));
+                                    return (
+                                        <React.Fragment>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <span style={{ fontSize: '13px', color: '#6B6560' }}>진행 횟수 / 30회</span>
+                                                {perfEditing ? (
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="30"
+                                                        value={perfDraft.perf_campaign_count}
+                                                        onChange={e => setPerfDraft(d => ({ ...d, perf_campaign_count: e.target.value }))}
+                                                        style={{ width: '60px', fontSize: '13px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9', textAlign: 'center' }}
+                                                    />
+                                                ) : (
+                                                    <span style={{ fontWeight: '700', fontSize: '18px', color: '#5B21B6' }}>{count}<span style={{ fontWeight: '400', fontSize: '13px', color: '#9C9690' }}>/30</span></span>
+                                                )}
+                                            </div>
+                                            <div style={{ background: '#E8E0F0', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
+                                                <div style={{ width: `${pct}%`, height: '100%', background: '#7C3AED', borderRadius: '6px', transition: 'width 0.4s' }} />
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: '#9C9690', marginTop: '4px', textAlign: 'right' }}>{pct}% 달성</div>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </div>
+                            {/* APP */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>📱 APP</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', color: '#6B6560' }}>네이티브 APP 출시</span>
+                                    {perfEditing ? (
+                                        <select
+                                            value={perfDraft.perf_app_released}
+                                            onChange={e => setPerfDraft(d => ({ ...d, perf_app_released: e.target.value }))}
+                                            style={{ fontSize: '12px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9' }}
+                                        >
+                                            <option value="0">❌ 미출시</option>
+                                            <option value="1">✅ 출시</option>
+                                        </select>
+                                    ) : (
+                                        <span className={`badge ${perfIndicators.perf_app_released === '1' ? 'badge-success' : 'badge-warning'}`}>
+                                            {perfIndicators.perf_app_released === '1' ? '✅ 출시' : '❌ 미출시'}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            {/* 운영위원회 */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>🏛️ 운영위원회</div>
+                                {(() => {
+                                    const count = perfEditing ? parseInt(perfDraft.perf_committee_count, 10) || 0 : parseInt(perfIndicators.perf_committee_count, 10) || 0;
+                                    const pct = Math.min(100, Math.round(count / 12 * 100));
+                                    return (
+                                        <React.Fragment>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <span style={{ fontSize: '13px', color: '#6B6560' }}>진행 횟수 / 12회</span>
+                                                {perfEditing ? (
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="12"
+                                                        value={perfDraft.perf_committee_count}
+                                                        onChange={e => setPerfDraft(d => ({ ...d, perf_committee_count: e.target.value }))}
+                                                        style={{ width: '60px', fontSize: '13px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9', textAlign: 'center' }}
+                                                    />
+                                                ) : (
+                                                    <span style={{ fontWeight: '700', fontSize: '18px', color: '#1D6B4A' }}>{count}<span style={{ fontWeight: '400', fontSize: '13px', color: '#9C9690' }}>/12</span></span>
+                                                )}
+                                            </div>
+                                            <div style={{ background: '#D4EDDA', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
+                                                <div style={{ width: `${pct}%`, height: '100%', background: '#1D6B4A', borderRadius: '6px', transition: 'width 0.4s' }} />
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: '#9C9690', marginTop: '4px', textAlign: 'right' }}>{pct}% 달성</div>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                        {perfMsg && (
+                            <div style={{ fontSize: '13px', color: perfMsg.includes('오류') ? '#dc3545' : '#28a745', marginTop: '8px' }}>{perfMsg}</div>
+                        )}
                     </div>
 
                     <div className="grid-2">
@@ -7660,6 +7830,16 @@
                 setShowUserForm(false);
             };
 
+            // ── 성과지표 (system_settings) ────────────────────────────────
+            const [perfIndicators, setPerfIndicators] = useState({
+                perf_textbook_team: '0', perf_textbook_report: '0',
+                perf_campaign_count: '0', perf_app_released: '0', perf_committee_count: '0'
+            });
+            const [perfEditing, setPerfEditing] = useState(false);
+            const [perfDraft, setPerfDraft] = useState(null);
+            const [perfSaving, setPerfSaving] = useState(false);
+            const [perfMsg, setPerfMsg] = useState('');
+
             // ── 기관 정보 (system_settings) ──────────────────────────────
             const [orgSettings, setOrgSettings] = useState({
                 org_representative: '', org_address: '', org_registration_number: '', org_seal: ''
@@ -7707,6 +7887,29 @@
                     setOrgSettingsMsg({ type: 'error', text: '저장 중 오류가 발생했습니다.' });
                 } finally {
                     setOrgSettingsSaving(false);
+                }
+            };
+
+            // ── 성과지표 저장 ─────────────────────────────────────────────
+            const handleSavePerfIndicators = async () => {
+                setPerfSaving(true);
+                setPerfMsg('');
+                try {
+                    const rows = Object.entries(perfDraft).map(([k, v]) => ({ setting_key: k, setting_value: String(v) }));
+                    const { error } = await supabase
+                        .from('system_settings')
+                        .upsert(rows, { onConflict: 'setting_key' });
+                    if (error) throw error;
+                    setPerfIndicators({ ...perfDraft });
+                    setPerfEditing(false);
+                    setPerfDraft(null);
+                    setPerfMsg('저장되었습니다.');
+                    setTimeout(() => setPerfMsg(''), 3000);
+                } catch (err) {
+                    console.error('성과지표 저장 오류:', err);
+                    setPerfMsg('저장 중 오류가 발생했습니다.');
+                } finally {
+                    setPerfSaving(false);
                 }
             };
 
