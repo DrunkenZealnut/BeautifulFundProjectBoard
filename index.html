@@ -2155,6 +2155,8 @@
             }
         };
 
+        const DEFAULT_ORG_NAME = '청년노동자인권센터';
+
         // 예산 집행 상태 정보 (레이블 + 배지 색상)
         const EXECUTION_STATUS = {
             pending:   { label: '대기',   bg: '#FFF3CD', color: '#856404' },
@@ -2183,7 +2185,7 @@
         // ────────────────────────────────────────────────────────────
         const generateSalaryStatementHTML = (targetExecution, allExecutions, orgSettings = {}, recipientProfile = null) => {
             const recipientName = targetExecution.recipient || '';
-            const orgName = orgSettings.org_name || '청년노동자인권센터';
+            const orgName = orgSettings.org_name || DEFAULT_ORG_NAME;
 
             // Seal image — only accept data: URLs to prevent XSS
             const sealDataUrl = (orgSettings.org_seal || '').startsWith('data:image/') ? orgSettings.org_seal : '';
@@ -2372,7 +2374,7 @@
             // Preserve line breaks in free-text content after escaping
             const escMultiline = (s) => esc(s).replace(/\n/g, '<br>');
 
-            const orgName = esc(orgSettings.org_name || '청년노동자인권센터');
+            const orgName = esc(orgSettings.org_name || DEFAULT_ORG_NAME);
             const orgRep = esc(orgSettings.org_representative || '');
 
             // Seal image — only accept data: URLs to prevent XSS
@@ -6065,7 +6067,8 @@
                             .from('galleries').update(postData).eq('id', editingGalleryItem.id).select();
                         if (updateError) throw updateError;
                         if (!updatedRows || updatedRows.length === 0) {
-                            throw new Error('수정 권한이 없거나 항목을 찾을 수 없습니다. Supabase 대시보드에서 galleries 테이블의 UPDATE RLS 정책을 확인하세요.');
+                            console.error('Gallery update returned 0 rows — check RLS UPDATE policy on galleries table');
+                            throw new Error('항목을 수정할 수 없습니다. 권한을 확인하거나 관리자에게 문의해주세요.');
                         }
                         const updatedRow = updatedRows[0];
 
@@ -6073,10 +6076,12 @@
                             await uploadAttachments(galleryAttachments, 'gallery', editingGalleryItem.id);
                         }
 
-                        // 수정 후 selectedGalleryItem도 갱신
-                        if (updatedRow) {
-                            setSelectedGalleryItem(prev => prev?.id === editingGalleryItem.id ? { ...prev, ...updatedRow } : prev);
-                        }
+                        // 수정 후 data.galleries 및 selectedGalleryItem을 in-place 갱신 (전체 리로드 생략)
+                        setData(prev => ({
+                            ...prev,
+                            galleries: prev.galleries.map(g => g.id === updatedRow.id ? { ...g, ...updatedRow } : g)
+                        }));
+                        setSelectedGalleryItem(prev => prev?.id === editingGalleryItem.id ? { ...prev, ...updatedRow } : prev);
                     } else {
                         // 새글 작성
                         postData.image_path = 'placeholder';
@@ -6089,7 +6094,10 @@
                         const { data: insertedRows, error: insertError } = await supabase
                             .from('galleries').insert([postData]).select();
                         if (insertError) throw insertError;
-                        const inserted = insertedRows?.[0];
+                        if (!insertedRows || insertedRows.length === 0) {
+                            throw new Error('항목을 등록할 수 없습니다. 권한을 확인하거나 관리자에게 문의해주세요.');
+                        }
+                        const inserted = insertedRows[0];
 
                         if (galleryAttachments.length > 0 && inserted?.id) {
                             await uploadAttachments(galleryAttachments, 'gallery', inserted.id);
@@ -6115,14 +6123,14 @@
                                 }
                             }
                         }
+
+                        // 새 항목 등록 후 전체 목록 리로드 (image_path가 별도 쿼리로 갱신되므로 필요)
+                        const { data: galleries } = await supabase
+                            .from('galleries')
+                            .select('*')
+                            .order('created_at', { ascending: false });
+                        setData(prev => ({ ...prev, galleries: galleries || [] }));
                     }
-
-                    const { data: galleries } = await supabase
-                        .from('galleries')
-                        .select('*')
-                        .order('created_at', { ascending: false });
-
-                    setData(prev => ({ ...prev, galleries: galleries || [] }));
                     setGalleryView('list');
                     setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' });
                     setEditingGalleryItem(null);
