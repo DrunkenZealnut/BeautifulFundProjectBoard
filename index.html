@@ -2183,6 +2183,7 @@
         // ────────────────────────────────────────────────────────────
         const generateSalaryStatementHTML = (targetExecution, allExecutions, orgSettings = {}, recipientProfile = null) => {
             const recipientName = targetExecution.recipient || '';
+            const orgName = orgSettings.org_name || '청년노동자인권센터';
 
             // Seal image — only accept data: URLs to prevent XSS
             const sealDataUrl = (orgSettings.org_seal || '').startsWith('data:image/') ? orgSettings.org_seal : '';
