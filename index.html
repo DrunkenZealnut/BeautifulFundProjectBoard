@@ -2155,6 +2155,14 @@
             }
         };
 
+        // 예산 집행 상태 정보 (레이블 + 배지 색상)
+        const EXECUTION_STATUS = {
+            pending:   { label: '대기',   bg: '#FFF3CD', color: '#856404' },
+            approved:  { label: '승인',   bg: '#D1ECF1', color: '#0C5460' },
+            executed:  { label: '집행',   bg: '#D4EDDA', color: '#155724' },
+            completed: { label: '완료',   bg: '#E2E3E5', color: '#383D41' }
+        };
+
         // Utility functions for consistent number/percentage formatting
         const fmt = (n) => Math.round(n).toLocaleString();
         const pct = (spent, budget) => budget > 0 ? Math.min(100, Math.round(spent / budget * 100)) : 0;
@@ -3852,12 +3860,10 @@
                 if (!monthlyChartRef.current || !categoryChartRef.current) return;
 
                 const monthly = Array(12).fill(0);
+                const byCategory = {};
                 data.budgetExecutions.forEach(e => {
                     const m = parseInt((e.execution_date || '').slice(5, 7)) - 1;
                     if (m >= 0 && m < 12) monthly[m] += e.amount || 0;
-                });
-                const byCategory = {};
-                data.budgetExecutions.forEach(e => {
                     if (e.category_name) {
                         byCategory[e.category_name] = (byCategory[e.category_name] || 0) + (e.amount || 0);
                     }
@@ -6508,7 +6514,7 @@
                                 <button
                                     className="btn btn-secondary"
                                     style={{ fontSize: '13px', padding: '6px 14px' }}
-                                    onClick={handleGalleryZipDownload}
+                                    onClick={() => handleGalleryZipDownload(filteredGalleries)}
                                     disabled={galleryZipping}
                                 >
                                     {galleryZipping ? '⏳ 압축 중...' : '📦 전체 다운로드'}
@@ -7761,15 +7767,8 @@
                                         </div>
                                     </div>
 
-                                    {(() => {
-                                        const STATUS_INFO = {
-                                            pending:   { label: '대기',   bg: '#FFF3CD', color: '#856404' },
-                                            approved:  { label: '승인',   bg: '#D1ECF1', color: '#0C5460' },
-                                            executed:  { label: '집행',   bg: '#D4EDDA', color: '#155724' },
-                                            completed: { label: '완료',   bg: '#E2E3E5', color: '#383D41' }
-                                        };
-                                        return data.budgetExecutions.map(execution => {
-                                            const si = STATUS_INFO[execution.status] || STATUS_INFO.pending;
+                                    {data.budgetExecutions.map(execution => {
+                                            const si = EXECUTION_STATUS[execution.status] || EXECUTION_STATUS.pending;
                                             const isEditing = editingExecution?.id === execution.id;
                                             const isDeleteConfirm = executionDeleteId === execution.id;
                                             return (
@@ -7820,7 +7819,7 @@
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <React.Fragment>
+                                                <>
                                                 <div className="execution-header">
                                                     <div>
                                                         <div className="execution-title">{execution.budget_item_name}</div>
@@ -7849,13 +7848,13 @@
                                                     </button>
                                                     {currentUser?.role === 'admin' && (
                                                         isDeleteConfirm ? (
-                                                            <React.Fragment>
+                                                            <>
                                                                 <span style={{ fontSize: '12px', color: '#dc3545' }}>정말 삭제하시겠습니까?</span>
                                                                 <button className="btn" style={{ fontSize: '11px', padding: '3px 10px', background: '#dc3545', color: 'white', border: 'none' }}
                                                                     onClick={() => handleDeleteExecution(execution.id)}>확인</button>
                                                                 <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}
                                                                     onClick={() => setExecutionDeleteId(null)}>취소</button>
-                                                            </React.Fragment>
+                                                            </>
                                                         ) : (
                                                             <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#dc3545', borderColor: '#dc3545' }}
                                                                 onClick={() => setExecutionDeleteId(execution.id)}>
@@ -7864,7 +7863,7 @@
                                                         )
                                                     )}
                                                     {currentUser?.role === 'admin' && (
-                                                        <React.Fragment>
+                                                        <>
                                                             {execution.status === 'pending' && (
                                                                 <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#0C5460', borderColor: '#0C5460' }}
                                                                     onClick={() => handleChangeExecutionStatus(execution.id, 'approved')}>✅ 승인</button>
@@ -7877,10 +7876,10 @@
                                                                 <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#383D41', borderColor: '#6C757D' }}
                                                                     onClick={() => handleChangeExecutionStatus(execution.id, 'completed')}>🏁 완료처리</button>
                                                             )}
-                                                        </React.Fragment>
+                                                        </>
                                                     )}
                                                 </div>
-                                                </React.Fragment>
+                                                </>
                                             )}
 
                                             {!isEditing && execution.type === '운영인건비' && execution.recipient && (
@@ -7959,8 +7958,7 @@
                                             )}
                                         </div>
                                         );
-                                    });
-                                })()}
+                                    })}
 
                                     <input
                                         ref={docUploadFileInputRef}
@@ -8194,7 +8192,6 @@
 
             const handleExportExcel = () => {
                 if (!window.XLSX) { alert('Excel 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return; }
-                const STATUS_KO = { pending: '대기', approved: '승인', executed: '집행', completed: '완료' };
                 const executions = data.budgetExecutions || [];
                 const rows = executions.map(e => ({
                     '집행일': e.execution_date || '',
@@ -8205,7 +8202,7 @@
                     '금액(원)': e.amount || 0,
                     '결제방법': e.payment_method || '',
                     '수급자': e.recipient || '',
-                    '상태': STATUS_KO[e.status] || e.status || ''
+                    '상태': EXECUTION_STATUS[e.status]?.label || e.status || ''
                 }));
                 const ws = window.XLSX.utils.json_to_sheet(rows);
                 const wb = window.XLSX.utils.book_new();
@@ -8213,18 +8210,24 @@
                 window.XLSX.writeFile(wb, `집행내역_${new Date().toISOString().slice(0, 10)}.xlsx`);
             };
 
-            const handleGalleryZipDownload = async () => {
+            const handleGalleryZipDownload = async (galleriesArg) => {
                 if (!window.JSZip) { alert('JSZip 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return; }
                 setGalleryZipping(true);
                 try {
                     const zip = new window.JSZip();
-                    const galleries = data.galleries || [];
-                    for (const item of galleries) {
-                        const { data: atts } = await supabase.from('attachments')
-                            .select('file_path, file_name')
-                            .eq('gallery_id', item.id)
-                            .not('file_type', 'eq', 'document');
-                        for (const att of (atts || [])) {
+                    const galleries = galleriesArg || [];
+                    // Fetch all attachment metadata in parallel
+                    const attsByGallery = await Promise.all(
+                        galleries.map(item =>
+                            supabase.from('attachments')
+                                .select('file_path, file_name')
+                                .eq('gallery_id', item.id)
+                                .not('file_type', 'eq', 'document')
+                                .then(({ data }) => ({ item, atts: data || [] }))
+                        )
+                    );
+                    for (const { item, atts } of attsByGallery) {
+                        for (const att of atts) {
                             try {
                                 const { data: blob } = await supabase.storage
                                     .from('attachments').download(att.file_path);
