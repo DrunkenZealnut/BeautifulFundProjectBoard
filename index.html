@@ -2479,6 +2479,203 @@
             win.document.close();
         };
 
+        // ────────────────────────────────────────────────────────────
+        // Change Application (사업변경신청서) HTML generator
+        // Reflects the structure of HWP template 0[서식]_사업변경신청서.hwp
+        // ────────────────────────────────────────────────────────────
+        const generateChangeApplicationHTML = (formData, orgSettings = {}) => {
+            const esc = (s) => String(s || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            const escMultiline = (s) => esc(s).replace(/\n/g, '<br>');
+
+            const orgName = esc(orgSettings.org_name || DEFAULT_ORG_NAME);
+            const sealDataUrl = (orgSettings.org_seal || '').startsWith('data:image/') ? orgSettings.org_seal : '';
+            const sealHTML = sealDataUrl
+                ? `<img src="${sealDataUrl}" style="height:70px;vertical-align:middle;margin-left:8px;" alt="단체직인">`
+                : '<span style="font-size:10pt;color:#555;">(단체직인 또는 대표자서명)</span>';
+
+            const appDate = formData.applicationDate || new Date().toISOString().slice(0, 10);
+            const [ay, am, ad] = appDate.split('-');
+
+            // Section 2: 사업변경내역 rows
+            const changeDetailRows = (formData.changeDetails || []).map(row => `
+                <tr>
+                    <td>${esc(row.beforeUnit)}</td>
+                    <td>${esc(row.beforeSchedule)}</td>
+                    <td>${esc(row.beforeContent)}</td>
+                    <td>${esc(row.afterUnit)}</td>
+                    <td>${esc(row.afterSchedule)}</td>
+                    <td>${esc(row.afterContent)}</td>
+                </tr>`).join('');
+
+            // Section 3: 예산변경내역 rows
+            const budgetChanges = formData.budgetChanges || {};
+            let budgetRowsHTML = '';
+            let grandBeforeTotal = 0;
+            let grandAfterTotal = 0;
+
+            BUDGET_DATA.categories.forEach(cat => {
+                let catBeforeTotal = 0;
+                let catAfterTotal = 0;
+                const subRows = cat.subcategories.map(sub => {
+                    const bc = budgetChanges[sub.id] || { before: sub.budget, after: sub.budget };
+                    const before = bc.before || 0;
+                    const after = bc.after || 0;
+                    catBeforeTotal += before;
+                    catAfterTotal += after;
+                    const diff = after - before;
+                    const changed = diff !== 0;
+                    const highlight = changed ? ' style="background:#FFFDE7;"' : '';
+                    const diffStr = diff > 0 ? `<span style="color:#1B6B5A;font-size:9pt;">(+${Math.round(diff).toLocaleString()})</span>`
+                                  : diff < 0 ? `<span style="color:#D32F2F;font-size:9pt;">(${Math.round(diff).toLocaleString()})</span>` : '';
+                    return `<tr${highlight}>
+                        <td>${esc(cat.name)}</td>
+                        <td>${esc(sub.name)}</td>
+                        <td style="text-align:right;">${Math.round(before).toLocaleString()}</td>
+                        <td style="text-align:right;">${Math.round(after).toLocaleString()} ${diffStr}</td>
+                    </tr>`;
+                }).join('');
+                grandBeforeTotal += catBeforeTotal;
+                grandAfterTotal += catAfterTotal;
+                budgetRowsHTML += subRows;
+                budgetRowsHTML += `<tr style="background:#f5f5f5;font-weight:bold;">
+                    <td colspan="2" style="text-align:center;">${esc(cat.name)} 소계</td>
+                    <td style="text-align:right;">${Math.round(catBeforeTotal).toLocaleString()}</td>
+                    <td style="text-align:right;">${Math.round(catAfterTotal).toLocaleString()}</td>
+                </tr>`;
+            });
+            budgetRowsHTML += `<tr style="background:#e8e8e8;font-weight:bold;">
+                <td colspan="2" style="text-align:center;">합 계</td>
+                <td style="text-align:right;">${Math.round(grandBeforeTotal).toLocaleString()}</td>
+                <td style="text-align:right;">${Math.round(grandAfterTotal).toLocaleString()}</td>
+            </tr>`;
+
+            // Section 4: 구체내역
+            const specificRows = (formData.specificDetails || []).filter(d => d.unitName).map(d => {
+                const before = d.beforeAmount || 0;
+                const after = d.afterAmount || 0;
+                const diff = after - before;
+                const diffLabel = diff > 0 ? `+${Math.round(diff).toLocaleString()}` : Math.round(diff).toLocaleString();
+                return `
+                <div class="detail-item">
+                    <table>
+                        <tr>
+                            <td class="lbl" style="width:120px;">단위사업명</td>
+                            <td colspan="5">${esc(d.unitName)}</td>
+                        </tr>
+                        <tr>
+                            <td class="lbl">예산변경</td>
+                            <td style="width:25%;text-align:right;">변경전: ${Math.round(before).toLocaleString()}원</td>
+                            <td style="width:5%;text-align:center;">→</td>
+                            <td style="width:25%;text-align:right;">변경후: ${Math.round(after).toLocaleString()}원</td>
+                            <td style="width:5%;text-align:center;"></td>
+                            <td style="width:20%;text-align:right;">증감: ${diffLabel}원</td>
+                        </tr>
+                        <tr>
+                            <td class="lbl">산출근거</td>
+                            <td colspan="5">${escMultiline(d.basis)}</td>
+                        </tr>
+                        <tr>
+                            <td class="lbl">사유</td>
+                            <td colspan="5">${escMultiline(d.reason)}</td>
+                        </tr>
+                    </table>
+                </div>`;
+            }).join('');
+
+            return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>사업변경신청서</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: '맑은 고딕', '나눔고딕', Arial, sans-serif; font-size: 11pt; background: #fff; color: #000; }
+        .container { width: 210mm; margin: 0 auto; padding: 20mm 15mm; }
+        h2 { text-align: center; font-size: 20pt; letter-spacing: 8px; margin-bottom: 28px; font-weight: bold; }
+        h3 { font-size: 12pt; margin: 20px 0 10px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+        th, td { border: 1px solid #000; padding: 6px 10px; font-size: 10pt; vertical-align: middle; }
+        th { background: #f0f0f0; font-weight: bold; text-align: center; white-space: nowrap; }
+        .lbl { background: #f0f0f0; font-weight: bold; text-align: center; white-space: nowrap; }
+        .reason-cell { min-height: 60px; vertical-align: top; padding: 10px 12px; line-height: 1.7; }
+        .detail-item { margin-bottom: 16px; }
+        .detail-item table td { font-size: 10pt; }
+        .sign-area { margin-top: 32px; text-align: center; font-size: 11pt; line-height: 2.2; }
+        .btn-print { display: inline-block; margin: 20px 6px 0; padding: 10px 28px; font-size: 13px; cursor: pointer; border: none; border-radius: 6px; }
+        @media print {
+            body { margin: 0; }
+            .container { padding: 12mm 10mm; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>사 업 변 경 신 청 서</h2>
+
+    <h3>1. 사업변경취지 및 사유</h3>
+    <div class="reason-cell" style="border:1px solid #000; padding:12px; min-height:80px; margin-bottom:16px;">
+        ${escMultiline(formData.reason)}
+    </div>
+
+    <h3>2. 사업변경내역</h3>
+    <table>
+        <tr>
+            <th colspan="3">변 경 전</th>
+            <th colspan="3">변 경 후</th>
+        </tr>
+        <tr>
+            <th style="width:16%">단위사업</th>
+            <th style="width:16%">일정</th>
+            <th style="width:18%">추진내용</th>
+            <th style="width:16%">단위사업</th>
+            <th style="width:16%">일정</th>
+            <th style="width:18%">추진내용</th>
+        </tr>
+        ${changeDetailRows}
+    </table>
+
+    <h3>3. 예산변경내역</h3>
+    <table>
+        <tr>
+            <th style="width:15%">관리그룹</th>
+            <th style="width:25%">단위사업(계정항목)</th>
+            <th style="width:25%">변경전 (원)</th>
+            <th style="width:35%">변경후 (원)</th>
+        </tr>
+        ${budgetRowsHTML}
+    </table>
+
+    <h3>4. 구체내역</h3>
+    ${specificRows || '<p style="color:#999;padding:12px;">구체내역이 없습니다.</p>'}
+
+    <div class="sign-area">
+        <p>${ay}년 &nbsp;&nbsp; ${am}월 &nbsp;&nbsp; ${ad}일</p>
+        <p style="margin-top:20px;">단체(기관)명 &nbsp;&nbsp; ${orgName} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${sealHTML}</p>
+    </div>
+
+    <div class="no-print" style="text-align:center">
+        <button class="btn-print" style="background:#1B6B5A;color:#fff" onclick="window.print()">🖨️ 인쇄 / PDF 저장</button>
+        <button class="btn-print" style="background:#888;color:#fff" onclick="window.close()">✕ 닫기</button>
+    </div>
+</div>
+</body>
+</html>`;
+        };
+
+        const openChangeApplication = (formData, orgSettings) => {
+            const html = generateChangeApplicationHTML(formData, orgSettings || {});
+            const win = window.open('', '_blank', 'width=1000,height=800');
+            if (!win) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+            win.document.write(html);
+            win.document.close();
+        };
+
         // Date ranges for budget period filtering (h1 = Jan-Jun, h2 = Jul-Dec)
         const PERIOD_DATE_RANGES = {
             h1: { start: '2026-01-01', end: '2026-06-30' },
@@ -2792,12 +2989,6 @@
             const [loginError, setLoginError] = useState('');
             const [isLoading, setIsLoading] = useState(false);
 
-            // 기본 비밀번호 강제 변경 모달 state
-            const [forceChangeUser, setForceChangeUser] = useState(null); // 로그인 성공한 user 임시 보관
-            const [newPassword, setNewPassword] = useState('');
-            const [confirmPassword, setConfirmPassword] = useState('');
-            const [changeError, setChangeError] = useState('');
-            const [changeSaving, setChangeSaving] = useState(false);
 
             const handleLogin = async (e) => {
                 e.preventDefault();
@@ -2831,14 +3022,6 @@
                         return;
                     }
 
-                    // 기본 비밀번호(admin1234) 사용 중이면 강제 변경 모달 표시
-                    const defaultHash = await hashPassword('admin1234');
-                    if (user.password_hash === defaultHash) {
-                        setForceChangeUser(user); // 세션 생성 전에 user 임시 보관
-                        setIsLoading(false);
-                        return;
-                    }
-
                     // 로그인 성공 - localStorage에 세션 저장 (password_hash 제외, 만료시간 포함)
                     const sessionData = {
                         id: user.id,
@@ -2860,101 +3043,6 @@
                 }
             };
 
-            // 기본 비밀번호 강제 변경 핸들러
-            const handleForcePasswordChange = async (e) => {
-                e.preventDefault();
-                setChangeError('');
-                if (newPassword.length < 8) {
-                    setChangeError('새 비밀번호는 8자 이상이어야 합니다.');
-                    return;
-                }
-                if (newPassword !== confirmPassword) {
-                    setChangeError('비밀번호 확인이 일치하지 않습니다.');
-                    return;
-                }
-                setChangeSaving(true);
-                try {
-                    const hashed = await hashPassword(newPassword);
-                    const { error } = await supabase
-                        .from('users')
-                        .update({ password_hash: hashed, updated_at: new Date().toISOString() })
-                        .eq('id', forceChangeUser.id);
-                    if (error) throw error;
-
-                    // 비밀번호 변경 성공 후 세션 생성
-                    const sessionData = {
-                        id: forceChangeUser.id,
-                        username: forceChangeUser.username,
-                        name: forceChangeUser.name,
-                        role: forceChangeUser.role,
-                        email: forceChangeUser.email,
-                        organization: forceChangeUser.organization,
-                        position: forceChangeUser.position,
-                        expiresAt: Date.now() + (24 * 60 * 60 * 1000)
-                    };
-                    localStorage.setItem('bf_user_session', JSON.stringify(sessionData));
-                    onLogin(sessionData);
-                } catch (err) {
-                    console.error('비밀번호 변경 오류:', err);
-                    setChangeError('비밀번호 변경 중 오류가 발생했습니다: ' + err.message);
-                } finally {
-                    setChangeSaving(false);
-                }
-            };
-
-            // 기본 비밀번호 강제 변경 모달 (닫기 불가)
-            if (forceChangeUser) {
-                return (
-                    <div className="login-overlay">
-                        <div className="login-card">
-                            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                                <div style={{ fontSize: '36px', marginBottom: '8px' }}>🔐</div>
-                                <h2 style={{ margin: 0, color: '#1B6B5A' }}>비밀번호 변경 필요</h2>
-                            </div>
-                            <p style={{ color: '#6B7280', fontSize: '14px', textAlign: 'center', marginBottom: '20px' }}>
-                                기본 비밀번호를 사용 중입니다.<br/>
-                                보안을 위해 반드시 새 비밀번호로 변경하세요.
-                            </p>
-                            <form onSubmit={handleForcePasswordChange}>
-                                <div className="form-group">
-                                    <label>새 비밀번호 <span style={{ color: '#EF4444' }}>*</span></label>
-                                    <input
-                                        type="password"
-                                        value={newPassword}
-                                        onChange={e => setNewPassword(e.target.value)}
-                                        placeholder="8자 이상 입력"
-                                        required
-                                        autoFocus
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>비밀번호 확인 <span style={{ color: '#EF4444' }}>*</span></label>
-                                    <input
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={e => setConfirmPassword(e.target.value)}
-                                        placeholder="비밀번호 재입력"
-                                        required
-                                    />
-                                </div>
-                                {changeError && (
-                                    <div style={{ color: '#EF4444', fontSize: '13px', marginBottom: '12px', padding: '8px', background: '#FEF2F2', borderRadius: '6px' }}>
-                                        {changeError}
-                                    </div>
-                                )}
-                                <button
-                                    type="submit"
-                                    className="login-btn"
-                                    disabled={changeSaving}
-                                    style={{ width: '100%' }}
-                                >
-                                    {changeSaving ? '저장 중...' : '비밀번호 변경 후 로그인'}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                );
-            }
 
             return (
                 <div className="login-overlay">
@@ -6578,6 +6666,28 @@
                         <h1 className="section-title">💰 예산 관리</h1>
                         <p className="section-subtitle">총 7천만원 예산의 고급 집행 관리 시스템</p>
 
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                            <button className="btn btn-secondary" onClick={() => {
+                                const initialBudgetChanges = {};
+                                BUDGET_DATA.categories.forEach(cat => {
+                                    cat.subcategories.forEach(sub => {
+                                        initialBudgetChanges[sub.id] = { before: sub.budget, after: sub.budget };
+                                    });
+                                });
+                                setChangeApplicationForm({
+                                    reason: '',
+                                    changeDetails: [{ beforeUnit: '', beforeSchedule: '', beforeContent: '',
+                                                      afterUnit: '', afterSchedule: '', afterContent: '' }],
+                                    budgetChanges: initialBudgetChanges,
+                                    specificDetails: [{ unitName: '', beforeAmount: 0, afterAmount: 0, basis: '', reason: '' }],
+                                    applicationDate: new Date().toISOString().slice(0, 10)
+                                });
+                                setChangeApplicationModal(true);
+                            }}>
+                                📝 사업변경신청서
+                            </button>
+                        </div>
+
                         {/* 탭 네비게이션 */}
                         <div className="tab-navigation">
                             <button
@@ -8257,6 +8367,17 @@
                 title: '', date: '', location: '', content: '', participants: ''
             });
 
+            // ── 사업변경신청서 입력 모달 ─────────────────────────────────────
+            const [changeApplicationModal, setChangeApplicationModal] = useState(false);
+            const [changeApplicationForm, setChangeApplicationForm] = useState({
+                reason: '',
+                changeDetails: [{ beforeUnit: '', beforeSchedule: '', beforeContent: '',
+                                  afterUnit: '', afterSchedule: '', afterContent: '' }],
+                budgetChanges: {},
+                specificDetails: [{ unitName: '', beforeAmount: 0, afterAmount: 0, basis: '', reason: '' }],
+                applicationDate: new Date().toISOString().slice(0, 10)
+            });
+
             // ── 기관 정보 저장 ────────────────────────────────────────────
             const saveOrgSettings = async () => {
                 setOrgSettingsSaving(true);
@@ -9878,6 +9999,272 @@
                                             setMeetingMinutesModal(null);
                                         }}>
                                         📋 문서 생성
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 사업변경신청서 입력 모달 */}
+                    {changeApplicationModal && (
+                        <div className="schedule-modal-overlay" onClick={() => setChangeApplicationModal(false)}>
+                            <div className="schedule-modal" style={{ maxWidth: 860, maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+                                <div className="schedule-modal-header">
+                                    <h3>📝 사업변경신청서 생성</h3>
+                                    <button className="schedule-modal-close" onClick={() => setChangeApplicationModal(false)}>&times;</button>
+                                </div>
+                                <div className="schedule-modal-body">
+                                    {/* 섹션 1: 사유 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>1. 사업변경취지 및 사유</label>
+                                        <textarea rows="4" value={changeApplicationForm.reason}
+                                            onChange={e => setChangeApplicationForm(p => ({ ...p, reason: e.target.value }))}
+                                            placeholder="사업변경의 취지와 사유를 입력하세요." />
+                                    </div>
+
+                                    {/* 섹션 2: 사업변경내역 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>2. 사업변경내역</label>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: 8 }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th colSpan="3" style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>변경 전</th>
+                                                        <th colSpan="3" style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>변경 후</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '40px' }}></th>
+                                                    </tr>
+                                                    <tr>
+                                                        {['단위사업', '일정', '추진내용', '단위사업', '일정', '추진내용'].map((h, i) => (
+                                                            <th key={i} style={{ background: '#f9f9f9', border: '1px solid #ddd', padding: '4px 6px', fontSize: '11px', textAlign: 'center' }}>{h}</th>
+                                                        ))}
+                                                        <th style={{ background: '#f9f9f9', border: '1px solid #ddd', padding: '4px' }}></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {changeApplicationForm.changeDetails.map((row, idx) => (
+                                                        <tr key={idx}>
+                                                            {['beforeUnit', 'beforeSchedule', 'beforeContent', 'afterUnit', 'afterSchedule', 'afterContent'].map(field => (
+                                                                <td key={field} style={{ border: '1px solid #ddd', padding: '2px' }}>
+                                                                    <input type="text" value={row[field]}
+                                                                        style={{ width: '100%', border: 'none', padding: '4px', fontSize: '11px', background: 'transparent' }}
+                                                                        onChange={e => {
+                                                                            const updated = [...changeApplicationForm.changeDetails];
+                                                                            updated[idx] = { ...updated[idx], [field]: e.target.value };
+                                                                            setChangeApplicationForm(p => ({ ...p, changeDetails: updated }));
+                                                                        }} />
+                                                                </td>
+                                                            ))}
+                                                            <td style={{ border: '1px solid #ddd', padding: '2px', textAlign: 'center' }}>
+                                                                {changeApplicationForm.changeDetails.length > 1 && (
+                                                                    <button style={{ background: 'none', border: 'none', color: '#D32F2F', cursor: 'pointer', fontSize: '14px' }}
+                                                                        onClick={() => {
+                                                                            const updated = changeApplicationForm.changeDetails.filter((_, i) => i !== idx);
+                                                                            setChangeApplicationForm(p => ({ ...p, changeDetails: updated }));
+                                                                        }}>✕</button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <button style={{ marginTop: 6, padding: '4px 12px', fontSize: '12px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer' }}
+                                            onClick={() => setChangeApplicationForm(p => ({
+                                                ...p,
+                                                changeDetails: [...p.changeDetails, { beforeUnit: '', beforeSchedule: '', beforeContent: '', afterUnit: '', afterSchedule: '', afterContent: '' }]
+                                            }))}>
+                                            + 행 추가
+                                        </button>
+                                    </div>
+
+                                    {/* 섹션 3: 예산변경내역 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>3. 예산변경내역</label>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: 8 }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '15%' }}>관리그룹</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '25%' }}>단위사업</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '20%' }}>변경전 (원)</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '20%' }}>변경후 (원)</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '20%' }}>증감</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {BUDGET_DATA.categories.map(cat => {
+                                                        let catBeforeTotal = 0;
+                                                        let catAfterTotal = 0;
+                                                        const subRows = cat.subcategories.map(sub => {
+                                                            const bc = changeApplicationForm.budgetChanges[sub.id] || { before: sub.budget, after: sub.budget };
+                                                            catBeforeTotal += bc.before;
+                                                            catAfterTotal += bc.after;
+                                                            const diff = bc.after - bc.before;
+                                                            const changed = diff !== 0;
+                                                            return (
+                                                                <tr key={sub.id} style={changed ? { background: '#FFFDE7' } : {}}>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', fontSize: '11px' }}>{cat.name}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', fontSize: '11px' }}>{sub.name}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px', color: '#666' }}>
+                                                                        {fmt(bc.before)}
+                                                                    </td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '2px' }}>
+                                                                        <input type="number" value={bc.after}
+                                                                            style={{ width: '100%', border: 'none', padding: '4px', fontSize: '11px', textAlign: 'right', background: 'transparent' }}
+                                                                            onChange={e => {
+                                                                                const val = Number(e.target.value) || 0;
+                                                                                setChangeApplicationForm(p => ({
+                                                                                    ...p,
+                                                                                    budgetChanges: { ...p.budgetChanges, [sub.id]: { ...p.budgetChanges[sub.id], after: val } }
+                                                                                }));
+                                                                            }} />
+                                                                    </td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px',
+                                                                        color: diff > 0 ? '#1B6B5A' : diff < 0 ? '#D32F2F' : '#666' }}>
+                                                                        {diff > 0 ? '+' : ''}{fmt(diff)}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        });
+                                                        return (
+                                                            <React.Fragment key={cat.id}>
+                                                                {subRows}
+                                                                <tr style={{ background: '#f5f5f5', fontWeight: 'bold' }}>
+                                                                    <td colSpan="2" style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{cat.name} 소계</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>{fmt(catBeforeTotal)}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>{fmt(catAfterTotal)}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px',
+                                                                        color: (catAfterTotal - catBeforeTotal) > 0 ? '#1B6B5A' : (catAfterTotal - catBeforeTotal) < 0 ? '#D32F2F' : '#666' }}>
+                                                                        {(catAfterTotal - catBeforeTotal) > 0 ? '+' : ''}{fmt(catAfterTotal - catBeforeTotal)}
+                                                                    </td>
+                                                                </tr>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                    {(() => {
+                                                        let totalBefore = 0, totalAfter = 0;
+                                                        BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sub => {
+                                                            const bc = changeApplicationForm.budgetChanges[sub.id] || { before: sub.budget, after: sub.budget };
+                                                            totalBefore += bc.before;
+                                                            totalAfter += bc.after;
+                                                        }));
+                                                        const totalDiff = totalAfter - totalBefore;
+                                                        return (
+                                                            <tr style={{ background: '#e8e8e8', fontWeight: 'bold' }}>
+                                                                <td colSpan="2" style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>합 계</td>
+                                                                <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'right' }}>{fmt(totalBefore)}</td>
+                                                                <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'right' }}>{fmt(totalAfter)}</td>
+                                                                <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'right',
+                                                                    color: totalDiff > 0 ? '#1B6B5A' : totalDiff < 0 ? '#D32F2F' : '#666' }}>
+                                                                    {totalDiff > 0 ? '+' : ''}{fmt(totalDiff)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })()}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* 섹션 4: 구체내역 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>4. 구체내역</label>
+                                        {changeApplicationForm.specificDetails.map((detail, idx) => (
+                                            <div key={idx} style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, marginTop: 8, position: 'relative', background: '#fafafa' }}>
+                                                {changeApplicationForm.specificDetails.length > 1 && (
+                                                    <button style={{ position: 'absolute', top: 6, right: 8, background: 'none', border: 'none', color: '#D32F2F', cursor: 'pointer', fontSize: '14px' }}
+                                                        onClick={() => {
+                                                            const updated = changeApplicationForm.specificDetails.filter((_, i) => i !== idx);
+                                                            setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                        }}>✕</button>
+                                                )}
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+                                                    <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                        <label style={{ fontSize: '12px' }}>단위사업명</label>
+                                                        <input type="text" value={detail.unitName}
+                                                            onChange={e => {
+                                                                const updated = [...changeApplicationForm.specificDetails];
+                                                                updated[idx] = { ...updated[idx], unitName: e.target.value };
+                                                                setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                            }}
+                                                            placeholder="예: 노동안전보건 교과서 기초연구" />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                                        <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                            <label style={{ fontSize: '12px' }}>변경전 금액</label>
+                                                            <input type="number" value={detail.beforeAmount}
+                                                                onChange={e => {
+                                                                    const updated = [...changeApplicationForm.specificDetails];
+                                                                    updated[idx] = { ...updated[idx], beforeAmount: Number(e.target.value) || 0 };
+                                                                    setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                                }} />
+                                                        </div>
+                                                        <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                            <label style={{ fontSize: '12px' }}>변경후 금액</label>
+                                                            <input type="number" value={detail.afterAmount}
+                                                                onChange={e => {
+                                                                    const updated = [...changeApplicationForm.specificDetails];
+                                                                    updated[idx] = { ...updated[idx], afterAmount: Number(e.target.value) || 0 };
+                                                                    setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                                }} />
+                                                        </div>
+                                                        <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                            <label style={{ fontSize: '12px' }}>증감</label>
+                                                            <div style={{ padding: '8px', fontSize: '12px', color: (detail.afterAmount - detail.beforeAmount) > 0 ? '#1B6B5A' : (detail.afterAmount - detail.beforeAmount) < 0 ? '#D32F2F' : '#666' }}>
+                                                                {(detail.afterAmount - detail.beforeAmount) > 0 ? '+' : ''}{fmt(detail.afterAmount - detail.beforeAmount)}원
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                        <label style={{ fontSize: '12px' }}>산출근거</label>
+                                                        <textarea rows="2" value={detail.basis}
+                                                            onChange={e => {
+                                                                const updated = [...changeApplicationForm.specificDetails];
+                                                                updated[idx] = { ...updated[idx], basis: e.target.value };
+                                                                setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                            }}
+                                                            placeholder="산출근거를 입력하세요" />
+                                                    </div>
+                                                    <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                        <label style={{ fontSize: '12px' }}>사유</label>
+                                                        <textarea rows="2" value={detail.reason}
+                                                            onChange={e => {
+                                                                const updated = [...changeApplicationForm.specificDetails];
+                                                                updated[idx] = { ...updated[idx], reason: e.target.value };
+                                                                setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                            }}
+                                                            placeholder="변경 사유를 입력하세요" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <button style={{ marginTop: 8, padding: '4px 12px', fontSize: '12px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer' }}
+                                            onClick={() => setChangeApplicationForm(p => ({
+                                                ...p,
+                                                specificDetails: [...p.specificDetails, { unitName: '', beforeAmount: 0, afterAmount: 0, basis: '', reason: '' }]
+                                            }))}>
+                                            + 항목 추가
+                                        </button>
+                                    </div>
+
+                                    {/* 신청일 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>신청일</label>
+                                        <input type="date" value={changeApplicationForm.applicationDate}
+                                            onChange={e => setChangeApplicationForm(p => ({ ...p, applicationDate: e.target.value }))} />
+                                    </div>
+                                </div>
+                                <div className="schedule-modal-footer">
+                                    <button className="btn" style={{ background: '#F8F6F1', border: '1px solid #EBE8E1', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                        onClick={() => setChangeApplicationModal(false)}>
+                                        취소
+                                    </button>
+                                    <button className="btn btn-primary"
+                                        onClick={() => {
+                                            openChangeApplication(changeApplicationForm, orgSettings);
+                                            setChangeApplicationModal(false);
+                                        }}>
+                                        📝 문서 생성
                                     </button>
                                 </div>
                             </div>
