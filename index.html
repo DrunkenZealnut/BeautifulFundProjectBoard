@@ -3946,7 +3946,7 @@
             }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
 
             // ── 대시보드 차트 ─────────────────────────────────────────────
-            useEffect(() => {
+            const renderMonthlyChart = useCallback(() => {
                 if (!data?.budgetExecutions?.length) return;
                 if (!monthlyChartRef.current) return;
 
@@ -3994,11 +3994,14 @@
                         }
                     }
                 });
+            }, [data?.budgetExecutions]);
 
+            useEffect(() => {
+                renderMonthlyChart();
                 return () => {
                     if (monthlyChartInst.current) { monthlyChartInst.current.destroy(); monthlyChartInst.current = null; }
                 };
-            }, [data?.budgetExecutions]);
+            }, [renderMonthlyChart]);
 
             // 집행 내역 탭: 증빙서류 업로드 현황 로드
             useEffect(() => {
@@ -4307,7 +4310,7 @@
                             <div className="card-header">
                                 <h2 className="card-title">📈 월별 집행 추이 (카테고리별)</h2>
                             </div>
-                            <canvas ref={monthlyChartRef} />
+                            <canvas ref={node => { monthlyChartRef.current = node; if (node) renderMonthlyChart(); }} />
                         </div>
                     )}
 
@@ -7461,7 +7464,7 @@
                                                     setFormDocFiles({});
                                                     activeFormDocNameRef.current = null;
                                                     // 데이터 새로고침
-                                                    window.location.reload();
+                                                    await refreshExecutions();
 
                                                 } catch (error) {
                                                     console.error('예산 집행 등록 오류:', error);
