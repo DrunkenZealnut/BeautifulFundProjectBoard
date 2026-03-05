@@ -3856,7 +3856,7 @@
                     const { data: executions, error } = await supabase
                         .from('budget_executions')
                         .select('*')
-                        .order('execution_date', { ascending: false });
+                        .order('created_at', { ascending: false });
 
                     if (error) throw error;
                     return executions || [];
@@ -7910,9 +7910,45 @@
                                                     <div style={{ fontWeight: '600', marginBottom: '12px', color: '#134E42' }}>✏️ 집행내역 수정</div>
                                                     <div className="form-grid" style={{ marginBottom: '12px' }}>
                                                         <div className="form-group">
+                                                            <label className="form-label">예산 분류</label>
+                                                            <select className="form-input" value={executionEditForm.subcategory_id}
+                                                                onChange={e => {
+                                                                    const sc = subcategories.find(s => s.id === e.target.value);
+                                                                    setExecutionEditForm(f => ({ ...f, subcategory_id: e.target.value, subcategory_name: sc?.name || '', category_name: sc?.categoryName || '', budget_item_id: '', budget_item_name: '', type: '' }));
+                                                                }}>
+                                                                <option value="">분류 선택</option>
+                                                                {subcategories.map(sc => (
+                                                                    <option key={sc.id} value={sc.id}>{sc.categoryName} &gt; {sc.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">예산 항목</label>
+                                                            <select className="form-input" value={executionEditForm.budget_item_id}
+                                                                onChange={e => {
+                                                                    const items = getAllBudgetItems(executionEditForm.subcategory_id);
+                                                                    const item = items.find(i => i.id === e.target.value);
+                                                                    setExecutionEditForm(f => ({ ...f, budget_item_id: e.target.value, budget_item_name: item?.name || '', type: item?.type || '' }));
+                                                                }}
+                                                                disabled={!executionEditForm.subcategory_id}>
+                                                                <option value="">항목 선택</option>
+                                                                {getAllBudgetItems(executionEditForm.subcategory_id).map(item => (
+                                                                    <option key={item.id} value={item.id}>{item.name} ({item.type})</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="form-group">
                                                             <label className="form-label">금액 (원)</label>
                                                             <input className="form-input" type="number" value={executionEditForm.amount}
                                                                 onChange={e => setExecutionEditForm(f => ({ ...f, amount: e.target.value }))} />
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">결제방법</label>
+                                                            <select className="form-input" value={executionEditForm.payment_method}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, payment_method: e.target.value }))}>
+                                                                <option value="카드">카드</option>
+                                                                <option value="계좌이체">계좌이체</option>
+                                                            </select>
                                                         </div>
                                                         <div className="form-group">
                                                             <label className="form-label">집행일</label>
@@ -7920,24 +7956,24 @@
                                                                 onChange={e => setExecutionEditForm(f => ({ ...f, execution_date: e.target.value }))} />
                                                         </div>
                                                         <div className="form-group">
-                                                            <label className="form-label">결제방법</label>
-                                                            <select className="form-input" value={executionEditForm.payment_method}
-                                                                onChange={e => setExecutionEditForm(f => ({ ...f, payment_method: e.target.value }))}>
-                                                                <option value="계좌이체">계좌이체</option>
-                                                                <option value="카드결제">카드결제</option>
-                                                                <option value="현금">현금</option>
-                                                            </select>
-                                                        </div>
-                                                        <div className="form-group">
-                                                            <label className="form-label">수급자</label>
+                                                            <label className="form-label">수취인</label>
                                                             <input className="form-input" type="text" value={executionEditForm.recipient}
-                                                                onChange={e => setExecutionEditForm(f => ({ ...f, recipient: e.target.value }))} />
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, recipient: e.target.value }))}
+                                                                list="recipient-datalist-edit" />
+                                                            <datalist id="recipient-datalist-edit">
+                                                                {recipients.map(r => <option key={r.id} value={r.name} />)}
+                                                            </datalist>
                                                         </div>
                                                     </div>
                                                     <div className="form-group" style={{ marginBottom: '12px' }}>
                                                         <label className="form-label">설명</label>
                                                         <input className="form-input" type="text" value={executionEditForm.description}
                                                             onChange={e => setExecutionEditForm(f => ({ ...f, description: e.target.value }))} />
+                                                    </div>
+                                                    <div className="form-group" style={{ marginBottom: '12px' }}>
+                                                        <label className="form-label">비고</label>
+                                                        <input className="form-input" type="text" value={executionEditForm.notes || ''}
+                                                            onChange={e => setExecutionEditForm(f => ({ ...f, notes: e.target.value }))} placeholder="비고 (선택사항)" />
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '8px' }}>
                                                         <button className="btn btn-primary" style={{ fontSize: '13px' }}
@@ -7975,7 +8011,7 @@
                                                 {/* 수정/삭제/승인 버튼 */}
                                                 <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                                                     <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}
-                                                        onClick={() => { setEditingExecution(execution); setExecutionEditForm({ amount: execution.amount, payment_method: execution.payment_method, execution_date: execution.execution_date, recipient: execution.recipient || '', description: execution.description || '' }); }}>
+                                                        onClick={() => { setEditingExecution(execution); setExecutionEditForm({ subcategory_id: execution.subcategory_id || '', subcategory_name: execution.subcategory_name || '', category_name: execution.category_name || '', budget_item_id: execution.budget_item_id || '', budget_item_name: execution.budget_item_name || '', type: execution.type || '', amount: execution.amount, payment_method: execution.payment_method, execution_date: execution.execution_date, recipient: execution.recipient || '', description: execution.description || '', notes: execution.notes || '' }); }}>
                                                         ✏️ 수정
                                                     </button>
                                                     {currentUser?.role === 'admin' && (
@@ -8442,11 +8478,18 @@
                 setExecutionMsg('');
                 try {
                     const { error } = await supabase.from('budget_executions').update({
+                        subcategory_id: executionEditForm.subcategory_id,
+                        subcategory_name: executionEditForm.subcategory_name,
+                        category_name: executionEditForm.category_name,
+                        budget_item_id: executionEditForm.budget_item_id,
+                        budget_item_name: executionEditForm.budget_item_name,
+                        type: executionEditForm.type,
                         amount: parseInt(executionEditForm.amount) || 0,
                         payment_method: executionEditForm.payment_method,
                         execution_date: executionEditForm.execution_date,
                         recipient: executionEditForm.recipient || '',
-                        description: executionEditForm.description || ''
+                        description: executionEditForm.description || '',
+                        notes: executionEditForm.notes || null
                     }).eq('id', editingExecution.id);
                     if (error) throw error;
                     setEditingExecution(null);
