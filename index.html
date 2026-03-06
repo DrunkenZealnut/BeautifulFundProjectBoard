@@ -2167,6 +2167,8 @@
 
         // Utility functions for consistent number/percentage formatting
         const fmt = (n) => Math.round(n).toLocaleString();
+        const parseInput = (s) => String(s).replace(/[^0-9]/g, '');
+        const fmtInput = (v) => { const s = parseInput(v); return s ? fmt(Number(s)) : ''; };
         const pct = (spent, budget) => budget > 0 ? Math.min(100, Math.round(spent / budget * 100)) : 0;
 
         // 비밀번호 SHA-256 해시 유틸리티 (최상위 스코프 - LoginPage·ProjectManagementSystem 공유)
@@ -7262,10 +7264,11 @@
                                         <div className="form-group">
                                             <label>집행 금액</label>
                                             <input
-                                                type="number"
+                                                type="text"
+                                                inputMode="numeric"
                                                 placeholder="금액 입력"
-                                                value={formData.amount}
-                                                onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                                                value={fmtInput(formData.amount)}
+                                                onChange={(e) => setFormData({...formData, amount: parseInput(e.target.value)})}
                                             />
                                         </div>
 
@@ -7599,10 +7602,11 @@
                                                 <div className="form-group">
                                                     <label>지급 금액 (원)</label>
                                                     <input
-                                                        type="number"
-                                                        placeholder="금액 입력 (예: 210000)"
-                                                        value={calculatorAmount}
-                                                        onChange={(e) => setCalculatorAmount(e.target.value)}
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        placeholder="금액 입력 (예: 210,000)"
+                                                        value={fmtInput(calculatorAmount)}
+                                                        onChange={(e) => setCalculatorAmount(parseInput(e.target.value))}
                                                     />
                                                 </div>
                                             </div>
@@ -7694,12 +7698,13 @@
                                                             style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
                                                         />
                                                         <input
-                                                            type="number"
+                                                            type="text"
+                                                            inputMode="numeric"
                                                             placeholder="지급금액 (원)"
-                                                            value={person.amount}
+                                                            value={fmtInput(person.amount)}
                                                             onChange={(e) => {
                                                                 const updated = [...calcPersons];
-                                                                updated[idx].amount = e.target.value;
+                                                                updated[idx].amount = parseInput(e.target.value);
                                                                 setCalcPersons(updated);
                                                             }}
                                                             style={{ flex: 1.5, padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
@@ -8066,8 +8071,8 @@
                                                         </div>
                                                         <div className="form-group">
                                                             <label className="form-label">금액 (원)</label>
-                                                            <input className="form-input" type="number" value={executionEditForm.amount}
-                                                                onChange={e => setExecutionEditForm(f => ({ ...f, amount: e.target.value }))} />
+                                                            <input className="form-input" type="text" inputMode="numeric" value={fmtInput(executionEditForm.amount)}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, amount: parseInput(e.target.value) }))} />
                                                         </div>
                                                         <div className="form-group">
                                                             <label className="form-label">결제방법</label>
@@ -9337,8 +9342,8 @@
                                     <div style={{ display: 'grid', gap: '16px' }}>
                                         <div>
                                             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>지급 금액 (원)</label>
-                                            <input type="number" value={withholdingAmount} onChange={e => setWithholdingAmount(e.target.value)}
-                                                placeholder="예: 200000" style={{ width: '100%', padding: '10px 12px', border: '1px solid #D5D3D0', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }} />
+                                            <input type="text" inputMode="numeric" value={fmtInput(withholdingAmount)} onChange={e => setWithholdingAmount(parseInput(e.target.value))}
+                                                placeholder="예: 200,000" style={{ width: '100%', padding: '10px 12px', border: '1px solid #D5D3D0', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }} />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>필요경비율</label>
@@ -10284,10 +10289,10 @@
                                                                         {fmt(bc.before)}
                                                                     </td>
                                                                     <td style={{ border: '1px solid #ddd', padding: '2px' }}>
-                                                                        <input type="number" value={bc.after}
+                                                                        <input type="text" inputMode="numeric" value={fmtInput(bc.after)}
                                                                             style={{ width: '100%', border: 'none', padding: '4px', fontSize: '11px', textAlign: 'right', background: 'transparent' }}
                                                                             onChange={e => {
-                                                                                const val = Number(e.target.value) || 0;
+                                                                                const val = Number(parseInput(e.target.value)) || 0;
                                                                                 setChangeApplicationForm(p => ({
                                                                                     ...p,
                                                                                     budgetChanges: { ...p.budgetChanges, [sub.id]: { ...p.budgetChanges[sub.id], after: val } }
@@ -10367,19 +10372,19 @@
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                                                         <div className="schedule-form-group" style={{ marginBottom: 4 }}>
                                                             <label style={{ fontSize: '12px' }}>변경전 금액</label>
-                                                            <input type="number" value={detail.beforeAmount}
+                                                            <input type="text" inputMode="numeric" value={fmtInput(detail.beforeAmount)}
                                                                 onChange={e => {
                                                                     const updated = [...changeApplicationForm.specificDetails];
-                                                                    updated[idx] = { ...updated[idx], beforeAmount: Number(e.target.value) || 0 };
+                                                                    updated[idx] = { ...updated[idx], beforeAmount: Number(parseInput(e.target.value)) || 0 };
                                                                     setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
                                                                 }} />
                                                         </div>
                                                         <div className="schedule-form-group" style={{ marginBottom: 4 }}>
                                                             <label style={{ fontSize: '12px' }}>변경후 금액</label>
-                                                            <input type="number" value={detail.afterAmount}
+                                                            <input type="text" inputMode="numeric" value={fmtInput(detail.afterAmount)}
                                                                 onChange={e => {
                                                                     const updated = [...changeApplicationForm.specificDetails];
-                                                                    updated[idx] = { ...updated[idx], afterAmount: Number(e.target.value) || 0 };
+                                                                    updated[idx] = { ...updated[idx], afterAmount: Number(parseInput(e.target.value)) || 0 };
                                                                     setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
                                                                 }} />
                                                         </div>
