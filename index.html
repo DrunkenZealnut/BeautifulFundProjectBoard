@@ -3638,6 +3638,16 @@
             const [budgetTab, setBudgetTab] = useState("dashboard");
             const [budgetPeriod, setBudgetPeriod] = useState("total"); // total | h1 | h2
             const [ratioTab, setRatioTab] = useState('project'); // 비용비율 내부 탭: 'project' | 'operating'
+            // ── 집행내역 정렬/필터/검색 상태 ──────────────────────────────
+            const [execSortBy, setExecSortBy] = useState('execution_date');
+            const [execSortDir, setExecSortDir] = useState('desc');
+            const [execFilterCategory, setExecFilterCategory] = useState('');
+            const [execFilterSubcategory, setExecFilterSubcategory] = useState('');
+            const [execFilterStatus, setExecFilterStatus] = useState('');
+            const [execFilterPayment, setExecFilterPayment] = useState('');
+            const [execFilterDateFrom, setExecFilterDateFrom] = useState('');
+            const [execFilterDateTo, setExecFilterDateTo] = useState('');
+            const [execSearchQuery, setExecSearchQuery] = useState('');
             const [formData, setFormData] = useState({
                 subcategory_id: '',
                 subcategory_name: '',
@@ -3758,6 +3768,44 @@
                 const subcategories = getAllSubcategories();
                 const subcategory = subcategories.find(s => s.id === subcategoryId);
                 return subcategory ? subcategory.items : [];
+            };
+
+            // ── 집행내역 필터링/정렬 파이프라인 ─────────────────────────
+            const filteredExecutions = useMemo(() => {
+                let result = data?.budgetExecutions || [];
+                if (execFilterCategory) result = result.filter(e => e.category_name === execFilterCategory);
+                if (execFilterSubcategory) result = result.filter(e => e.subcategory_name === execFilterSubcategory);
+                if (execFilterStatus) result = result.filter(e => e.status === execFilterStatus);
+                if (execFilterPayment) result = result.filter(e => e.payment_method === execFilterPayment);
+                if (execFilterDateFrom) result = result.filter(e => e.execution_date >= execFilterDateFrom);
+                if (execFilterDateTo) result = result.filter(e => e.execution_date <= execFilterDateTo);
+                if (execSearchQuery.trim()) {
+                    const q = execSearchQuery.trim().toLowerCase();
+                    result = result.filter(e =>
+                        (e.budget_item_name || '').toLowerCase().includes(q) ||
+                        (e.description || '').toLowerCase().includes(q) ||
+                        (e.recipient || '').toLowerCase().includes(q)
+                    );
+                }
+                result = [...result].sort((a, b) => {
+                    let va = a[execSortBy], vb = b[execSortBy];
+                    if (execSortBy === 'amount') {
+                        va = va || 0; vb = vb || 0;
+                        return execSortDir === 'asc' ? va - vb : vb - va;
+                    }
+                    va = va || ''; vb = vb || '';
+                    const cmp = va.localeCompare(vb);
+                    return execSortDir === 'asc' ? cmp : -cmp;
+                });
+                return result;
+            }, [data?.budgetExecutions, execFilterCategory, execFilterSubcategory, execFilterStatus, execFilterPayment, execFilterDateFrom, execFilterDateTo, execSearchQuery, execSortBy, execSortDir]);
+
+            const resetExecFilters = () => {
+                setExecSortBy('execution_date'); setExecSortDir('desc');
+                setExecFilterCategory(''); setExecFilterSubcategory('');
+                setExecFilterStatus(''); setExecFilterPayment('');
+                setExecFilterDateFrom(''); setExecFilterDateTo('');
+                setExecSearchQuery('');
             };
 
             // 데이터 로딩 함수들
@@ -7885,7 +7933,7 @@
 
                             {budgetTab === 'history' && (
                                 <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
                                         <h2 style={{ fontSize: '20px', fontWeight: '600' }}>
                                             📋 예산 집행 내역
                                         </h2>
@@ -7899,7 +7947,86 @@
                                         </div>
                                     </div>
 
-                                    {data.budgetExecutions.map(execution => {
+                                    {/* 검색 */}
+                                    <div style={{ marginBottom: '10px' }}>
+                                        <input className="form-input" type="text"
+                                            placeholder="🔍 항목명, 설명, 수취인 검색..."
+                                            value={execSearchQuery}
+                                            onChange={e => setExecSearchQuery(e.target.value)}
+                                            style={{ width: '100%' }} />
+                                    </div>
+
+                                    {/* 필터 */}
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '110px' }}
+                                            value={execFilterCategory}
+                                            onChange={e => { setExecFilterCategory(e.target.value); setExecFilterSubcategory(''); }}>
+                                            <option value="">카테고리 전체</option>
+                                            {BUDGET_DATA.categories.map(c => (
+                                                <option key={c.id} value={c.name}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '110px' }}
+                                            value={execFilterSubcategory}
+                                            onChange={e => setExecFilterSubcategory(e.target.value)}
+                                            disabled={!execFilterCategory}>
+                                            <option value="">소분류 전체</option>
+                                            {execFilterCategory && BUDGET_DATA.categories
+                                                .find(c => c.name === execFilterCategory)
+                                                ?.subcategories.map(s => (
+                                                    <option key={s.id} value={s.name}>{s.name}</option>
+                                                ))
+                                            }
+                                        </select>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '90px' }}
+                                            value={execFilterStatus}
+                                            onChange={e => setExecFilterStatus(e.target.value)}>
+                                            <option value="">상태 전체</option>
+                                            {Object.entries(EXECUTION_STATUS).map(([key, val]) => (
+                                                <option key={key} value={key}>{val.label}</option>
+                                            ))}
+                                        </select>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '90px' }}
+                                            value={execFilterPayment}
+                                            onChange={e => setExecFilterPayment(e.target.value)}>
+                                            <option value="">결제 전체</option>
+                                            <option value="카드">카드</option>
+                                            <option value="계좌이체">계좌이체</option>
+                                        </select>
+                                    </div>
+
+                                    {/* 기간 + 정렬 + 건수 + 초기화 */}
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <input className="form-input" type="date" style={{ width: '140px', fontSize: '13px' }}
+                                                value={execFilterDateFrom}
+                                                onChange={e => setExecFilterDateFrom(e.target.value)} />
+                                            <span style={{ color: '#9C9690' }}>~</span>
+                                            <input className="form-input" type="date" style={{ width: '140px', fontSize: '13px' }}
+                                                value={execFilterDateTo}
+                                                onChange={e => setExecFilterDateTo(e.target.value)} />
+                                        </div>
+                                        <select className="form-input" style={{ width: 'auto', fontSize: '13px' }}
+                                            value={execSortBy}
+                                            onChange={e => setExecSortBy(e.target.value)}>
+                                            <option value="execution_date">집행일</option>
+                                            <option value="amount">금액</option>
+                                            <option value="created_at">등록일</option>
+                                        </select>
+                                        <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 10px' }}
+                                            onClick={() => setExecSortDir(d => d === 'asc' ? 'desc' : 'asc')}>
+                                            {execSortDir === 'desc' ? '↓ 내림차순' : '↑ 오름차순'}
+                                        </button>
+                                        <span style={{ fontSize: '13px', color: '#6B6560', marginLeft: 'auto' }}>
+                                            📊 {filteredExecutions.length}건 / {(data?.budgetExecutions || []).length}건
+                                        </span>
+                                        <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 10px' }}
+                                            onClick={resetExecFilters}>
+                                            🔄 초기화
+                                        </button>
+                                    </div>
+
+                                    {filteredExecutions.map(execution => {
                                             const si = EXECUTION_STATUS[execution.status] || EXECUTION_STATUS.pending;
                                             const isEditing = editingExecution?.id === execution.id;
                                             const isDeleteConfirm = executionDeleteId === execution.id;
@@ -8172,9 +8299,11 @@
                                         }}
                                     />
 
-                                    {data.budgetExecutions.length === 0 && (
+                                    {filteredExecutions.length === 0 && (
                                         <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
-                                            등록된 집행 내역이 없습니다.
+                                            {(data?.budgetExecutions || []).length === 0
+                                                ? '등록된 집행 내역이 없습니다.'
+                                                : '조건에 맞는 집행 내역이 없습니다.'}
                                         </div>
                                     )}
                                 </div>
@@ -8529,7 +8658,7 @@
 
             const handleExportExcel = () => {
                 if (!window.XLSX) { alert('Excel 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return; }
-                const executions = data.budgetExecutions || [];
+                const executions = filteredExecutions;
                 const rows = executions.map(e => ({
                     '집행일': e.execution_date || '',
                     '대분류': e.category_name || '',

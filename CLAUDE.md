@@ -39,7 +39,7 @@ Then execute `supabase-migration-auth.sql` to add users table RLS policies and s
 
 ### Single-file SPA pattern
 
-The main application lives entirely in `index.html` (~97KB):
+The main application lives entirely in `index.html` (~600KB, ~7800 lines):
 1. CDN imports (React, ReactDOM, Babel, Supabase client, Chart.js)
 2. Inline `<style>` block (1000+ lines)
 3. Single `<script type="text/babel">` block containing all React components
@@ -71,17 +71,27 @@ Navigation is state-driven (no URL routing) via `currentPage` state:
 | `index-simple.html` | Lightweight testing version |
 | `budget-management-advanced.html` | Standalone budget module demo |
 
-### Standalone JSX modules (reference/components)
+### Standalone JSX modules (archived reference)
 
-- `project-management-system.jsx` - Full component library (84KB)
-- `participant-management.jsx` - Participant management module
-- `budget-manager.jsx` - Budget management module
+- `_archive/project-management-system.jsx` - Full component library (84KB)
+- `_archive/participant-management.jsx` - Participant management module
+- `_archive/budget-manager.jsx` - Budget management module
 
 ### Database schema files
 
 - `supabase-schema-safe.sql` - Primary schema (PostgreSQL/Supabase, use this)
 - `supabase-schema.sql` - Earlier schema version
 - `database-schema.sql` - Original MySQL schema (reference only)
+
+### Migration files (run in Supabase SQL Editor)
+
+- `supabase-migration-auth.sql` - Users RLS + default admin password
+- `supabase-migration-rls.sql` - RLS policy setup
+- `supabase-migration-rls-improved.sql` - Improved RLS policies
+- `supabase-migration-gallery-category.sql` - Gallery category additions
+- `supabase-migration-gallery-rls-fix.sql` - Gallery RLS fix
+- `supabase-migration-password-hash.sql` - Password hashing migration
+- `supabase-migration-recipients.sql` - Recipients table for payroll
 
 ## Domain Logic
 
@@ -119,3 +129,16 @@ All 11 tables have RLS enabled. Public key is used client-side (read-oriented). 
 - Utility functions: `fmt(n)` for Korean number formatting, `pct(spent, budget)` for percentages, `Icon({ name, size })` for SVG icons
 - Korean commit messages: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`
 - All inline — styles, components, and logic coexist in the same HTML file
+
+## Deployment
+
+Hosted on Vercel. Push to `main` triggers auto-deploy. See `vercel.json` for CSP headers.
+
+## Claude Code Commands
+
+Custom commands available via `/` in Claude Code:
+- `/commit` - Korean commit message with convention
+- `/deploy` - Push to main for Vercel deploy
+- `/new-migration` - Create Supabase migration file
+- `/find-component` - Locate component/function in index.html
+- `/review-changes` - Review current changes
