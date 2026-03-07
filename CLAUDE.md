@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: React 18 (no-build, CDN via unpkg/jsdelivr) + Babel standalone transpiler
 - **Backend**: Supabase (PostgreSQL + JWT Auth + RLS)
-- **Charting**: Chart.js (CDN)
+- **CDN Libraries**: Chart.js, DOMPurify (XSS sanitization), JSZip (gallery ZIP downloads), SheetJS/XLSX (Excel export), Google Calendar API
 - **Language**: Korean-first UI, English code comments
 
 ## Running the Application
@@ -19,10 +19,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 No build step required. Serve static files:
 
 ```bash
-# Any of these work:
 python -m http.server 8000
-npx http-server
-# Or use VS Code Live Server extension
+# or: npx http-server
 ```
 
 Open `http://localhost:8000` → loads `index.html`.
@@ -39,13 +37,33 @@ Then execute `supabase-migration-auth.sql` to add users table RLS policies and s
 
 ### Single-file SPA pattern
 
-The main application lives entirely in `index.html` (~600KB, ~7800 lines):
-1. CDN imports (React, ReactDOM, Babel, Supabase client, Chart.js)
-2. Inline `<style>` block (1000+ lines)
-3. Single `<script type="text/babel">` block containing all React components
+The main application lives entirely in `index.html` (~630KB, ~10400 lines):
+1. CDN imports (lines 1–31)
+2. Inline `<style>` block (~2100 lines)
+3. Single `<script type="text/babel">` block starting at line ~2132 containing all React components
 4. Root component: `ProjectManagementSystem` rendered into `<div id="root">`
 
-Navigation is state-driven (no URL routing) via `currentPage` state:
+### Key locations in index.html
+
+| What | Approx. line |
+|------|-------------|
+| Supabase config & CONFIG constants | ~2140 |
+| Utility functions (`fmt`, `pct`, `hashPassword`) | ~2169 |
+| Salary statement / meeting minutes generators | ~2188 |
+| `LoginPage` component | ~2988 |
+| `ProjectManagementSystem` (root component) | ~3097 |
+| `renderDashboard` | ~4152 |
+| `renderSchedule` / calendar & list views | ~4483 |
+| Board components (`BoardWriteForm`, `BoardDetailView`) | ~5162 |
+| `GalleryWriteForm` / `GalleryDetailView` | ~5556 |
+| `renderBoard` | ~6369 |
+| `renderGallery` | ~6590 |
+| `renderBudget` | ~6713 |
+| `renderAdmin` | ~9516 |
+
+### Navigation
+
+State-driven (no URL routing) via `currentPage` state:
 - `dashboard` → 대시보드 (budget execution rate, stats)
 - `budget` → 예산 관리 (execution tracking, withholding tax calc)
 - `schedule` → 일정 관리 (events, participant tracking)
@@ -54,7 +72,7 @@ Navigation is state-driven (no URL routing) via `currentPage` state:
 - `admin` → 관리자 (user management, admin-only)
 
 ### Authentication
-- Login required on page load, checks `users` table (username + password_hash)
+- Login required on page load, checks `users` table (username + password_hash via SHA-256)
 - Session stored in `localStorage` (`bf_user_session`)
 - Admin page visible only to users with `role = 'admin'`
 - Default admin account: `admin` / `admin1234`
@@ -71,27 +89,20 @@ Navigation is state-driven (no URL routing) via `currentPage` state:
 | `index-simple.html` | Lightweight testing version |
 | `budget-management-advanced.html` | Standalone budget module demo |
 
-### Standalone JSX modules (archived reference)
+### Archived JSX modules (`_archive/`)
 
-- `_archive/project-management-system.jsx` - Full component library (84KB)
-- `_archive/participant-management.jsx` - Participant management module
-- `_archive/budget-manager.jsx` - Budget management module
+Earlier standalone component files kept for reference. Not used at runtime.
 
-### Database schema files
+### Database schema & migrations
 
-- `supabase-schema-safe.sql` - Primary schema (PostgreSQL/Supabase, use this)
+- `supabase-schema-safe.sql` - **Primary schema** (use this)
 - `supabase-schema.sql` - Earlier schema version
 - `database-schema.sql` - Original MySQL schema (reference only)
+- `supabase-migration-*.sql` - Incremental migrations (run in Supabase SQL Editor)
 
-### Migration files (run in Supabase SQL Editor)
+### Design docs (`docs/`)
 
-- `supabase-migration-auth.sql` - Users RLS + default admin password
-- `supabase-migration-rls.sql` - RLS policy setup
-- `supabase-migration-rls-improved.sql` - Improved RLS policies
-- `supabase-migration-gallery-category.sql` - Gallery category additions
-- `supabase-migration-gallery-rls-fix.sql` - Gallery RLS fix
-- `supabase-migration-password-hash.sql` - Password hashing migration
-- `supabase-migration-recipients.sql` - Recipients table for payroll
+Feature planning and analysis documents live in `docs/01-plan/`, `docs/02-design/`, `docs/03-analysis/`.
 
 ## Domain Logic
 
@@ -103,6 +114,9 @@ Amounts >= 125,000 KRW trigger automatic tax:
 
 ### Budget Hierarchy
 Category (사업비/운영비) → Subcategory (교과서, APP, 캠페인, etc.) → Line Item (predetermined amounts) → Executions (actual spending)
+
+### Budget Periods
+Half-year split: H1 (2026-01-01 to 2026-06-30) and H2 (2026-07-01 to 2026-12-31), configured in `CONFIG.PERIODS`.
 
 ### Document Requirements
 Each expense type has specific required proof documents defined in `getRequiredDocs()`. Payment method and expense category determine which documents are mandatory.
@@ -121,24 +135,16 @@ const { data, error } = await supabase
   .order('created_at', { ascending: false });
 ```
 
-All 11 tables have RLS enabled. Public key is used client-side (read-oriented). UUID primary keys throughout.
+All 11 tables have RLS enabled. Public anon key is used client-side (read-oriented). UUID primary keys throughout.
 
 ## Code Conventions
 
-- React functional components with hooks (useState, useEffect, useCallback, useRef)
+- React functional components with hooks (useState, useEffect, useCallback, useRef, useMemo)
 - Utility functions: `fmt(n)` for Korean number formatting, `pct(spent, budget)` for percentages, `Icon({ name, size })` for SVG icons
 - Korean commit messages: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`
 - All inline — styles, components, and logic coexist in the same HTML file
+- CSP headers configured in `vercel.json` — update when adding new CDN sources
 
 ## Deployment
 
 Hosted on Vercel. Push to `main` triggers auto-deploy. See `vercel.json` for CSP headers.
-
-## Claude Code Commands
-
-Custom commands available via `/` in Claude Code:
-- `/commit` - Korean commit message with convention
-- `/deploy` - Push to main for Vercel deploy
-- `/new-migration` - Create Supabase migration file
-- `/find-component` - Locate component/function in index.html
-- `/review-changes` - Review current changes
