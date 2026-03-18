@@ -800,6 +800,10 @@
                 grid-template-columns: 1fr;
             }
 
+            .newsletter-grid {
+                grid-template-columns: 1fr !important;
+            }
+
             .execution-header {
                 flex-direction: column;
                 gap: 8px;
@@ -3060,6 +3064,94 @@
             });
         };
 
+        // ────────────────────────────────────────────────────────────
+        // Newsletter HTML generator
+        // Generates a printable newsletter from selected schedules and board posts.
+        // ────────────────────────────────────────────────────────────
+        const generateNewsletterHTML = (config, selectedSchedules, selectedBoards, orgName) => {
+            const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            const schedulesSection = selectedSchedules.length > 0 ? `
+            <section style="margin-bottom:28px;">
+                <h2 style="font-size:16pt;color:#134E42;border-bottom:2px solid #134E42;padding-bottom:6px;margin-bottom:14px;">📅 주요 일정</h2>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#134E42;color:#fff;">
+                            <th style="padding:8px 10px;text-align:left;font-size:10pt;">날짜</th>
+                            <th style="padding:8px 10px;text-align:left;font-size:10pt;">제목</th>
+                            <th style="padding:8px 10px;text-align:center;font-size:10pt;">카테고리</th>
+                            <th style="padding:8px 10px;text-align:left;font-size:10pt;">장소</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${selectedSchedules.map((s, i) => `
+                        <tr style="background:${i % 2 === 0 ? '#fff' : '#f8f8f8'};border-bottom:1px solid #e0e0e0;">
+                            <td style="padding:8px 10px;font-size:10pt;white-space:nowrap;">${esc(s.start_date)}${s.end_date && s.end_date !== s.start_date ? ' ~ ' + esc(s.end_date) : ''}</td>
+                            <td style="padding:8px 10px;font-size:10pt;font-weight:500;">${esc(s.title)}</td>
+                            <td style="padding:8px 10px;font-size:10pt;text-align:center;">${esc(s.category)}</td>
+                            <td style="padding:8px 10px;font-size:10pt;">${esc(s.location) || '-'}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </section>` : '';
+
+            const boardsSection = selectedBoards.length > 0 ? `
+            <section style="margin-bottom:28px;">
+                <h2 style="font-size:16pt;color:#134E42;border-bottom:2px solid #134E42;padding-bottom:6px;margin-bottom:14px;">📋 주요 소식</h2>
+                ${selectedBoards.map(b => {
+                    const typeLabels = { notice: '공지', materials: '자료', report: '보고서', free: '자유' };
+                    const typeLabel = typeLabels[b.board_type] || b.board_type;
+                    const dateStr = b.created_at ? b.created_at.split('T')[0] : '';
+                    const sanitized = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(b.content || '') : esc(String(b.content || '').replace(/<[^>]*>/g, ''));
+                    return `
+                    <div style="margin-bottom:20px;padding:16px;border:1px solid #e8e8e8;border-radius:8px;background:#fafafa;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <h3 style="margin:0;font-size:12pt;color:#2D2D2D;">${esc(b.title)}</h3>
+                            <span style="font-size:9pt;color:#888;">[${esc(typeLabel)}] ${esc(dateStr)}</span>
+                        </div>
+                        <div style="font-size:10pt;line-height:1.7;color:#444;">${sanitized}</div>
+                    </div>`;
+                }).join('')}
+            </section>` : '';
+
+            return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>${esc(config.title || '뉴스레터')}</title>
+<style>
+    @page { size: A4; margin: 15mm; }
+    @media print { .no-print { display: none !important; } }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: '맑은 고딕', '나눔고딕', Arial, sans-serif; font-size: 10pt; background: #fff; color: #000; max-width: 210mm; margin: 0 auto; padding: 20mm 15mm; }
+    .btn-print { display: inline-block; margin: 20px 6px 0; padding: 10px 28px; font-size: 13px; cursor: pointer; border: none; border-radius: 6px; }
+</style>
+</head>
+<body>
+    <div class="no-print" style="text-align:center;margin-bottom:20px;">
+        <button class="btn-print" style="background:#1B6B5A;color:#fff" onclick="window.print()">🖨️ 인쇄 / PDF 저장</button>
+        <button class="btn-print" style="background:#888;color:#fff" onclick="window.close()">✕ 닫기</button>
+    </div>
+
+    <div style="text-align:center;margin-bottom:32px;padding:24px 0;border-bottom:3px solid #134E42;">
+        <h1 style="font-size:22pt;color:#134E42;margin-bottom:8px;">${esc(config.title || '뉴스레터')}</h1>
+        <p style="font-size:11pt;color:#666;">${esc(orgName)}${config.issueNumber ? ' | ' + esc(config.issueNumber) : ''} | ${esc(config.publishDate)}</p>
+    </div>
+
+    ${config.greeting ? `<div style="margin-bottom:24px;padding:16px 20px;background:#f0f7f5;border-radius:8px;font-size:11pt;line-height:1.8;color:#333;white-space:pre-line;">${esc(config.greeting)}</div>` : ''}
+
+    ${schedulesSection}
+    ${boardsSection}
+
+    ${config.closing ? `<div style="margin-top:24px;padding:16px 20px;background:#f0f7f5;border-radius:8px;font-size:11pt;line-height:1.8;color:#333;white-space:pre-line;">${esc(config.closing)}</div>` : ''}
+
+    <div style="margin-top:32px;padding-top:16px;border-top:2px solid #134E42;text-align:center;font-size:9pt;color:#888;">
+        <p>${esc(orgName)} · 아름다운재단 2026 공익단체 인큐베이팅 지원사업</p>
+    </div>
+</body>
+</html>`;
+        };
+
         // 로그인 컴포넌트
         function LoginPage({ onLogin }) {
             const [username, setUsername] = useState('');
@@ -3240,6 +3332,15 @@
             const [googleTokenClient, setGoogleTokenClient] = useState(null);
             const gapiInited = useRef(false);
             const gisInited = useRef(false);
+
+            // ===== 뉴스레터 상태 =====
+            const [newsletterConfig, setNewsletterConfig] = useState({
+                title: '', issueNumber: '', publishDate: new Date().toISOString().split('T')[0],
+                greeting: '', closing: '', dateFrom: '', dateTo: '',
+                scheduleCategory: 'all', boardCategory: 'all',
+            });
+            const [selectedScheduleIds, setSelectedScheduleIds] = useState(new Set());
+            const [selectedBoardIds, setSelectedBoardIds] = useState(new Set());
 
             // Google API 초기화
             useEffect(() => {
@@ -10406,6 +10507,273 @@
                 );
             };
 
+            // ===== 뉴스레터 페이지 렌더링 =====
+            const renderNewsletter = () => {
+                const SCHEDULE_CATS = ['all', '교육', '캠페인', '회의', '평가', '기타'];
+                const BOARD_TYPES = [
+                    { value: 'all', label: '전체' }, { value: 'notice', label: '공지' },
+                    { value: 'materials', label: '자료' }, { value: 'report', label: '보고서' }, { value: 'free', label: '자유' }
+                ];
+
+                const filteredSchedules = (data.schedules || []).filter(s => {
+                    if (newsletterConfig.dateFrom && s.start_date < newsletterConfig.dateFrom) return false;
+                    if (newsletterConfig.dateTo && s.start_date > newsletterConfig.dateTo) return false;
+                    if (newsletterConfig.scheduleCategory !== 'all' && s.category !== newsletterConfig.scheduleCategory) return false;
+                    return true;
+                });
+
+                const filteredBoards = (data.boards || []).filter(b => {
+                    const createdDate = b.created_at ? b.created_at.split('T')[0] : '';
+                    if (newsletterConfig.dateFrom && createdDate < newsletterConfig.dateFrom) return false;
+                    if (newsletterConfig.dateTo && createdDate > newsletterConfig.dateTo) return false;
+                    if (newsletterConfig.boardCategory !== 'all' && b.board_type !== newsletterConfig.boardCategory) return false;
+                    return true;
+                });
+
+                const toggleSchedule = (id) => {
+                    setSelectedScheduleIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+                };
+                const toggleAllSchedules = () => {
+                    setSelectedScheduleIds(prev => prev.size === filteredSchedules.length ? new Set() : new Set(filteredSchedules.map(s => s.id)));
+                };
+                const toggleBoard = (id) => {
+                    setSelectedBoardIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+                };
+                const toggleAllBoards = () => {
+                    setSelectedBoardIds(prev => prev.size === filteredBoards.length ? new Set() : new Set(filteredBoards.map(b => b.id)));
+                };
+
+                const handlePrintNewsletter = () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const html = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME);
+                    const pw = window.open('', '_blank', 'width=900,height=700');
+                    if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+                    pw.document.write(html);
+                    pw.document.close();
+                };
+
+                // Helper: strip HTML tags for board content preview
+                const stripHtml = (html) => { try { return new DOMParser().parseFromString(html || '', 'text/html').body.textContent || ''; } catch { return String(html || '').replace(/<[^>]*>/g, ''); } };
+
+                const selectedSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                const selectedBoardsArr = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+
+                return (
+                    <div>
+                        <h1 className="section-title">📰 뉴스레터 제작</h1>
+
+                        <div className="newsletter-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+                            {/* 좌측: 설정 & 콘텐츠 선택 */}
+                            <div>
+                                {/* 뉴스레터 정보 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <h3 style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>뉴스레터 정보</h3>
+                                    <div className="schedule-form-group">
+                                        <label>제목</label>
+                                        <input type="text" placeholder="예: 청년노동자인권센터 뉴스레터" value={newsletterConfig.title}
+                                            onChange={e => setNewsletterConfig(p => ({...p, title: e.target.value}))} />
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                        <div className="schedule-form-group">
+                                            <label>발행 호수</label>
+                                            <input type="text" placeholder="예: 제3호" value={newsletterConfig.issueNumber}
+                                                onChange={e => setNewsletterConfig(p => ({...p, issueNumber: e.target.value}))} />
+                                        </div>
+                                        <div className="schedule-form-group">
+                                            <label>발행일</label>
+                                            <input type="date" value={newsletterConfig.publishDate}
+                                                onChange={e => setNewsletterConfig(p => ({...p, publishDate: e.target.value}))} />
+                                        </div>
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>인사말</label>
+                                        <textarea rows={3} placeholder="뉴스레터 상단에 표시할 인사말" value={newsletterConfig.greeting}
+                                            onChange={e => setNewsletterConfig(p => ({...p, greeting: e.target.value}))}
+                                            style={{ width: '100%', resize: 'vertical', padding: 8, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>마무리말</label>
+                                        <textarea rows={2} placeholder="뉴스레터 하단에 표시할 마무리말" value={newsletterConfig.closing}
+                                            onChange={e => setNewsletterConfig(p => ({...p, closing: e.target.value}))}
+                                            style={{ width: '100%', resize: 'vertical', padding: 8, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+                                    </div>
+                                </div>
+
+                                {/* 기간 필터 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <h3 style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>기간 필터</h3>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <input type="date" value={newsletterConfig.dateFrom}
+                                            onChange={e => setNewsletterConfig(p => ({...p, dateFrom: e.target.value}))} />
+                                        <span>~</span>
+                                        <input type="date" value={newsletterConfig.dateTo}
+                                            onChange={e => setNewsletterConfig(p => ({...p, dateTo: e.target.value}))} />
+                                    </div>
+                                </div>
+
+                                {/* 일정 선택 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>📅 일정 선택 ({selectedScheduleIds.size}/{filteredSchedules.length})</h3>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <select value={newsletterConfig.scheduleCategory} onChange={e => setNewsletterConfig(p => ({...p, scheduleCategory: e.target.value}))}
+                                                style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}>
+                                                {SCHEDULE_CATS.map(c => <option key={c} value={c}>{c === 'all' ? '전체' : c}</option>)}
+                                            </select>
+                                            <button onClick={toggleAllSchedules} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', background: '#f8f8f8' }}>
+                                                {selectedScheduleIds.size === filteredSchedules.length && filteredSchedules.length > 0 ? '전체해제' : '전체선택'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {filteredSchedules.length === 0 ? (
+                                        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 16 }}>해당 기간의 일정이 없습니다.</p>
+                                    ) : (
+                                        <div style={{ maxHeight: 250, overflowY: 'auto' }}>
+                                            {filteredSchedules.map(s => (
+                                                <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 13 }}>
+                                                    <input type="checkbox" checked={selectedScheduleIds.has(s.id)} onChange={() => toggleSchedule(s.id)} />
+                                                    <span style={{ color: '#888', whiteSpace: 'nowrap', fontSize: 12 }}>{s.start_date}</span>
+                                                    <span style={{ flex: 1, fontWeight: 500 }}>{s.title}</span>
+                                                    <span style={{ background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: 10, fontSize: 11 }}>{s.category}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 게시글 선택 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>📋 게시글 선택 ({selectedBoardIds.size}/{filteredBoards.length})</h3>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <select value={newsletterConfig.boardCategory} onChange={e => setNewsletterConfig(p => ({...p, boardCategory: e.target.value}))}
+                                                style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}>
+                                                {BOARD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                            </select>
+                                            <button onClick={toggleAllBoards} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', background: '#f8f8f8' }}>
+                                                {selectedBoardIds.size === filteredBoards.length && filteredBoards.length > 0 ? '전체해제' : '전체선택'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {filteredBoards.length === 0 ? (
+                                        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 16 }}>해당 기간의 게시글이 없습니다.</p>
+                                    ) : (
+                                        <div style={{ maxHeight: 250, overflowY: 'auto' }}>
+                                            {filteredBoards.map(b => {
+                                                const typeLabels = { notice: '📢 공지', materials: '📁 자료', report: '📊 보고서', free: '💬 자유' };
+                                                return (
+                                                    <label key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 13 }}>
+                                                        <input type="checkbox" checked={selectedBoardIds.has(b.id)} onChange={() => toggleBoard(b.id)} />
+                                                        <span style={{ color: '#888', whiteSpace: 'nowrap', fontSize: 11 }}>{typeLabels[b.board_type] || b.board_type}</span>
+                                                        <span style={{ flex: 1, fontWeight: 500 }}>{b.title}</span>
+                                                        <span style={{ color: '#aaa', fontSize: 11 }}>{b.created_at ? b.created_at.split('T')[0] : ''}</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 우측: 미리보기 */}
+                            <div>
+                                <div className="card" style={{ position: 'sticky', top: 20 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>미리보기</h3>
+                                        <button className="btn btn-primary" onClick={handlePrintNewsletter}
+                                            style={{ padding: '8px 20px', fontSize: 13 }}>
+                                            🖨️ 인쇄하기
+                                        </button>
+                                    </div>
+
+                                    <div style={{ border: '1px solid #EBE8E1', borderRadius: 8, padding: 24, background: '#fff', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
+                                        {/* Header */}
+                                        <div style={{ textAlign: 'center', marginBottom: 20, paddingBottom: 16, borderBottom: '2px solid #134E42' }}>
+                                            <h2 style={{ fontSize: 18, color: '#134E42', margin: '0 0 4px' }}>{newsletterConfig.title || '뉴스레터 제목을 입력하세요'}</h2>
+                                            <p style={{ color: '#999', fontSize: 12, margin: 0 }}>
+                                                {DEFAULT_ORG_NAME}{newsletterConfig.issueNumber ? ` | ${newsletterConfig.issueNumber}` : ''} | {newsletterConfig.publishDate}
+                                            </p>
+                                        </div>
+
+                                        {/* Greeting */}
+                                        {newsletterConfig.greeting && (
+                                            <div style={{ margin: '0 0 16px', padding: '12px 14px', background: '#f0f7f5', borderRadius: 6, whiteSpace: 'pre-line' }}>
+                                                {newsletterConfig.greeting}
+                                            </div>
+                                        )}
+
+                                        {/* Selected schedules preview */}
+                                        {selectedSchedules.length > 0 && (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <h4 style={{ color: '#134E42', borderBottom: '1px solid #134E42', paddingBottom: 4, marginBottom: 8 }}>📅 주요 일정</h4>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                                    <thead>
+                                                        <tr style={{ background: '#f5f5f5' }}>
+                                                            <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>날짜</th>
+                                                            <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>제목</th>
+                                                            <th style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>카테고리</th>
+                                                            <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>장소</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {selectedSchedules.map(s => (
+                                                            <tr key={s.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                                                <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{s.start_date}</td>
+                                                                <td style={{ padding: '6px 8px', fontWeight: 500 }}>{s.title}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'center' }}>{s.category}</td>
+                                                                <td style={{ padding: '6px 8px' }}>{s.location || '-'}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+
+                                        {/* Selected boards preview */}
+                                        {selectedBoardsArr.length > 0 && (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <h4 style={{ color: '#134E42', borderBottom: '1px solid #134E42', paddingBottom: 4, marginBottom: 8 }}>📋 주요 소식</h4>
+                                                {selectedBoardsArr.map(b => (
+                                                    <div key={b.id} style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid #eee', borderRadius: 6, background: '#fafafa' }}>
+                                                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{b.title}</div>
+                                                        <div style={{ color: '#666', fontSize: 12 }}>{stripHtml(b.content).slice(0, 200)}{stripHtml(b.content).length > 200 ? '...' : ''}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Closing */}
+                                        {newsletterConfig.closing && (
+                                            <div style={{ margin: '16px 0 0', padding: '12px 14px', background: '#f0f7f5', borderRadius: 6, whiteSpace: 'pre-line' }}>
+                                                {newsletterConfig.closing}
+                                            </div>
+                                        )}
+
+                                        {/* Empty state */}
+                                        {selectedSchedules.length === 0 && selectedBoardsArr.length === 0 && !newsletterConfig.greeting && !newsletterConfig.closing && (
+                                            <div style={{ textAlign: 'center', color: '#ccc', padding: '60px 20px' }}>
+                                                <p style={{ fontSize: 32, marginBottom: 8 }}>📰</p>
+                                                <p>일정이나 게시글을 선택하면 미리보기가 표시됩니다</p>
+                                            </div>
+                                        )}
+
+                                        {/* Footer */}
+                                        <div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid #ddd', textAlign: 'center', fontSize: 11, color: '#aaa' }}>
+                                            {DEFAULT_ORG_NAME} · 아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
             // 관리자 페이지 렌더링
             const renderAdmin = () => {
                 return (
@@ -10996,6 +11364,7 @@
                     case "gallery": return renderGallery();
                     case "board": return renderBoard();
                     case "guide": return renderGuide();
+                    case "newsletter": return renderNewsletter();
                     case "admin": return currentUser?.role === 'admin' ? renderAdmin() : renderDashboard();
                     default: return renderDashboard();
                 }
@@ -11045,6 +11414,7 @@
                                 { id: 'gallery', label: '📸 갤러리', description: '현장 사진 및 결과물' },
                                 { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' },
                                 { id: 'guide', label: '📖 회계가이드', description: '회계처리방식 안내' },
+                                { id: 'newsletter', label: '📰 뉴스레터', description: '일정·게시글 뉴스레터 제작' },
                                 ...(currentUser.role === 'admin' ? [{ id: 'admin', label: '⚙️ 관리자', description: '사용자 및 시스템 관리' }] : [])
                             ].map(nav => (
                                 <button
