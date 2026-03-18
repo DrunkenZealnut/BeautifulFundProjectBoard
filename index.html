@@ -3065,6 +3065,94 @@
         };
 
         // ────────────────────────────────────────────────────────────
+        // HWPX (OWPML) direct download utility
+        // Generates a .hwpx file (ZIP containing OWPML XML) using JSZip.
+        // ────────────────────────────────────────────────────────────
+        const HWPX_VERSION_XML = '<?xml version="1.0" encoding="UTF-8"?>\n<hv:HWPVersion xmlns:hv="http://www.hancom.co.kr/hwpml/2011/version" major="1" minor="2" micro="0" buildnum="0"/>';
+        const HWPX_CONTAINER_XML = '<?xml version="1.0" encoding="UTF-8"?>\n<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="Contents/content.hpf" media-type="application/hwpml-package+xml"/></rootfiles></container>';
+        const HWPX_CONTENT_HPF = '<?xml version="1.0" encoding="UTF-8"?>\n<opf:package xmlns:opf="http://www.idpf.org/2007/opf" version="1.0" unique-identifier="bookid"><opf:manifest><opf:item id="header" href="header.xml" media-type="application/xml"/><opf:item id="section0" href="section0.xml" media-type="application/xml"/></opf:manifest><opf:spine><opf:itemref idref="section0"/></opf:spine></opf:package>';
+        const HWPX_HEADER_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
+  <hh:beginNum page="1" footnote="1" endnote="1"/>
+  <hh:refList>
+    <hh:fontfaces>
+      <hh:fontface lang="HANGUL"><hh:font id="0" face="함초롬돋움" type="TTF"/></hh:fontface>
+      <hh:fontface lang="LATIN"><hh:font id="0" face="함초롬돋움" type="TTF"/></hh:fontface>
+      <hh:fontface lang="HANJA"><hh:font id="0" face="함초롬돋움" type="TTF"/></hh:fontface>
+    </hh:fontfaces>
+    <hh:charProperties>
+      <hh:charPr id="0" height="1000" bold="0"/>
+      <hh:charPr id="1" height="1800" bold="1"/>
+      <hh:charPr id="2" height="1400" bold="1"/>
+    </hh:charProperties>
+    <hh:paraProperties>
+      <hh:paraPr id="0" align="JUSTIFY"><hh:spacing line="160" lineType="PERCENT"/></hh:paraPr>
+      <hh:paraPr id="1" align="CENTER"><hh:spacing line="160" lineType="PERCENT"/></hh:paraPr>
+    </hh:paraProperties>
+  </hh:refList>
+  <hh:secProperties>
+    <hh:secPr textDirection="HORIZONTAL" spaceColumns="1134">
+      <hh:pageSize width="59528" height="84188"/>
+      <hh:pageMar header="4252" footer="4252" left="4252" right="4252" top="5668" bottom="4252"/>
+    </hh:secPr>
+  </hh:secProperties>
+</hh:head>`;
+
+        const generateHWPX = async (title, sections, filename) => {
+            if (!window.JSZip) { alert('JSZip 라이브러리가 로드되지 않았습니다.'); return; }
+            const ex = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+            // Build section0.xml body
+            let body = '';
+            let pId = 0;
+            sections.forEach(sec => {
+                if (sec.type === 'paragraph') {
+                    const charRef = sec.bold ? (sec.fontSize >= 16 ? '1' : '2') : '0';
+                    const paraRef = sec.align === 'center' ? '1' : '0';
+                    body += `  <hp:p id="${pId++}" paraPrIDRef="${paraRef}" styleIDRef="0"><hp:run charPrIDRef="${charRef}"><hp:t>${ex(sec.text)}</hp:t></hp:run></hp:p>\n`;
+                } else if (sec.type === 'table' && sec.headers && sec.rows) {
+                    const colCnt = sec.headers.length;
+                    const rowCnt = sec.rows.length + 1;
+                    let tbl = `  <hp:p id="${pId++}" paraPrIDRef="0" styleIDRef="0"><hp:run charPrIDRef="0"><hp:tbl colCnt="${colCnt}" rowCnt="${rowCnt}" cellSpacing="0" borderFill="1">\n`;
+                    // Header row
+                    tbl += '    <hp:tr>';
+                    sec.headers.forEach(h => { tbl += `<hp:tc><hp:p paraPrIDRef="0"><hp:run charPrIDRef="2"><hp:t>${ex(h)}</hp:t></hp:run></hp:p></hp:tc>`; });
+                    tbl += '</hp:tr>\n';
+                    // Data rows
+                    sec.rows.forEach(row => {
+                        tbl += '    <hp:tr>';
+                        row.forEach(cell => { tbl += `<hp:tc><hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:t>${ex(cell)}</hp:t></hp:run></hp:p></hp:tc>`; });
+                        tbl += '</hp:tr>\n';
+                    });
+                    tbl += '  </hp:tbl></hp:run></hp:p>\n';
+                    body += tbl;
+                }
+            });
+
+            const section0 = `<?xml version="1.0" encoding="UTF-8"?>\n<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">\n${body}</hs:sec>`;
+
+            const zip = new JSZip();
+            zip.file('mimetype', 'application/hwp+zip', { compression: 'STORE' });
+            zip.file('version.xml', HWPX_VERSION_XML);
+            zip.file('META-INF/container.xml', HWPX_CONTAINER_XML);
+            zip.file('Contents/content.hpf', HWPX_CONTENT_HPF);
+            zip.file('Contents/header.xml', HWPX_HEADER_XML);
+            zip.file('Contents/section0.xml', section0);
+
+            try {
+                const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = filename;
+                document.body.appendChild(a); a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('HWPX 생성 중 오류가 발생했습니다.');
+            }
+        };
+
+        // ────────────────────────────────────────────────────────────
         // Newsletter HTML generator
         // Generates a printable newsletter from selected schedules and board posts.
         // ────────────────────────────────────────────────────────────
@@ -8800,11 +8888,44 @@
                                                 onClick={() => generatePDF(getSettlementReportHTML(), `정산보고서_${formatLocalDate()}.pdf`)}
                                             >📥 PDF</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => {
+                                                    const execs = data?.budgetExecutions || [];
+                                                    const totalSpent = execs.reduce((s, e) => s + (e.amount || 0), 0);
+                                                    generateHWPX('정산보고서', [
+                                                        { type: 'paragraph', text: '아름다운재단 2026 공익단체 인큐베이팅 지원사업 정산보고서', bold: true, fontSize: 18, align: 'center' },
+                                                        { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}`, align: 'center' },
+                                                        { type: 'paragraph', text: `총 예산: ${fmt(CONFIG.TOTAL_BUDGET)}원 | 총 집행: ${fmt(totalSpent)}원 | 집행률: ${pct(totalSpent, CONFIG.TOTAL_BUDGET)}% | 잔여: ${fmt(CONFIG.TOTAL_BUDGET - totalSpent)}원` },
+                                                        { type: 'table', headers: ['집행일', '카테고리', '소분류', '항목', '금액', '결제방법', '수취인', '상태'],
+                                                          rows: execs.map(e => [e.execution_date||'', e.category_name||'', e.subcategory_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'', EXECUTION_STATUS[e.status]?.label||e.status||'']) },
+                                                        { type: 'paragraph', text: `합계: ${fmt(totalSpent)}원` }
+                                                    ], `정산보고서_${formatLocalDate()}.hwpx`);
+                                                }}
+                                            >📄 HWPX</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => { const pw = window.open('', '_blank', 'width=900,height=700'); pw.document.write(getMonthlyReportHTML()); pw.document.close(); pw.print(); }}
                                             >📋 월별 명세서</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => generatePDF(getMonthlyReportHTML(), `월별명세서_${formatLocalDate()}.pdf`)}
                                             >📥 PDF</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => {
+                                                    const execs = data?.budgetExecutions || [];
+                                                    const monthly = {};
+                                                    execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7); if (m) { if (!monthly[m]) monthly[m] = []; monthly[m].push(e); } });
+                                                    const secs = [
+                                                        { type: 'paragraph', text: '월별 집행 명세서', bold: true, fontSize: 18, align: 'center' },
+                                                        { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}`, align: 'center' },
+                                                    ];
+                                                    Object.keys(monthly).sort().forEach(m => {
+                                                        const items = monthly[m]; const sum = items.reduce((s, e) => s + (e.amount || 0), 0);
+                                                        secs.push({ type: 'paragraph', text: `${m.replace('-', '년 ')}월 (${items.length}건, ${fmt(sum)}원)`, bold: true, fontSize: 14 });
+                                                        secs.push({ type: 'table', headers: ['집행일', '카테고리', '항목', '금액', '결제방법', '수취인'],
+                                                            rows: [...items.map(e => [e.execution_date||'', e.category_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'']),
+                                                                   ['', '', '소계', fmt(sum)+'원', '', '']] });
+                                                    });
+                                                    generateHWPX('월별명세서', secs, `월별명세서_${formatLocalDate()}.hwpx`);
+                                                }}
+                                            >📄 HWPX</button>
                                         </div>
                                     </div>
 
@@ -10689,6 +10810,27 @@
                                             style={{ padding: '8px 20px', fontSize: 13 }}>
                                             🖨️ 인쇄하기
                                         </button>
+                                        <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }}
+                                            onClick={() => {
+                                                const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                                                const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                                                if (selSchedules.length === 0 && selBoards.length === 0) { alert('뉴스레터에 포함할 항목을 선택해주세요.'); return; }
+                                                const secs = [];
+                                                secs.push({ type: 'paragraph', text: newsletterConfig.title || '뉴스레터', bold: true, fontSize: 18, align: 'center' });
+                                                secs.push({ type: 'paragraph', text: `${DEFAULT_ORG_NAME}${newsletterConfig.issueNumber ? ' | ' + newsletterConfig.issueNumber : ''} | ${newsletterConfig.publishDate}`, align: 'center' });
+                                                if (newsletterConfig.greeting) secs.push({ type: 'paragraph', text: newsletterConfig.greeting });
+                                                if (selSchedules.length > 0) {
+                                                    secs.push({ type: 'paragraph', text: '주요 일정', bold: true, fontSize: 14 });
+                                                    secs.push({ type: 'table', headers: ['날짜', '제목', '카테고리', '장소'],
+                                                        rows: selSchedules.map(s => [s.start_date||'', s.title||'', s.category||'', s.location||'-']) });
+                                                }
+                                                if (selBoards.length > 0) {
+                                                    secs.push({ type: 'paragraph', text: '주요 소식', bold: true, fontSize: 14 });
+                                                    selBoards.forEach(b => { secs.push({ type: 'paragraph', text: b.title, bold: true }); secs.push({ type: 'paragraph', text: (b.content||'').replace(/<[^>]*>/g, '').slice(0, 500) }); });
+                                                }
+                                                if (newsletterConfig.closing) secs.push({ type: 'paragraph', text: newsletterConfig.closing });
+                                                generateHWPX('뉴스레터', secs, `뉴스레터_${formatLocalDate()}.hwpx`);
+                                            }}>📄 HWPX</button>
                                     </div>
 
                                     <div style={{ border: '1px solid #EBE8E1', borderRadius: 8, padding: 24, background: '#fff', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
