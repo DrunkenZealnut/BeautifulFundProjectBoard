@@ -3117,22 +3117,57 @@
             let body = '';
             let pId = 1000000000;
 
-            // First paragraph — MUST contain secPr + colPr (identical to base template)
-            const firstText = sections.length > 0 && sections[0].type === 'paragraph' ? ex(sections[0].text) : '';
-            body += `<hp:p id="${pId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0">${secPr}<hp:ctrl><hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/></hp:ctrl></hp:run><hp:run charPrIDRef="0"><hp:t>${firstText}</hp:t></hp:run><hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="42520" flags="393216"/></hp:linesegarray></hp:p>`;
+            // Style mapping: charPrIDRef 0=normal 10pt, 1=normal(fontRef1), 5=16pt blue, 7=18pt bold
+            //                paraPrIDRef 0=justify, 20=center
+            const charRef = (sec) => sec.bold ? '7' : '0';
+            const paraRef = (sec) => sec.align === 'center' ? '20' : '0';
+            const mkP = (text, sec = {}) => `<hp:p id="${pId++}" paraPrIDRef="${paraRef(sec)}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="${charRef(sec)}"><hp:t>${ex(text)}</hp:t></hp:run></hp:p>`;
 
-            // Remaining sections (skip first if it was a paragraph)
+            // OWPML table builder
+            const BODY_WIDTH = 42520; // A4 body width in HWPUNIT
+            const mkTable = (headers, rows) => {
+                const colCnt = headers.length;
+                const rowCnt = rows.length + 1;
+                const colW = Math.floor(BODY_WIDTH / colCnt);
+                const rowH = 2400;
+                let tblId = pId++;
+                let tbl = `<hp:p id="${tblId}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:tbl id="${tblId}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rowCnt}" colCnt="${colCnt}" cellSpacing="0" borderFillIDRef="3" noAdjust="0">`;
+                tbl += `<hp:sz width="${BODY_WIDTH}" widthRelTo="ABSOLUTE" height="${rowH * rowCnt}" heightRelTo="ABSOLUTE" protect="0"/>`;
+                tbl += '<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>';
+                tbl += '<hp:outMargin left="0" right="0" top="0" bottom="0"/>';
+                tbl += '<hp:inMargin left="0" right="0" top="0" bottom="0"/>';
+
+                const mkCell = (text, colIdx, rowIdx, isHeader) => {
+                    const cRef = isHeader ? '7' : '0'; // bold for headers
+                    const w = (colIdx === colCnt - 1) ? BODY_WIDTH - colW * (colCnt - 1) : colW;
+                    return `<hp:tc name="" header="${isHeader ? '1' : '0'}" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="3"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0"><hp:p paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0" id="${pId++}"><hp:run charPrIDRef="${cRef}"><hp:t>${ex(text)}</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="${colIdx}" rowAddr="${rowIdx}"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${w}" height="${rowH}"/><hp:cellMargin left="510" right="510" top="142" bottom="142"/></hp:tc>`;
+                };
+
+                // Header row
+                tbl += '<hp:tr>';
+                headers.forEach((h, ci) => { tbl += mkCell(h, ci, 0, true); });
+                tbl += '</hp:tr>';
+                // Data rows
+                rows.forEach((row, ri) => {
+                    tbl += '<hp:tr>';
+                    row.forEach((cell, ci) => { tbl += mkCell(cell, ci, ri + 1, false); });
+                    tbl += '</hp:tr>';
+                });
+                tbl += '</hp:tbl></hp:run></hp:p>';
+                return tbl;
+            };
+
+            // First paragraph — MUST contain secPr + colPr
+            body += `<hp:p id="${pId++}" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0">${secPr}<hp:ctrl><hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/></hp:ctrl></hp:run><hp:run charPrIDRef="7"><hp:t>${sections.length > 0 && sections[0].type === 'paragraph' ? ex(sections[0].text) : ''}</hp:t></hp:run><hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="42520" flags="393216"/></hp:linesegarray></hp:p>`;
+
+            // Remaining sections
             const startIdx = (sections.length > 0 && sections[0].type === 'paragraph') ? 1 : 0;
             for (let i = startIdx; i < sections.length; i++) {
                 const sec = sections[i];
                 if (sec.type === 'paragraph') {
-                    body += `<hp:p id="${pId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t>${ex(sec.text)}</hp:t></hp:run></hp:p>`;
+                    body += mkP(sec.text, sec);
                 } else if (sec.type === 'table' && sec.headers && sec.rows) {
-                    // Render table as tab-separated text lines for maximum compatibility
-                    body += `<hp:p id="${pId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t>${ex(sec.headers.join('\t'))}</hp:t></hp:run></hp:p>`;
-                    sec.rows.forEach(row => {
-                        body += `<hp:p id="${pId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t>${ex(row.join('\t'))}</hp:t></hp:run></hp:p>`;
-                    });
+                    body += mkTable(sec.headers, sec.rows);
                 }
             }
 
