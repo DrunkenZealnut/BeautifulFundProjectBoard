@@ -3139,16 +3139,18 @@
             zip.file('Contents/header.xml', HWPX_HEADER_XML);
             zip.file('Contents/section0.xml', section0);
 
+            let url;
             try {
                 const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-                const url = URL.createObjectURL(blob);
+                url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url; a.download = filename;
                 document.body.appendChild(a); a.click();
                 document.body.removeChild(a);
-                URL.revokeObjectURL(url);
             } catch (err) {
                 alert('HWPX 생성 중 오류가 발생했습니다.');
+            } finally {
+                if (url) URL.revokeObjectURL(url);
             }
         };
 
@@ -8911,7 +8913,7 @@
                                                 onClick={() => {
                                                     const execs = data?.budgetExecutions || [];
                                                     const monthly = {};
-                                                    execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7); if (m) { if (!monthly[m]) monthly[m] = []; monthly[m].push(e); } });
+                                                    execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7) || '미기재'; if (!monthly[m]) monthly[m] = []; monthly[m].push(e); });
                                                     const secs = [
                                                         { type: 'paragraph', text: '월별 집행 명세서', bold: true, fontSize: 18, align: 'center' },
                                                         { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}`, align: 'center' },
@@ -10826,7 +10828,7 @@
                                                 }
                                                 if (selBoards.length > 0) {
                                                     secs.push({ type: 'paragraph', text: '주요 소식', bold: true, fontSize: 14 });
-                                                    selBoards.forEach(b => { secs.push({ type: 'paragraph', text: b.title, bold: true }); secs.push({ type: 'paragraph', text: (b.content||'').replace(/<[^>]*>/g, '').slice(0, 500) }); });
+                                                    selBoards.forEach(b => { secs.push({ type: 'paragraph', text: b.title, bold: true }); secs.push({ type: 'paragraph', text: (b.content||'').replace(/<[^>]*>/g, '') }); });
                                                 }
                                                 if (newsletterConfig.closing) secs.push({ type: 'paragraph', text: newsletterConfig.closing });
                                                 generateHWPX('뉴스레터', secs, `뉴스레터_${formatLocalDate()}.hwpx`);
