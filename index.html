@@ -3072,7 +3072,7 @@
                     const typeLabels = { notice: '공지', materials: '자료', report: '보고서', free: '자유' };
                     const typeLabel = typeLabels[b.board_type] || b.board_type;
                     const dateStr = b.created_at ? b.created_at.split('T')[0] : '';
-                    const sanitized = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(b.content || '') : esc(b.content);
+                    const sanitized = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(b.content || '') : esc(String(b.content || '').replace(/<[^>]*>/g, ''));
                     return `
                     <div style="margin-bottom:20px;padding:16px;border:1px solid #e8e8e8;border-radius:8px;background:#fafafa;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -10524,7 +10524,7 @@
                 };
 
                 // Helper: strip HTML tags for board content preview
-                const stripHtml = (html) => { const tmp = document.createElement('div'); tmp.innerHTML = html || ''; return tmp.textContent || tmp.innerText || ''; };
+                const stripHtml = (html) => { try { return new DOMParser().parseFromString(html || '', 'text/html').body.textContent || ''; } catch { return String(html || '').replace(/<[^>]*>/g, ''); } };
 
                 const selectedSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
                 const selectedBoardsArr = (data.boards || []).filter(b => selectedBoardIds.has(b.id));

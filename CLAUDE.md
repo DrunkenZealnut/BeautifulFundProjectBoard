@@ -33,7 +33,7 @@ No package.json, no npm install, no linting, no test runner configured.
 
 Execute in Supabase SQL Editor in this order:
 1. `supabase-schema-safe.sql` — Creates all 11 tables, indexes, RLS policies, sample data
-2. `supabase-migration-auth.sql` — Users RLS + default admin password (`admin/admin1234`)
+2. `supabase-migration-auth.sql` — Users RLS + 로컬 개발용 초기 관리자 계정 생성 (배포 전 반드시 변경)
 
 Additional migrations (run as needed):
 - `supabase-migration-rls-improved.sql` — Improved RLS policies
@@ -85,7 +85,7 @@ State-driven (no URL routing) via `currentPage`:
 - Login checks `users` table (username + SHA-256 hashed password)
 - Session stored in `localStorage` (`bf_user_session`), 24h expiry
 - Admin page visible only to `role = 'admin'`
-- Default admin: `admin` / `admin1234`
+- 초기 관리자 계정은 로컬 개발 전용 — 배포 전 반드시 변경 필수
 
 ### File variants
 
