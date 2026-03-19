@@ -3093,48 +3093,60 @@
         // ────────────────────────────────────────────────────────────
         const generateNewsletterHTML = (config, selectedSchedules, selectedBoards, orgName) => {
             const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const catColors = { '교육': '#6366f1', '캠페인': '#ec4899', '회의': '#f59e0b', '평가': '#10b981', '기타': '#8b5cf6' };
+            const typeColors = { notice: '#ef4444', materials: '#3b82f6', report: '#8b5cf6', free: '#6b7280' };
+            const typeLabels = { notice: '공지', materials: '자료', report: '보고서', free: '자유' };
 
             const schedulesSection = selectedSchedules.length > 0 ? `
-            <section style="margin-bottom:28px;">
-                <h2 style="font-size:16pt;color:#134E42;border-bottom:2px solid #134E42;padding-bottom:6px;margin-bottom:14px;">📅 주요 일정</h2>
-                <table style="width:100%;border-collapse:collapse;">
-                    <thead>
-                        <tr style="background:#134E42;color:#fff;">
-                            <th style="padding:8px 10px;text-align:left;font-size:10pt;">날짜</th>
-                            <th style="padding:8px 10px;text-align:left;font-size:10pt;">제목</th>
-                            <th style="padding:8px 10px;text-align:center;font-size:10pt;">카테고리</th>
-                            <th style="padding:8px 10px;text-align:left;font-size:10pt;">장소</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${selectedSchedules.map((s, i) => `
-                        <tr style="background:${i % 2 === 0 ? '#fff' : '#f8f8f8'};border-bottom:1px solid #e0e0e0;">
-                            <td style="padding:8px 10px;font-size:10pt;white-space:nowrap;">${esc(s.start_date)}${s.end_date && s.end_date !== s.start_date ? ' ~ ' + esc(s.end_date) : ''}</td>
-                            <td style="padding:8px 10px;font-size:10pt;font-weight:500;">${esc(s.title)}</td>
-                            <td style="padding:8px 10px;font-size:10pt;text-align:center;">${esc(s.category)}</td>
-                            <td style="padding:8px 10px;font-size:10pt;">${esc(s.location) || '-'}</td>
-                        </tr>`).join('')}
-                    </tbody>
-                </table>
+            <section style="margin-bottom:36px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+                    <div style="width:4px;height:28px;background:linear-gradient(180deg,#6366f1,#a855f7);border-radius:2px;"></div>
+                    <h2 style="font-size:15pt;font-weight:700;color:#1e1e2e;letter-spacing:-0.5px;">주요 일정</h2>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    ${selectedSchedules.map(s => {
+                        const catColor = catColors[s.category] || '#6b7280';
+                        return `
+                    <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;background:#fafafa;border-radius:14px;border:1px solid #f0f0f0;transition:all .2s;">
+                        <div style="min-width:56px;text-align:center;">
+                            <div style="font-size:9pt;color:#999;font-weight:500;">${esc((s.start_date||'').slice(0,7))}</div>
+                            <div style="font-size:18pt;font-weight:800;color:#1e1e2e;line-height:1.1;">${esc((s.start_date||'').slice(8))}</div>
+                        </div>
+                        <div style="width:1px;height:36px;background:#e5e5e5;"></div>
+                        <div style="flex:1;">
+                            <div style="font-size:11pt;font-weight:600;color:#1e1e2e;margin-bottom:4px;">${esc(s.title)}</div>
+                            <div style="font-size:9pt;color:#888;">${esc(s.location) || ''}</div>
+                        </div>
+                        <span style="padding:4px 12px;background:${catColor}15;color:${catColor};font-size:8.5pt;font-weight:600;border-radius:20px;">${esc(s.category)}</span>
+                    </div>`;
+                    }).join('')}
+                </div>
             </section>` : '';
 
             const boardsSection = selectedBoards.length > 0 ? `
-            <section style="margin-bottom:28px;">
-                <h2 style="font-size:16pt;color:#134E42;border-bottom:2px solid #134E42;padding-bottom:6px;margin-bottom:14px;">📋 주요 소식</h2>
-                ${selectedBoards.map(b => {
-                    const typeLabels = { notice: '공지', materials: '자료', report: '보고서', free: '자유' };
-                    const typeLabel = typeLabels[b.board_type] || b.board_type;
-                    const dateStr = b.created_at ? b.created_at.split('T')[0] : '';
-                    const sanitized = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(b.content || '') : esc(String(b.content || '').replace(/<[^>]*>/g, ''));
-                    return `
-                    <div style="margin-bottom:20px;padding:16px;border:1px solid #e8e8e8;border-radius:8px;background:#fafafa;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                            <h3 style="margin:0;font-size:12pt;color:#2D2D2D;">${esc(b.title)}</h3>
-                            <span style="font-size:9pt;color:#888;">[${esc(typeLabel)}] ${esc(dateStr)}</span>
+            <section style="margin-bottom:36px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+                    <div style="width:4px;height:28px;background:linear-gradient(180deg,#3b82f6,#06b6d4);border-radius:2px;"></div>
+                    <h2 style="font-size:15pt;font-weight:700;color:#1e1e2e;letter-spacing:-0.5px;">주요 소식</h2>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:16px;">
+                    ${selectedBoards.map(b => {
+                        const typeLabel = typeLabels[b.board_type] || b.board_type;
+                        const typeColor = typeColors[b.board_type] || '#6b7280';
+                        const dateStr = b.created_at ? b.created_at.split('T')[0] : '';
+                        const sanitized = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(b.content || '') : esc(String(b.content || '').replace(/<[^>]*>/g, ''));
+                        return `
+                    <div style="padding:20px 24px;background:#fff;border-radius:16px;border:1px solid #eee;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                            <span style="display:inline-block;width:8px;height:8px;background:${typeColor};border-radius:50%;"></span>
+                            <span style="font-size:8.5pt;font-weight:600;color:${typeColor};text-transform:uppercase;">${esc(typeLabel)}</span>
+                            <span style="font-size:8.5pt;color:#bbb;margin-left:auto;">${esc(dateStr)}</span>
                         </div>
-                        <div style="font-size:10pt;line-height:1.7;color:#444;">${sanitized}</div>
+                        <h3 style="margin:0 0 8px;font-size:12.5pt;font-weight:700;color:#1e1e2e;line-height:1.4;">${esc(b.title)}</h3>
+                        <div style="font-size:10pt;line-height:1.8;color:#555;">${sanitized}</div>
                     </div>`;
-                }).join('')}
+                    }).join('')}
+                </div>
             </section>` : '';
 
             return `<!DOCTYPE html>
@@ -3143,33 +3155,53 @@
 <meta charset="UTF-8">
 <title>${esc(config.title || '뉴스레터')}</title>
 <style>
-    @page { size: A4; margin: 15mm; }
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap');
+    @page { size: A4; margin: 12mm; }
     @media print { .no-print { display: none !important; } }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: '맑은 고딕', '나눔고딕', Arial, sans-serif; font-size: 10pt; background: #fff; color: #000; max-width: 210mm; margin: 0 auto; padding: 20mm 15mm; }
-    .btn-print { display: inline-block; margin: 20px 6px 0; padding: 10px 28px; font-size: 13px; cursor: pointer; border: none; border-radius: 6px; }
+    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 10pt; background: #f5f5f5; color: #1e1e2e; }
+    .nl-wrap { max-width: 600px; margin: 0 auto; background: #fff; }
+    .btn-print { display: inline-block; margin: 16px 6px; padding: 10px 24px; font-size: 13px; cursor: pointer; border: none; border-radius: 10px; font-weight: 600; }
 </style>
 </head>
 <body>
-    <div class="no-print" style="text-align:center;margin-bottom:20px;">
-        <button class="btn-print" style="background:#1B6B5A;color:#fff" onclick="window.print()">🖨️ 인쇄 / PDF 저장</button>
-        <button class="btn-print" style="background:#888;color:#fff" onclick="window.close()">✕ 닫기</button>
+    <div class="no-print" style="text-align:center;padding:12px;background:#fff;">
+        <button class="btn-print" style="background:#1e1e2e;color:#fff" onclick="window.print()">인쇄 / PDF 저장</button>
+        <button class="btn-print" style="background:#f0f0f0;color:#666" onclick="window.close()">닫기</button>
     </div>
 
-    <div style="text-align:center;margin-bottom:32px;padding:24px 0;border-bottom:3px solid #134E42;">
-        <h1 style="font-size:22pt;color:#134E42;margin-bottom:8px;">${esc(config.title || '뉴스레터')}</h1>
-        <p style="font-size:11pt;color:#666;">${esc(orgName)}${config.issueNumber ? ' | ' + esc(config.issueNumber) : ''} | ${esc(config.publishDate)}</p>
-    </div>
+    <div class="nl-wrap">
+        <!-- Hero Header -->
+        <div style="background:linear-gradient(135deg,#134E42 0%,#0f766e 50%,#06b6d4 100%);padding:48px 32px 40px;text-align:center;border-radius:0 0 32px 32px;">
+            <div style="display:inline-block;padding:6px 16px;background:rgba(255,255,255,0.15);border-radius:20px;font-size:8.5pt;color:rgba(255,255,255,0.9);font-weight:500;margin-bottom:16px;letter-spacing:0.5px;">
+                ${config.issueNumber ? esc(config.issueNumber) + ' · ' : ''}${esc(config.publishDate)}
+            </div>
+            <h1 style="font-size:24pt;font-weight:800;color:#fff;margin-bottom:8px;letter-spacing:-1px;line-height:1.2;">${esc(config.title || '뉴스레터')}</h1>
+            <p style="font-size:10pt;color:rgba(255,255,255,0.7);font-weight:400;">${esc(orgName)}</p>
+        </div>
 
-    ${config.greeting ? `<div style="margin-bottom:24px;padding:16px 20px;background:#f0f7f5;border-radius:8px;font-size:11pt;line-height:1.8;color:#333;white-space:pre-line;">${esc(config.greeting)}</div>` : ''}
+        <div style="padding:32px 28px;">
 
-    ${schedulesSection}
-    ${boardsSection}
+            ${config.greeting ? `
+            <div style="margin-bottom:32px;padding:20px 24px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-radius:16px;border-left:4px solid #10b981;">
+                <div style="font-size:10.5pt;line-height:1.9;color:#374151;white-space:pre-line;">${esc(config.greeting)}</div>
+            </div>` : ''}
 
-    ${config.closing ? `<div style="margin-top:24px;padding:16px 20px;background:#f0f7f5;border-radius:8px;font-size:11pt;line-height:1.8;color:#333;white-space:pre-line;">${esc(config.closing)}</div>` : ''}
+            ${schedulesSection}
+            ${boardsSection}
 
-    <div style="margin-top:32px;padding-top:16px;border-top:2px solid #134E42;text-align:center;font-size:9pt;color:#888;">
-        <p>${esc(orgName)} · 아름다운재단 2026 공익단체 인큐베이팅 지원사업</p>
+            ${config.closing ? `
+            <div style="margin-top:32px;padding:20px 24px;background:#f8f9fa;border-radius:16px;">
+                <div style="font-size:10.5pt;line-height:1.9;color:#374151;white-space:pre-line;">${esc(config.closing)}</div>
+            </div>` : ''}
+
+        </div>
+
+        <!-- Footer -->
+        <div style="padding:24px 28px;background:#f9fafb;border-top:1px solid #f0f0f0;text-align:center;border-radius:0 0 0 0;">
+            <p style="font-size:8.5pt;color:#9ca3af;font-weight:500;">${esc(orgName)}</p>
+            <p style="font-size:8pt;color:#d1d5db;margin-top:4px;">아름다운재단 2026 공익단체 인큐베이팅 지원사업</p>
+        </div>
     </div>
 </body>
 </html>`;
@@ -10764,18 +10796,20 @@
                                             }}>📄 한글</button>
                                     </div>
 
-                                    <div style={{ border: '1px solid #EBE8E1', borderRadius: 8, padding: 24, background: '#fff', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
-                                        {/* Header */}
-                                        <div style={{ textAlign: 'center', marginBottom: 20, paddingBottom: 16, borderBottom: '2px solid #134E42' }}>
-                                            <h2 style={{ fontSize: 18, color: '#134E42', margin: '0 0 4px' }}>{newsletterConfig.title || '뉴스레터 제목을 입력하세요'}</h2>
-                                            <p style={{ color: '#999', fontSize: 12, margin: 0 }}>
-                                                {DEFAULT_ORG_NAME}{newsletterConfig.issueNumber ? ` | ${newsletterConfig.issueNumber}` : ''} | {newsletterConfig.publishDate}
-                                            </p>
+                                    <div style={{ borderRadius: 16, overflow: 'hidden', background: '#f5f5f5', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
+                                        {/* Hero Header */}
+                                        <div style={{ background: 'linear-gradient(135deg,#134E42,#0f766e,#06b6d4)', padding: '36px 24px 28px', textAlign: 'center', borderRadius: '0 0 24px 24px' }}>
+                                            <div style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(255,255,255,0.15)', borderRadius: 16, fontSize: 11, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>
+                                                {newsletterConfig.issueNumber ? `${newsletterConfig.issueNumber} · ` : ''}{newsletterConfig.publishDate}
+                                            </div>
+                                            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 4px', letterSpacing: -0.5 }}>{newsletterConfig.title || '뉴스레터 제목'}</h2>
+                                            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 0 }}>{DEFAULT_ORG_NAME}</p>
                                         </div>
 
+                                        <div style={{ padding: '20px 20px' }}>
                                         {/* Greeting */}
                                         {newsletterConfig.greeting && (
-                                            <div style={{ margin: '0 0 16px', padding: '12px 14px', background: '#f0f7f5', borderRadius: 6, whiteSpace: 'pre-line' }}>
+                                            <div style={{ margin: '0 0 16px', padding: '14px 16px', background: 'linear-gradient(135deg,#f0fdf4,#ecfdf5)', borderRadius: 12, borderLeft: '3px solid #10b981', whiteSpace: 'pre-line', fontSize: 12 }}>
                                                 {newsletterConfig.greeting}
                                             </div>
                                         )}
@@ -10783,49 +10817,63 @@
                                         {/* Selected schedules preview */}
                                         {selectedSchedules.length > 0 && (
                                             <div style={{ marginBottom: 16 }}>
-                                                <h4 style={{ color: '#134E42', borderBottom: '1px solid #134E42', paddingBottom: 4, marginBottom: 8 }}>📅 주요 일정</h4>
-                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                                                    <thead>
-                                                        <tr style={{ background: '#f5f5f5' }}>
-                                                            <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>날짜</th>
-                                                            <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>제목</th>
-                                                            <th style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>카테고리</th>
-                                                            <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>장소</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {selectedSchedules.map(s => (
-                                                            <tr key={s.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                                                                <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{s.start_date}</td>
-                                                                <td style={{ padding: '6px 8px', fontWeight: 500 }}>{s.title}</td>
-                                                                <td style={{ padding: '6px 8px', textAlign: 'center' }}>{s.category}</td>
-                                                                <td style={{ padding: '6px 8px' }}>{s.location || '-'}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                                    <div style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#6366f1,#a855f7)', borderRadius: 2 }}></div>
+                                                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1e1e2e', margin: 0 }}>주요 일정</h4>
+                                                </div>
+                                                {selectedSchedules.map(s => {
+                                                    const catColors = { '교육': '#6366f1', '캠페인': '#ec4899', '회의': '#f59e0b', '평가': '#10b981', '기타': '#8b5cf6' };
+                                                    const cc = catColors[s.category] || '#6b7280';
+                                                    return (
+                                                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0', marginBottom: 8 }}>
+                                                        <div style={{ minWidth: 42, textAlign: 'center' }}>
+                                                            <div style={{ fontSize: 10, color: '#999' }}>{(s.start_date||'').slice(5,7)}월</div>
+                                                            <div style={{ fontSize: 18, fontWeight: 800, color: '#1e1e2e' }}>{(s.start_date||'').slice(8)}</div>
+                                                        </div>
+                                                        <div style={{ width: 1, height: 28, background: '#eee' }}></div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontSize: 12, fontWeight: 600, color: '#1e1e2e' }}>{s.title}</div>
+                                                            <div style={{ fontSize: 10, color: '#999' }}>{s.location || ''}</div>
+                                                        </div>
+                                                        <span style={{ padding: '3px 10px', background: `${cc}15`, color: cc, fontSize: 10, fontWeight: 600, borderRadius: 16 }}>{s.category}</span>
+                                                    </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
 
                                         {/* Selected boards preview */}
                                         {selectedBoardsArr.length > 0 && (
                                             <div style={{ marginBottom: 16 }}>
-                                                <h4 style={{ color: '#134E42', borderBottom: '1px solid #134E42', paddingBottom: 4, marginBottom: 8 }}>📋 주요 소식</h4>
-                                                {selectedBoardsArr.map(b => (
-                                                    <div key={b.id} style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid #eee', borderRadius: 6, background: '#fafafa' }}>
-                                                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{b.title}</div>
-                                                        <div style={{ color: '#666', fontSize: 12 }}>{stripHtml(b.content).slice(0, 200)}{stripHtml(b.content).length > 200 ? '...' : ''}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                                    <div style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#3b82f6,#06b6d4)', borderRadius: 2 }}></div>
+                                                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1e1e2e', margin: 0 }}>주요 소식</h4>
+                                                </div>
+                                                {selectedBoardsArr.map(b => {
+                                                    const tc = { notice: '#ef4444', materials: '#3b82f6', report: '#8b5cf6', free: '#6b7280' };
+                                                    const tl = { notice: '공지', materials: '자료', report: '보고서', free: '자유' };
+                                                    return (
+                                                    <div key={b.id} style={{ marginBottom: 10, padding: '14px 16px', background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                                            <span style={{ width: 6, height: 6, background: tc[b.board_type]||'#999', borderRadius: '50%', display: 'inline-block' }}></span>
+                                                            <span style={{ fontSize: 10, fontWeight: 600, color: tc[b.board_type]||'#999' }}>{tl[b.board_type]||b.board_type}</span>
+                                                            <span style={{ fontSize: 10, color: '#ccc', marginLeft: 'auto' }}>{b.created_at?.split('T')[0]}</span>
+                                                        </div>
+                                                        <div style={{ fontWeight: 700, fontSize: 13, color: '#1e1e2e', marginBottom: 4 }}>{b.title}</div>
+                                                        <div style={{ color: '#777', fontSize: 11 }}>{stripHtml(b.content).slice(0, 200)}{stripHtml(b.content).length > 200 ? '...' : ''}</div>
                                                     </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         )}
 
                                         {/* Closing */}
                                         {newsletterConfig.closing && (
-                                            <div style={{ margin: '16px 0 0', padding: '12px 14px', background: '#f0f7f5', borderRadius: 6, whiteSpace: 'pre-line' }}>
+                                            <div style={{ margin: '16px 0 0', padding: '14px 16px', background: '#f8f9fa', borderRadius: 12, whiteSpace: 'pre-line', fontSize: 12 }}>
                                                 {newsletterConfig.closing}
                                             </div>
                                         )}
+                                        </div>
 
                                         {/* Empty state */}
                                         {selectedSchedules.length === 0 && selectedBoardsArr.length === 0 && !newsletterConfig.greeting && !newsletterConfig.closing && (
