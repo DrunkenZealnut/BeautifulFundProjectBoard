@@ -3065,6 +3065,29 @@
         };
 
         // ────────────────────────────────────────────────────────────
+        // HWPX download via server API (/api/hwpx)
+        // ────────────────────────────────────────────────────────────
+        const downloadHWPX = async (title, sections, filename, template = 'base') => {
+            try {
+                const resp = await fetch('/api/hwpx', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, template, sections })
+                });
+                if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || 'HWPX 생성 실패'); return; }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = filename;
+                document.body.appendChild(a); a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('HWPX 서버 연결 실패. 잠시 후 다시 시도해주세요.');
+            }
+        };
+
+        // ────────────────────────────────────────────────────────────
         // Newsletter HTML generator
         // Generates a printable newsletter from selected schedules and board posts.
         // ────────────────────────────────────────────────────────────
@@ -8800,11 +8823,41 @@
                                                 onClick={() => generatePDF(getSettlementReportHTML(), `정산보고서_${formatLocalDate()}.pdf`)}
                                             >📥 PDF</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => {
+                                                    const execs = data?.budgetExecutions || [];
+                                                    const totalSpent = execs.reduce((s, e) => s + (e.amount || 0), 0);
+                                                    downloadHWPX('정산보고서', [
+                                                        { type: 'paragraph', text: '아름다운재단 2026 공익단체 인큐베이팅 지원사업 정산보고서' },
+                                                        { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}` },
+                                                        { type: 'paragraph', text: `총 예산: ${fmt(CONFIG.TOTAL_BUDGET)}원 | 총 집행: ${fmt(totalSpent)}원 | 집행률: ${pct(totalSpent, CONFIG.TOTAL_BUDGET)}% | 잔여: ${fmt(CONFIG.TOTAL_BUDGET - totalSpent)}원` },
+                                                        { type: 'table', headers: ['집행일', '카테고리', '소분류', '항목', '금액', '결제방법', '수취인', '상태'],
+                                                          rows: execs.map(e => [e.execution_date||'', e.category_name||'', e.subcategory_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'', EXECUTION_STATUS[e.status]?.label||e.status||'']) },
+                                                        { type: 'paragraph', text: `합계: ${fmt(totalSpent)}원` }
+                                                    ], `정산보고서_${formatLocalDate()}.hwpx`, 'report');
+                                                }}
+                                            >📄 한글</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => { const pw = window.open('', '_blank', 'width=900,height=700'); pw.document.write(getMonthlyReportHTML()); pw.document.close(); pw.print(); }}
                                             >📋 월별 명세서</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => generatePDF(getMonthlyReportHTML(), `월별명세서_${formatLocalDate()}.pdf`)}
                                             >📥 PDF</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => {
+                                                    const execs = data?.budgetExecutions || [];
+                                                    const monthly = {};
+                                                    execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7) || '미기재'; if (!monthly[m]) monthly[m] = []; monthly[m].push(e); });
+                                                    const secs = [{ type: 'paragraph', text: '월별 집행 명세서' }, { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}` }];
+                                                    Object.keys(monthly).sort().forEach(m => {
+                                                        const items = monthly[m]; const sum = items.reduce((s, e) => s + (e.amount || 0), 0);
+                                                        secs.push({ type: 'paragraph', text: `${m.replace('-', '년 ')}월 (${items.length}건, ${fmt(sum)}원)` });
+                                                        secs.push({ type: 'table', headers: ['집행일', '카테고리', '항목', '금액', '결제방법', '수취인'],
+                                                            rows: [...items.map(e => [e.execution_date||'', e.category_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'']),
+                                                                   ['', '', '소계', fmt(sum)+'원', '', '']] });
+                                                    });
+                                                    downloadHWPX('월별명세서', secs, `월별명세서_${formatLocalDate()}.hwpx`, 'report');
+                                                }}
+                                            >📄 한글</button>
                                         </div>
                                     </div>
 
@@ -10689,6 +10742,26 @@
                                             style={{ padding: '8px 20px', fontSize: 13 }}>
                                             🖨️ 인쇄하기
                                         </button>
+                                        <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }}
+                                            onClick={() => {
+                                                const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                                                const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                                                if (selSchedules.length === 0 && selBoards.length === 0) { alert('뉴스레터에 포함할 항목을 선택해주세요.'); return; }
+                                                const secs = [{ type: 'paragraph', text: newsletterConfig.title || '뉴스레터' },
+                                                    { type: 'paragraph', text: `${DEFAULT_ORG_NAME}${newsletterConfig.issueNumber ? ' | ' + newsletterConfig.issueNumber : ''} | ${newsletterConfig.publishDate}` }];
+                                                if (newsletterConfig.greeting) secs.push({ type: 'paragraph', text: newsletterConfig.greeting });
+                                                if (selSchedules.length > 0) {
+                                                    secs.push({ type: 'paragraph', text: '주요 일정' });
+                                                    secs.push({ type: 'table', headers: ['날짜', '제목', '카테고리', '장소'],
+                                                        rows: selSchedules.map(s => [s.start_date||'', s.title||'', s.category||'', s.location||'-']) });
+                                                }
+                                                if (selBoards.length > 0) {
+                                                    secs.push({ type: 'paragraph', text: '주요 소식' });
+                                                    selBoards.forEach(b => { secs.push({ type: 'paragraph', text: b.title }); secs.push({ type: 'paragraph', text: (b.content||'').replace(/<[^>]*>/g, '') }); });
+                                                }
+                                                if (newsletterConfig.closing) secs.push({ type: 'paragraph', text: newsletterConfig.closing });
+                                                downloadHWPX('뉴스레터', secs, `뉴스레터_${formatLocalDate()}.hwpx`);
+                                            }}>📄 한글</button>
                                     </div>
 
                                     <div style={{ border: '1px solid #EBE8E1', borderRadius: 8, padding: 24, background: '#fff', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
