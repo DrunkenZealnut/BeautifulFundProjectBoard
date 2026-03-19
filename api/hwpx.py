@@ -162,10 +162,12 @@ class handler(BaseHTTPRequestHandler):
 
                 hwpx_bytes = output_path.read_bytes()
 
+                # Use URL-encoded filename for non-ASCII characters
+                import urllib.parse
+                safe_filename = urllib.parse.quote(f'{title}.hwpx')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/octet-stream')
-                self.send_header('Content-Disposition', f'attachment; filename="{title}.hwpx"')
-                self.send_header('Content-Length', str(len(hwpx_bytes)))
+                self.send_header('Content-Disposition', f"attachment; filename*=UTF-8''{safe_filename}")
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(hwpx_bytes)
