@@ -39,10 +39,14 @@ from lxml import etree
 # Resolve paths relative to this script
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
-TEMPLATES_DIR = SKILL_DIR / "templates"
+# Support both original layout (../templates) and Vercel layout (../hwpxskill_templates)
+_tpl_dir = SKILL_DIR / "templates"
+if not _tpl_dir.exists():
+    _tpl_dir = SKILL_DIR / "hwpxskill_templates"
+TEMPLATES_DIR = _tpl_dir
 BASE_DIR = TEMPLATES_DIR / "base"
 
-AVAILABLE_TEMPLATES = ["gonmun", "report", "minutes"]
+AVAILABLE_TEMPLATES = ["gonmun", "report", "minutes", "proposal"]
 
 
 def validate_xml(filepath: Path) -> None:
