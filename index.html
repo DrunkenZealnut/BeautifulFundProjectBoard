@@ -3065,144 +3065,6 @@
         };
 
         // ────────────────────────────────────────────────────────────
-        // HWPX (OWPML) direct download utility
-        // Generates a .hwpx file (ZIP containing OWPML XML) using JSZip.
-        // ────────────────────────────────────────────────────────────
-        // HWPX generator — uses base template files from hwpx-template/ directory
-        // Based on hwpxskill project's validated HWPX structure
-        const HWPX_TEMPLATE_BASE = 'hwpx-template';
-        const HWPX_TEMPLATE_FILES = [
-            'version.xml', 'settings.xml',
-            'META-INF/container.xml', 'META-INF/container.rdf', 'META-INF/manifest.xml',
-            'Contents/content.hpf', 'Contents/header.xml',
-            'Preview/PrvText.txt'
-        ];
-        let _hwpxTemplateCache = null;
-
-        const loadHWPXTemplate = async () => {
-            if (_hwpxTemplateCache) return _hwpxTemplateCache;
-            const files = {};
-            await Promise.all(HWPX_TEMPLATE_FILES.map(async (path) => {
-                const resp = await fetch(`${HWPX_TEMPLATE_BASE}/${path}`);
-                files[path] = await resp.text();
-            }));
-            // Load preview image as binary
-            try {
-                const imgResp = await fetch(`${HWPX_TEMPLATE_BASE}/Preview/PrvImage.png`);
-                files['Preview/PrvImage.png'] = await imgResp.arrayBuffer();
-            } catch (e) { /* preview image optional */ }
-            _hwpxTemplateCache = files;
-            return files;
-        };
-
-        const generateHWPX = async (title, sections, filename) => {
-            if (!window.JSZip) { alert('JSZip 라이브러리가 로드되지 않았습니다.'); return; }
-            const ex = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-            // Load base template
-            let tpl;
-            try { tpl = await loadHWPXTemplate(); }
-            catch (e) { alert('HWPX 템플릿 로드 실패. 서버를 확인해주세요.'); return; }
-
-            // Read base section0.xml and extract the first paragraph (with secPr)
-            const baseSection = tpl['Contents/header.xml'] ? true : false;
-
-            // Parse base section0.xml to get secPr block
-            const baseSec0 = tpl['Contents/content.hpf'] ? true : false;
-
-            // Build section0.xml — use base template's section0 as reference for secPr
-            const HWPX_NS_SEC = 'xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history" xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart" xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0"';
-            const secPr = '<hp:secPr id="" textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000" tabStopVal="4000" tabStopUnit="HWPUNIT" outlineShapeIDRef="1" memoShapeIDRef="0" textVerticalWidthHead="0" masterPageCnt="0"><hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/><hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/><hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" border="SHOW_ALL" fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" showLineNumber="0"/><hp:lineNumberShape restartType="0" countBy="0" distance="0" startNumber="0"/><hp:pagePr landscape="WIDELY" width="59528" height="84186" gutterType="LEFT_ONLY"><hp:margin header="4252" footer="4252" gutter="0" left="8504" right="8504" top="5668" bottom="4252"/></hp:pagePr><hp:footNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/><hp:noteLine length="-1" type="SOLID" width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="283" belowLine="567" aboveLine="850"/><hp:numbering type="CONTINUOUS" newNum="1"/><hp:placement place="EACH_COLUMN" beneathText="0"/></hp:footNotePr><hp:endNotePr><hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/><hp:noteLine length="14692344" type="SOLID" width="0.12 mm" color="#000000"/><hp:noteSpacing betweenNotes="0" belowLine="567" aboveLine="850"/><hp:numbering type="CONTINUOUS" newNum="1"/><hp:placement place="END_OF_DOCUMENT" beneathText="0"/></hp:endNotePr><hp:pageBorderFill type="BOTH" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER"><hp:offset left="1417" right="1417" top="1417" bottom="1417"/></hp:pageBorderFill><hp:pageBorderFill type="EVEN" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER"><hp:offset left="1417" right="1417" top="1417" bottom="1417"/></hp:pageBorderFill><hp:pageBorderFill type="ODD" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER"><hp:offset left="1417" right="1417" top="1417" bottom="1417"/></hp:pageBorderFill></hp:secPr>';
-
-            let body = '';
-            let pId = 1000000000;
-
-            // Style mapping: charPrIDRef 0=normal 10pt, 1=normal(fontRef1), 5=16pt blue, 7=18pt bold
-            //                paraPrIDRef 0=justify, 20=center
-            const charRef = (sec) => sec.bold ? '7' : '0';
-            const paraRef = (sec) => sec.align === 'center' ? '20' : '0';
-            const mkP = (text, sec = {}) => `<hp:p id="${pId++}" paraPrIDRef="${paraRef(sec)}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="${charRef(sec)}"><hp:t>${ex(text)}</hp:t></hp:run></hp:p>`;
-
-            // OWPML table builder
-            const BODY_WIDTH = 42520; // A4 body width in HWPUNIT
-            const mkTable = (headers, rows) => {
-                const colCnt = headers.length;
-                const rowCnt = rows.length + 1;
-                const colW = Math.floor(BODY_WIDTH / colCnt);
-                const rowH = 2400;
-                let tblId = pId++;
-                let tbl = `<hp:p id="${tblId}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:tbl id="${tblId}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="1" rowCnt="${rowCnt}" colCnt="${colCnt}" cellSpacing="0" borderFillIDRef="3" noAdjust="0">`;
-                tbl += `<hp:sz width="${BODY_WIDTH}" widthRelTo="ABSOLUTE" height="${rowH * rowCnt}" heightRelTo="ABSOLUTE" protect="0"/>`;
-                tbl += '<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>';
-                tbl += '<hp:outMargin left="0" right="0" top="0" bottom="0"/>';
-                tbl += '<hp:inMargin left="0" right="0" top="0" bottom="0"/>';
-
-                const mkCell = (text, colIdx, rowIdx, isHeader) => {
-                    const cRef = isHeader ? '7' : '0'; // bold for headers
-                    const w = (colIdx === colCnt - 1) ? BODY_WIDTH - colW * (colCnt - 1) : colW;
-                    return `<hp:tc name="" header="${isHeader ? '1' : '0'}" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="3"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0"><hp:p paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0" id="${pId++}"><hp:run charPrIDRef="${cRef}"><hp:t>${ex(text)}</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="${colIdx}" rowAddr="${rowIdx}"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="${w}" height="${rowH}"/><hp:cellMargin left="510" right="510" top="142" bottom="142"/></hp:tc>`;
-                };
-
-                // Header row
-                tbl += '<hp:tr>';
-                headers.forEach((h, ci) => { tbl += mkCell(h, ci, 0, true); });
-                tbl += '</hp:tr>';
-                // Data rows
-                rows.forEach((row, ri) => {
-                    tbl += '<hp:tr>';
-                    row.forEach((cell, ci) => { tbl += mkCell(cell, ci, ri + 1, false); });
-                    tbl += '</hp:tr>';
-                });
-                tbl += '</hp:tbl></hp:run></hp:p>';
-                return tbl;
-            };
-
-            // First paragraph — MUST contain secPr + colPr
-            body += `<hp:p id="${pId++}" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0">${secPr}<hp:ctrl><hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/></hp:ctrl></hp:run><hp:run charPrIDRef="7"><hp:t>${sections.length > 0 && sections[0].type === 'paragraph' ? ex(sections[0].text) : ''}</hp:t></hp:run><hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="42520" flags="393216"/></hp:linesegarray></hp:p>`;
-
-            // Remaining sections
-            const startIdx = (sections.length > 0 && sections[0].type === 'paragraph') ? 1 : 0;
-            for (let i = startIdx; i < sections.length; i++) {
-                const sec = sections[i];
-                if (sec.type === 'paragraph') {
-                    body += mkP(sec.text, sec);
-                } else if (sec.type === 'table' && sec.headers && sec.rows) {
-                    body += mkTable(sec.headers, sec.rows);
-                }
-            }
-
-            const section0 = `<?xml version='1.0' encoding='UTF-8'?><hs:sec ${HWPX_NS_SEC}>${body}</hs:sec>`;
-
-            // Build ZIP — mimetype MUST be first entry with STORE compression
-            const zip = new JSZip();
-            zip.file('mimetype', 'application/hwp+zip', { compression: 'STORE' });
-            zip.file('version.xml', tpl['version.xml']);
-            zip.file('settings.xml', tpl['settings.xml']);
-            zip.file('META-INF/container.xml', tpl['META-INF/container.xml']);
-            zip.file('META-INF/container.rdf', tpl['META-INF/container.rdf']);
-            zip.file('META-INF/manifest.xml', tpl['META-INF/manifest.xml']);
-            zip.file('Contents/content.hpf', tpl['Contents/content.hpf']);
-            zip.file('Contents/header.xml', tpl['Contents/header.xml']);
-            zip.file('Contents/section0.xml', section0);
-            zip.file('Preview/PrvText.txt', tpl['Preview/PrvText.txt'] || '');
-            if (tpl['Preview/PrvImage.png']) zip.file('Preview/PrvImage.png', tpl['Preview/PrvImage.png']);
-
-            let url;
-            try {
-                const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-                url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = filename;
-                document.body.appendChild(a); a.click();
-                document.body.removeChild(a);
-            } catch (err) {
-                alert('HWPX 생성 중 오류가 발생했습니다.');
-            } finally {
-                if (url) URL.revokeObjectURL(url);
-            }
-        };
-
-        // ────────────────────────────────────────────────────────────
         // Newsletter HTML generator
         // Generates a printable newsletter from selected schedules and board posts.
         // ────────────────────────────────────────────────────────────
@@ -8938,44 +8800,11 @@
                                                 onClick={() => generatePDF(getSettlementReportHTML(), `정산보고서_${formatLocalDate()}.pdf`)}
                                             >📥 PDF</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
-                                                onClick={() => {
-                                                    const execs = data?.budgetExecutions || [];
-                                                    const totalSpent = execs.reduce((s, e) => s + (e.amount || 0), 0);
-                                                    generateHWPX('정산보고서', [
-                                                        { type: 'paragraph', text: '아름다운재단 2026 공익단체 인큐베이팅 지원사업 정산보고서', bold: true, fontSize: 18, align: 'center' },
-                                                        { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}`, align: 'center' },
-                                                        { type: 'paragraph', text: `총 예산: ${fmt(CONFIG.TOTAL_BUDGET)}원 | 총 집행: ${fmt(totalSpent)}원 | 집행률: ${pct(totalSpent, CONFIG.TOTAL_BUDGET)}% | 잔여: ${fmt(CONFIG.TOTAL_BUDGET - totalSpent)}원` },
-                                                        { type: 'table', headers: ['집행일', '카테고리', '소분류', '항목', '금액', '결제방법', '수취인', '상태'],
-                                                          rows: execs.map(e => [e.execution_date||'', e.category_name||'', e.subcategory_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'', EXECUTION_STATUS[e.status]?.label||e.status||'']) },
-                                                        { type: 'paragraph', text: `합계: ${fmt(totalSpent)}원` }
-                                                    ], `정산보고서_${formatLocalDate()}.hwpx`);
-                                                }}
-                                            >📄 HWPX</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => { const pw = window.open('', '_blank', 'width=900,height=700'); pw.document.write(getMonthlyReportHTML()); pw.document.close(); pw.print(); }}
                                             >📋 월별 명세서</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => generatePDF(getMonthlyReportHTML(), `월별명세서_${formatLocalDate()}.pdf`)}
                                             >📥 PDF</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
-                                                onClick={() => {
-                                                    const execs = data?.budgetExecutions || [];
-                                                    const monthly = {};
-                                                    execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7) || '미기재'; if (!monthly[m]) monthly[m] = []; monthly[m].push(e); });
-                                                    const secs = [
-                                                        { type: 'paragraph', text: '월별 집행 명세서', bold: true, fontSize: 18, align: 'center' },
-                                                        { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}`, align: 'center' },
-                                                    ];
-                                                    Object.keys(monthly).sort().forEach(m => {
-                                                        const items = monthly[m]; const sum = items.reduce((s, e) => s + (e.amount || 0), 0);
-                                                        secs.push({ type: 'paragraph', text: `${m.replace('-', '년 ')}월 (${items.length}건, ${fmt(sum)}원)`, bold: true, fontSize: 14 });
-                                                        secs.push({ type: 'table', headers: ['집행일', '카테고리', '항목', '금액', '결제방법', '수취인'],
-                                                            rows: [...items.map(e => [e.execution_date||'', e.category_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'']),
-                                                                   ['', '', '소계', fmt(sum)+'원', '', '']] });
-                                                    });
-                                                    generateHWPX('월별명세서', secs, `월별명세서_${formatLocalDate()}.hwpx`);
-                                                }}
-                                            >📄 HWPX</button>
                                         </div>
                                     </div>
 
@@ -10860,27 +10689,6 @@
                                             style={{ padding: '8px 20px', fontSize: 13 }}>
                                             🖨️ 인쇄하기
                                         </button>
-                                        <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }}
-                                            onClick={() => {
-                                                const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
-                                                const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
-                                                if (selSchedules.length === 0 && selBoards.length === 0) { alert('뉴스레터에 포함할 항목을 선택해주세요.'); return; }
-                                                const secs = [];
-                                                secs.push({ type: 'paragraph', text: newsletterConfig.title || '뉴스레터', bold: true, fontSize: 18, align: 'center' });
-                                                secs.push({ type: 'paragraph', text: `${DEFAULT_ORG_NAME}${newsletterConfig.issueNumber ? ' | ' + newsletterConfig.issueNumber : ''} | ${newsletterConfig.publishDate}`, align: 'center' });
-                                                if (newsletterConfig.greeting) secs.push({ type: 'paragraph', text: newsletterConfig.greeting });
-                                                if (selSchedules.length > 0) {
-                                                    secs.push({ type: 'paragraph', text: '주요 일정', bold: true, fontSize: 14 });
-                                                    secs.push({ type: 'table', headers: ['날짜', '제목', '카테고리', '장소'],
-                                                        rows: selSchedules.map(s => [s.start_date||'', s.title||'', s.category||'', s.location||'-']) });
-                                                }
-                                                if (selBoards.length > 0) {
-                                                    secs.push({ type: 'paragraph', text: '주요 소식', bold: true, fontSize: 14 });
-                                                    selBoards.forEach(b => { secs.push({ type: 'paragraph', text: b.title, bold: true }); secs.push({ type: 'paragraph', text: (b.content||'').replace(/<[^>]*>/g, '') }); });
-                                                }
-                                                if (newsletterConfig.closing) secs.push({ type: 'paragraph', text: newsletterConfig.closing });
-                                                generateHWPX('뉴스레터', secs, `뉴스레터_${formatLocalDate()}.hwpx`);
-                                            }}>📄 HWPX</button>
                                     </div>
 
                                     <div style={{ border: '1px solid #EBE8E1', borderRadius: 8, padding: 24, background: '#fff', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>

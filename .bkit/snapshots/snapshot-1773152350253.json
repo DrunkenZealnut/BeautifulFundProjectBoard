@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-03-10T14:19:10.252Z",
+  "reason": "compaction",
+  "status": {
+    "version": "2.0",
+    "lastUpdated": "2026-03-10T13:38:49.757Z",
+    "activeFeatures": [
+      "BeautifulFundProjectBoard"
+    ],
+    "primaryFeature": "BeautifulFundProjectBoard",
+    "features": {
+      "BeautifulFundProjectBoard": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T13:29:31.877Z",
+          "lastUpdated": "2026-03-10T13:38:49.756Z"
+        },
+        "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/service-worker.js"
+      }
+    },
+    "pipeline": {
+      "currentPhase": 1,
+      "level": "Dynamic",
+      "phaseHistory": []
+    },
+    "session": {
+      "startedAt": "2026-03-06T02:05:39.704Z",
+      "onboardingCompleted": false,
+      "lastActivity": "2026-03-10T13:38:49.757Z"
+    },
+    "history": [
+      {
+        "timestamp": "2026-03-10T13:29:31.877Z",
+        "feature": "BeautifulFundProjectBoard",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T13:38:49.756Z",
+        "feature": "BeautifulFundProjectBoard",
+        "phase": "do",
+        "action": "updated"
+      }
+    ]
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-03-18T00:00:00.000Z",
+  "activeFeatures": [],
+  "primaryFeature": null,
+  "features": {
+    "BeautifulFundProjectBoard": {
+      "phase": "completed",
+      "phaseNumber": 5,
+      "matchRate": 90.5,
+      "iterationCount": 4,
+      "requirements": [],
+      "documents": {
+        "plan": "docs/01-plan/features/feature-suggestions.plan.md",
+        "analysis": "docs/03-analysis/feature-suggestions.analysis.md"
+      },
+      "timestamps": {
+        "started": "2026-03-10T13:29:31.877Z",
+        "lastUpdated": "2026-03-11T00:00:00.000Z"
+      }
+    },
+    "F-10-newsletter": {
+      "phase": "archived",
+      "matchRate": 95,
+      "iterationCount": 0,
+      "startedAt": "2026-03-18T00:00:00.000Z",
+      "archivedAt": "2026-03-18T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/F-10-newsletter/"
+    },
+    "F-11-hwpx-export": {
+      "phase": "archived",
+      "matchRate": 100,
+      "iterationCount": 0,
+      "startedAt": "2026-03-18T00:00:00.000Z",
+      "archivedAt": "2026-03-18T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/F-11-hwpx-export/"
+    },
+    "F-06-pdf-generation": {
+      "phase": "archived",
+      "matchRate": 93,
+      "iterationCount": 1,
+      "startedAt": "2026-03-11T00:00:00.000Z",
+      "archivedAt": "2026-03-18T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/F-06-pdf-generation/"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Starter",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-03-06T02:05:39.704Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-03-11T00:00:00.000Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-03-10T13:29:31.877Z",
+      "feature": "BeautifulFundProjectBoard",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-11T00:00:00.000Z",
+      "feature": "BeautifulFundProjectBoard",
+      "phase": "completed",
+      "action": "completed"
+    },
+    {
+      "timestamp": "2026-03-11T00:00:00.000Z",
+      "feature": "F-06-pdf-generation",
+      "phase": "plan",
+      "action": "created"
+    },
+    {
+      "timestamp": "2026-03-18T00:00:00.000Z",
+      "feature": "F-10-newsletter",
+      "phase": "plan",
+      "action": "created"
+    },
+    {
+      "timestamp": "2026-03-18T00:00:00.000Z",
+      "feature": "F-10-newsletter",
+      "phase": "design",
+      "action": "created"
+    },
+    {
+      "timestamp": "2026-03-18T00:00:00.000Z",
+      "feature": "F-10-newsletter",
+      "phase": "check",
+      "action": "analyzed",
+      "matchRate": 95
+    },
+    {
+      "timestamp": "2026-03-18T00:00:00.000Z",
+      "feature": "F-10-newsletter",
+      "phase": "archived",
+      "action": "archived"
+    }
+  ]
+}
