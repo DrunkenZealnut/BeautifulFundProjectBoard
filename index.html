@@ -3402,6 +3402,36 @@
             const [rewrittenContents, setRewrittenContents] = useState({});
             const [rewritingBoardId, setRewritingBoardId] = useState(null);
 
+            // Load board attachment images when newsletter selection changes
+            useEffect(() => {
+                const loadImages = async () => {
+                    const newUrls = {};
+                    for (const bid of selectedBoardIds) {
+                        if (boardImageUrls[bid]) { newUrls[bid] = boardImageUrls[bid]; continue; }
+                        const { data: atts } = await supabase.from('attachments')
+                            .select('file_path, file_type').eq('board_id', bid).order('created_at', { ascending: true });
+                        const imgs = (atts || []).filter(a => a.file_type?.startsWith('image/'));
+                        newUrls[bid] = imgs.map(img => { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); return u?.publicUrl || null; }).filter(Boolean);
+                    }
+                    setBoardImageUrls(newUrls);
+                };
+                if (selectedBoardIds.size > 0) loadImages();
+            }, [[...selectedBoardIds].join(',')]);
+
+            // AI rewrite handler
+            const handleRewriteBoard = async (boardId, originalText) => {
+                setRewritingBoardId(boardId);
+                try {
+                    const resp = await fetch('/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: (originalText || '').replace(/<[^>]*>/g, '') }) });
+                    if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || `AI 재가공 실패 (${resp.status})`); return; }
+                    const d = await resp.json();
+                    if (d.rewritten) setRewrittenContents(prev => ({ ...prev, [boardId]: d.rewritten }));
+                    else alert(d.error || 'AI 재가공 실패');
+                } catch (e) { alert('AI 서버 연결 실패'); }
+                finally { setRewritingBoardId(null); }
+            };
+
             // Google API 초기화
             useEffect(() => {
                 const initGapi = () => {
@@ -10604,38 +10634,6 @@
                     { value: 'all', label: '전체' }, { value: 'notice', label: '공지' },
                     { value: 'materials', label: '자료' }, { value: 'report', label: '보고서' }, { value: 'free', label: '자유' }
                 ];
-
-                // Load board attachment images when selection changes
-                useEffect(() => {
-                    const loadImages = async () => {
-                        const newUrls = { ...boardImageUrls };
-                        let changed = false;
-                        for (const bid of selectedBoardIds) {
-                            if (newUrls[bid]) continue;
-                            const { data: atts } = await supabase.from('attachments')
-                                .select('file_path, file_type').eq('board_id', bid).order('created_at', { ascending: true });
-                            const imgs = (atts || []).filter(a => a.file_type?.startsWith('image/'));
-                            newUrls[bid] = imgs.map(img => { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); return u?.publicUrl || null; }).filter(Boolean);
-                            changed = true;
-                        }
-                        if (changed) setBoardImageUrls(newUrls);
-                    };
-                    if (selectedBoardIds.size > 0) loadImages();
-                }, [[...selectedBoardIds].join(',')]);
-
-                // AI rewrite handler
-                const handleRewriteBoard = async (boardId, originalText) => {
-                    setRewritingBoardId(boardId);
-                    try {
-                        const resp = await fetch('/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: (originalText || '').replace(/<[^>]*>/g, '') }) });
-                        if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || `AI 재가공 실패 (${resp.status})`); return; }
-                        const d = await resp.json();
-                        if (d.rewritten) setRewrittenContents(prev => ({ ...prev, [boardId]: d.rewritten }));
-                        else alert(d.error || 'AI 재가공 실패');
-                    } catch (e) { alert('AI 서버 연결 실패'); }
-                    finally { setRewritingBoardId(null); }
-                };
 
                 const filteredSchedules = (data.schedules || []).filter(s => {
                     if (newsletterConfig.dateFrom && s.start_date < newsletterConfig.dateFrom) return false;
