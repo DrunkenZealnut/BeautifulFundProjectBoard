@@ -58,14 +58,17 @@ class handler(BaseHTTPRequestHandler):
 
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read())
-                rewritten = result['content'][0]['text']
-                self._json(200, {'rewritten': rewritten})
+                content = result.get('content', [])
+                if not content or not isinstance(content, list) or 'text' not in content[0]:
+                    self._json(502, {'error': f'Unexpected API response: {json.dumps(result)[:200]}'})
+                    return
+                self._json(200, {'rewritten': content[0]['text']})
 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8', errors='replace')
             self._json(e.code, {'error': f'Claude API error: {error_body[:200]}'})
         except Exception as e:
-            self._json(500, {'error': str(e)})
+            self._json(500, {'error': f'{type(e).__name__}: {e}'})
 
     def _json(self, code, data):
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')

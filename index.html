@@ -10621,7 +10621,7 @@
                         if (changed) setBoardImageUrls(newUrls);
                     };
                     if (selectedBoardIds.size > 0) loadImages();
-                }, [selectedBoardIds.size]);
+                }, [[...selectedBoardIds].join(',')]);
 
                 // AI rewrite handler
                 const handleRewriteBoard = async (boardId, originalText) => {
@@ -10629,6 +10629,7 @@
                     try {
                         const resp = await fetch('/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ text: (originalText || '').replace(/<[^>]*>/g, '') }) });
+                        if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || `AI 재가공 실패 (${resp.status})`); return; }
                         const d = await resp.json();
                         if (d.rewritten) setRewrittenContents(prev => ({ ...prev, [boardId]: d.rewritten }));
                         else alert(d.error || 'AI 재가공 실패');
