@@ -3092,7 +3092,7 @@
         // Newsletter HTML generator
         // Generates a printable newsletter from selected schedules and board posts.
         // ────────────────────────────────────────────────────────────
-        const generateNewsletterHTML = (config, selectedSchedules, selectedBoards, orgName, boardImageUrls = {}, rewrittenContents = {}) => {
+        const generateNewsletterHTML = (config, selectedSchedules, selectedBoards, orgName, boardImageUrls = {}, rewrittenContents = {}, selectedGalleries = [], galleryThumbUrls = {}) => {
             const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const catColors = { '교육': '#6366f1', '캠페인': '#ec4899', '회의': '#f59e0b', '평가': '#10b981', '기타': '#8b5cf6' };
             const typeColors = { notice: '#ef4444', materials: '#3b82f6', report: '#8b5cf6', free: '#6b7280' };
@@ -3192,6 +3192,27 @@
 
             ${schedulesSection}
             ${boardsSection}
+
+            ${selectedGalleries.length > 0 ? `
+            <section style="margin-bottom:36px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+                    <div style="width:4px;height:28px;background:linear-gradient(180deg,#f59e0b,#ef4444);border-radius:2px;"></div>
+                    <h2 style="font-size:15pt;font-weight:700;color:#1e1e2e;letter-spacing:-0.5px;">갤러리</h2>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                    ${selectedGalleries.map(g => {
+                        const thumbUrl = galleryThumbUrls[g.id];
+                        return `
+                    <div style="border-radius:14px;overflow:hidden;border:1px solid #eee;background:#fff;">
+                        ${thumbUrl ? `<img src="${esc(thumbUrl)}" alt="" style="width:100%;height:160px;object-fit:cover;" />` : '<div style="width:100%;height:160px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:24pt;">📷</div>'}
+                        <div style="padding:10px 14px;">
+                            <div style="font-size:10pt;font-weight:600;color:#1e1e2e;">${esc(g.title)}</div>
+                            ${g.description ? `<div style="font-size:9pt;color:#888;margin-top:4px;">${esc(g.description).slice(0,80)}</div>` : ''}
+                        </div>
+                    </div>`;
+                    }).join('')}
+                </div>
+            </section>` : ''}
 
             ${config.closing ? `
             <div style="margin-top:32px;padding:20px 24px;background:#f8f9fa;border-radius:16px;">
@@ -3400,6 +3421,8 @@
             const [selectedScheduleIds, setSelectedScheduleIds] = useState(new Set());
             const [selectedBoardIds, setSelectedBoardIds] = useState(new Set());
             const [boardImageUrls, setBoardImageUrls] = useState({});
+            const [selectedGalleryNewsletterIds, setSelectedGalleryNewsletterIds] = useState(new Set());
+            const [galleryThumbUrls, setGalleryThumbUrls] = useState({});
             const [rewrittenContents, setRewrittenContents] = useState({});
             const [rewritingBoardId, setRewritingBoardId] = useState(null);
 
@@ -3420,6 +3443,25 @@
                 };
                 loadImages();
             }, [selectedBoardKey]);
+
+            // Load gallery thumbnail images when selection changes
+            const selectedGalleryKey = useMemo(() => Array.from(selectedGalleryNewsletterIds).sort().join(','), [selectedGalleryNewsletterIds]);
+            useEffect(() => {
+                if (!selectedGalleryKey) return;
+                const ids = selectedGalleryKey.split(',').filter(Boolean);
+                const loadGalleryThumbs = async () => {
+                    const urls = {};
+                    for (const gid of ids) {
+                        if (galleryThumbUrls[gid]) { urls[gid] = galleryThumbUrls[gid]; continue; }
+                        const { data: atts } = await supabase.from('attachments')
+                            .select('file_path, file_type').eq('gallery_id', gid).order('created_at', { ascending: true });
+                        const img = (atts || []).find(a => a.file_type?.startsWith('image/'));
+                        if (img) { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); urls[gid] = u?.publicUrl || null; }
+                    }
+                    setGalleryThumbUrls(urls);
+                };
+                loadGalleryThumbs();
+            }, [selectedGalleryKey]);
 
             // AI rewrite handler
             const handleRewriteBoard = async (boardId, originalText) => {
@@ -10674,7 +10716,7 @@
                         alert('뉴스레터에 포함할 항목을 선택해주세요.');
                         return;
                     }
-                    const html = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents);
+                    const html = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
                     const pw = window.open('', '_blank', 'width=900,height=700');
                     if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
                     pw.document.write(html);
@@ -10689,7 +10731,7 @@
                         alert('뉴스레터에 포함할 항목을 선택해주세요.');
                         return;
                     }
-                    const fullHtml = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents);
+                    const fullHtml = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
                     // Extract body content only (between <body> and </body>)
                     const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
                     const bodyHtml = bodyMatch ? bodyMatch[1] : fullHtml;
@@ -10843,6 +10885,35 @@
                                 </div>
                             </div>
 
+                                {/* 갤러리 선택 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>📸 갤러리 선택 ({selectedGalleryNewsletterIds.size}/{(data.galleries || []).length})</h3>
+                                        <button onClick={() => {
+                                            const all = (data.galleries || []).map(g => g.id);
+                                            setSelectedGalleryNewsletterIds(prev => prev.size === all.length ? new Set() : new Set(all));
+                                        }} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', background: '#f8f8f8' }}>
+                                            {selectedGalleryNewsletterIds.size === (data.galleries || []).length && (data.galleries || []).length > 0 ? '전체해제' : '전체선택'}
+                                        </button>
+                                    </div>
+                                    {(data.galleries || []).length === 0 ? (
+                                        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 16 }}>갤러리 항목이 없습니다.</p>
+                                    ) : (
+                                        <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                                            {(data.galleries || []).map(g => (
+                                                <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 13 }}>
+                                                    <input type="checkbox" checked={selectedGalleryNewsletterIds.has(g.id)}
+                                                        onChange={() => setSelectedGalleryNewsletterIds(prev => { const n = new Set(prev); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; })} />
+                                                    <span style={{ color: '#f59e0b', fontSize: 11 }}>📸</span>
+                                                    <span style={{ flex: 1, fontWeight: 500 }}>{g.title}</span>
+                                                    <span style={{ color: '#aaa', fontSize: 11 }}>{g.category}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* 우측: 미리보기 */}
                             <div>
                                 <div className="card" style={{ position: 'sticky', top: 20 }}>
@@ -10974,6 +11045,26 @@
                                                 })()}
                                             </div>
                                         )}
+
+                                        {/* Selected galleries preview */}
+                                        {(() => { const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                                            return selGalleries.length > 0 && (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                                    <div style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#f59e0b,#ef4444)', borderRadius: 2 }}></div>
+                                                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1e1e2e', margin: 0 }}>갤러리</h4>
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                                                    {selGalleries.map(g => (
+                                                        <div key={g.id} style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #f0f0f0', background: '#fff' }}>
+                                                            {galleryThumbUrls[g.id] ? <img src={galleryThumbUrls[g.id]} alt="" style={{ width: '100%', height: 100, objectFit: 'cover' }} />
+                                                                : <div style={{ width: '100%', height: 100, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 20 }}>📷</div>}
+                                                            <div style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, color: '#1e1e2e' }}>{g.title}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ); })()}
 
                                         {/* Closing */}
                                         {newsletterConfig.closing && (
