@@ -3091,7 +3091,7 @@
         // Newsletter HTML generator
         // Generates a printable newsletter from selected schedules and board posts.
         // ────────────────────────────────────────────────────────────
-        const generateNewsletterHTML = (config, selectedSchedules, selectedBoards, orgName) => {
+        const generateNewsletterHTML = (config, selectedSchedules, selectedBoards, orgName, boardImageUrls = {}, rewrittenContents = {}) => {
             const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const catColors = { '교육': '#6366f1', '캠페인': '#ec4899', '회의': '#f59e0b', '평가': '#10b981', '기타': '#8b5cf6' };
             const typeColors = { notice: '#ef4444', materials: '#3b82f6', report: '#8b5cf6', free: '#6b7280' };
@@ -3144,7 +3144,8 @@
                             <span style="font-size:8.5pt;color:#bbb;margin-left:auto;">${esc(dateStr)}</span>
                         </div>
                         <h3 style="margin:0 0 8px;font-size:12.5pt;font-weight:700;color:#1e1e2e;line-height:1.4;">${esc(b.title)}</h3>
-                        <div style="font-size:10pt;line-height:1.8;color:#555;">${sanitized}</div>
+                        ${(boardImageUrls[b.id] || []).map(url => `<img src="${esc(url)}" alt="" style="max-width:100%;border-radius:12px;margin:8px 0;display:block;" />`).join('')}
+                        <div style="font-size:10pt;line-height:1.8;color:#555;">${rewrittenContents[b.id] ? esc(rewrittenContents[b.id]) : sanitized}</div>
                     </div>`;
                     }).join('')}
                 </div>
@@ -3397,6 +3398,9 @@
             });
             const [selectedScheduleIds, setSelectedScheduleIds] = useState(new Set());
             const [selectedBoardIds, setSelectedBoardIds] = useState(new Set());
+            const [boardImageUrls, setBoardImageUrls] = useState({});
+            const [rewrittenContents, setRewrittenContents] = useState({});
+            const [rewritingBoardId, setRewritingBoardId] = useState(null);
 
             // Google API 초기화
             useEffect(() => {
@@ -10601,6 +10605,37 @@
                     { value: 'materials', label: '자료' }, { value: 'report', label: '보고서' }, { value: 'free', label: '자유' }
                 ];
 
+                // Load board attachment images when selection changes
+                useEffect(() => {
+                    const loadImages = async () => {
+                        const newUrls = { ...boardImageUrls };
+                        let changed = false;
+                        for (const bid of selectedBoardIds) {
+                            if (newUrls[bid]) continue;
+                            const { data: atts } = await supabase.from('attachments')
+                                .select('file_path, file_type').eq('board_id', bid).order('created_at', { ascending: true });
+                            const imgs = (atts || []).filter(a => a.file_type?.startsWith('image/'));
+                            newUrls[bid] = imgs.map(img => { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); return u?.publicUrl || null; }).filter(Boolean);
+                            changed = true;
+                        }
+                        if (changed) setBoardImageUrls(newUrls);
+                    };
+                    if (selectedBoardIds.size > 0) loadImages();
+                }, [selectedBoardIds.size]);
+
+                // AI rewrite handler
+                const handleRewriteBoard = async (boardId, originalText) => {
+                    setRewritingBoardId(boardId);
+                    try {
+                        const resp = await fetch('/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: (originalText || '').replace(/<[^>]*>/g, '') }) });
+                        const d = await resp.json();
+                        if (d.rewritten) setRewrittenContents(prev => ({ ...prev, [boardId]: d.rewritten }));
+                        else alert(d.error || 'AI 재가공 실패');
+                    } catch (e) { alert('AI 서버 연결 실패'); }
+                    finally { setRewritingBoardId(null); }
+                };
+
                 const filteredSchedules = (data.schedules || []).filter(s => {
                     if (newsletterConfig.dateFrom && s.start_date < newsletterConfig.dateFrom) return false;
                     if (newsletterConfig.dateTo && s.start_date > newsletterConfig.dateTo) return false;
@@ -10636,7 +10671,7 @@
                         alert('뉴스레터에 포함할 항목을 선택해주세요.');
                         return;
                     }
-                    const html = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME);
+                    const html = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents);
                     const pw = window.open('', '_blank', 'width=900,height=700');
                     if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
                     pw.document.write(html);
@@ -10651,7 +10686,7 @@
                         alert('뉴스레터에 포함할 항목을 선택해주세요.');
                         return;
                     }
-                    const fullHtml = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME);
+                    const fullHtml = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents);
                     // Extract body content only (between <body> and </body>)
                     const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
                     const bodyHtml = bodyMatch ? bodyMatch[1] : fullHtml;
@@ -10905,7 +10940,32 @@
                                                             <span style={{ fontSize: 10, color: '#ccc', marginLeft: 'auto' }}>{b.created_at?.split('T')[0]}</span>
                                                         </div>
                                                         <div style={{ fontWeight: 700, fontSize: 13, color: '#1e1e2e', marginBottom: 4 }}>{b.title}</div>
-                                                        <div style={{ color: '#777', fontSize: 11 }}>{stripHtml(b.content).slice(0, 200)}{stripHtml(b.content).length > 200 ? '...' : ''}</div>
+                                                        {(boardImageUrls[b.id] || []).length > 0 && (
+                                                            <div style={{ margin: '6px 0', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                                                {boardImageUrls[b.id].map((url, i) => (
+                                                                    <img key={i} src={url} alt="" style={{ maxWidth: '100%', maxHeight: 160, borderRadius: 8, objectFit: 'cover' }} />
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <div style={{ color: '#777', fontSize: 11 }}>
+                                                            {rewrittenContents[b.id]
+                                                                ? <span style={{ color: '#10b981' }}>{rewrittenContents[b.id]}</span>
+                                                                : <>{stripHtml(b.content).slice(0, 200)}{stripHtml(b.content).length > 200 ? '...' : ''}</>
+                                                            }
+                                                        </div>
+                                                        <div style={{ marginTop: 6, display: 'flex', gap: 4 }}>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleRewriteBoard(b.id, b.content); }}
+                                                                disabled={rewritingBoardId === b.id}
+                                                                style={{ fontSize: 10, padding: '3px 8px', border: '1px solid #e0e0e0', borderRadius: 6, cursor: 'pointer', background: rewritingBoardId === b.id ? '#f0f0f0' : '#fafafa', color: '#555' }}>
+                                                                {rewritingBoardId === b.id ? '재가공 중...' : '✨ AI 재가공'}
+                                                            </button>
+                                                            {rewrittenContents[b.id] && (
+                                                                <button onClick={(e) => { e.stopPropagation(); setRewrittenContents(prev => { const n = {...prev}; delete n[b.id]; return n; }); }}
+                                                                    style={{ fontSize: 10, padding: '3px 8px', border: '1px solid #e0e0e0', borderRadius: 6, cursor: 'pointer', background: '#fff', color: '#999' }}>
+                                                                    원본 복원
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     ));
                                                 })()}
