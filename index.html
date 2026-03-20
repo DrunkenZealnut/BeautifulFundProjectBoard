@@ -3404,11 +3404,13 @@
             const [rewritingBoardId, setRewritingBoardId] = useState(null);
 
             // Load board attachment images when newsletter selection changes
+            const selectedBoardKey = useMemo(() => Array.from(selectedBoardIds).sort().join(','), [selectedBoardIds]);
             useEffect(() => {
+                if (!selectedBoardKey) return;
+                const ids = selectedBoardKey.split(',').filter(Boolean);
                 const loadImages = async () => {
                     const newUrls = {};
-                    for (const bid of selectedBoardIds) {
-                        if (boardImageUrls[bid]) { newUrls[bid] = boardImageUrls[bid]; continue; }
+                    for (const bid of ids) {
                         const { data: atts } = await supabase.from('attachments')
                             .select('file_path, file_type').eq('board_id', bid).order('created_at', { ascending: true });
                         const imgs = (atts || []).filter(a => a.file_type?.startsWith('image/'));
@@ -3416,8 +3418,8 @@
                     }
                     setBoardImageUrls(newUrls);
                 };
-                if (selectedBoardIds.size > 0) loadImages();
-            }, [[...selectedBoardIds].join(',')]);
+                loadImages();
+            }, [selectedBoardKey]);
 
             // AI rewrite handler
             const handleRewriteBoard = async (boardId, originalText) => {
