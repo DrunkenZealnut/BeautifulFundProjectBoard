@@ -3069,7 +3069,8 @@
         // ────────────────────────────────────────────────────────────
         const downloadHWPX = async (title, sections, filename, template = 'base') => {
             try {
-                const resp = await fetch('/api/hwpx', {
+                const apiBase = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'https://beautifulfundboard.vercel.app' : '';
+                const resp = await fetch(apiBase + '/api/hwpx', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, template, sections })
@@ -3422,7 +3423,8 @@
             const handleRewriteBoard = async (boardId, originalText) => {
                 setRewritingBoardId(boardId);
                 try {
-                    const resp = await fetch('/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    const apiBase = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'https://beautifulfundboard.vercel.app' : '';
+                    const resp = await fetch(apiBase + '/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ text: (originalText || '').replace(/<[^>]*>/g, '') }) });
                     if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || `AI 재가공 실패 (${resp.status})`); return; }
                     const d = await resp.json();
