@@ -4268,7 +4268,7 @@
             };
             // F-07: 앱 시작 시 Supabase에서 출석 데이터 로딩
             React.useEffect(() => {
-                supabase.from('system_settings').select('setting_value').eq('setting_key', 'attendance_data').single()
+                supabase.from('system_settings').select('setting_value').eq('setting_key', 'attendance_data').maybeSingle()
                     .then(({ data: row }) => {
                         if (row?.setting_value) {
                             try {
