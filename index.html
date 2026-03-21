@@ -5118,16 +5118,6 @@
                         )}
                     </div>
 
-                    {/* 집행 추이 차트 */}
-                    {data.budgetExecutions && data.budgetExecutions.length > 0 && (
-                        <div className="card" style={{ marginBottom: '24px' }}>
-                            <div className="card-header">
-                                <h2 className="card-title">📈 월별 집행 추이 (카테고리별)</h2>
-                            </div>
-                            <canvas ref={node => { monthlyChartRef.current = node; if (node) renderMonthlyChart(); }} />
-                        </div>
-                    )}
-
                     <div className="grid-2">
                         <div className="card">
                             <div className="dash-section-header">
@@ -5219,38 +5209,6 @@
                         </div>
                     </div>
 
-                    {/* F-08: 월별 집행 추이 */}
-                    <div className="card" style={{ marginTop: '20px' }}>
-                        <div className="card-header">
-                            <h2 className="card-title">📊 월별 집행 추이</h2>
-                        </div>
-                        {(() => {
-                            const monthlyData = {};
-                            (data?.budgetExecutions || []).forEach(ex => {
-                                if (ex.execution_date) {
-                                    const m = ex.execution_date.slice(0, 7);
-                                    monthlyData[m] = (monthlyData[m] || 0) + (ex.amount || 0);
-                                }
-                            });
-                            const months = Object.keys(monthlyData).sort();
-                            const maxAmt = Math.max(...Object.values(monthlyData), 1);
-                            return months.length > 0 ? (
-                                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 120, padding: '8px 0' }}>
-                                    {months.map(m => {
-                                        const h = Math.max(8, (monthlyData[m] / maxAmt) * 100);
-                                        return (
-                                            <div key={m} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                                                <div style={{ fontSize: 10, color: '#6B6560', fontWeight: 600 }}>{fmt(monthlyData[m])}</div>
-                                                <div style={{ width: '100%', maxWidth: 40, height: `${h}%`, background: '#1B6B5A', borderRadius: '4px 4px 0 0', minHeight: 8 }} />
-                                                <div style={{ fontSize: 10, color: '#9C9690' }}>{m.split('-')[1]}월</div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : <div style={{ textAlign: 'center', color: '#9C9690', padding: 20, fontSize: 13 }}>아직 집행 데이터가 없습니다.</div>;
-                        })()}
-                    </div>
-
                     {/* F-08: 카테고리별 집행 현황 */}
                     <div className="card" style={{ marginTop: '20px' }}>
                         <div className="card-header">
@@ -5282,54 +5240,6 @@
                             ) : <div style={{ textAlign: 'center', color: '#9C9690', padding: 20, fontSize: 13 }}>아직 집행 데이터가 없습니다.</div>;
                         })()}
                     </div>
-
-                    {/* F-08: 예산 vs 성과 상관관계 */}
-                    {(() => {
-                        const execs = data?.budgetExecutions || [];
-                        if (execs.length === 0) return null;
-                        const catSpent = {};
-                        execs.forEach(e => { const c = e.category_name || '기타'; catSpent[c] = (catSpent[c] || 0) + (e.amount || 0); });
-                        const perfItems = [
-                            { name: '교과서기초연구', perf: perfIndicators.perf_textbook_team === '1' && perfIndicators.perf_textbook_report === '1' ? 100 : perfIndicators.perf_textbook_team === '1' || perfIndicators.perf_textbook_report === '1' ? 50 : 0 },
-                            { name: '캠페인', perf: Math.min(100, Math.round((parseInt(perfIndicators.perf_campaign_count) || 0) / 30 * 100)) },
-                            { name: 'APP', perf: perfIndicators.perf_app_released === '1' ? 100 : 0 },
-                            { name: '운영위원회', perf: Math.min(100, Math.round((parseInt(perfIndicators.perf_committee_count) || 0) / 12 * 100)) }
-                        ];
-                        const totalExec = Object.values(catSpent).reduce((s, v) => s + v, 0) || 1;
-                        return (
-                            <div className="card" style={{ marginTop: 20 }}>
-                                <div className="card-header"><h2 className="card-title">🔗 예산 vs 성과 상관관계</h2></div>
-                                <div style={{ padding: '8px 0' }}>
-                                    {perfItems.map(p => {
-                                        const spent = catSpent[p.name] || 0;
-                                        const spentPct = Math.round((spent / totalExec) * 100);
-                                        return (
-                                            <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 13 }}>
-                                                <span style={{ minWidth: 80, fontWeight: 500 }}>{p.name}</span>
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 2 }}>
-                                                        <span style={{ fontSize: 10, color: '#718096', minWidth: 32 }}>집행</span>
-                                                        <div style={{ flex: 1, height: 8, background: '#EDF2F7', borderRadius: 4, overflow: 'hidden' }}>
-                                                            <div style={{ width: `${spentPct}%`, height: '100%', background: '#3182CE', borderRadius: 4 }} />
-                                                        </div>
-                                                        <span style={{ fontSize: 10, color: '#4A5568', minWidth: 30 }}>{spentPct}%</span>
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                                        <span style={{ fontSize: 10, color: '#718096', minWidth: 32 }}>성과</span>
-                                                        <div style={{ flex: 1, height: 8, background: '#EDF2F7', borderRadius: 4, overflow: 'hidden' }}>
-                                                            <div style={{ width: `${p.perf}%`, height: '100%', background: '#38A169', borderRadius: 4 }} />
-                                                        </div>
-                                                        <span style={{ fontSize: 10, color: '#4A5568', minWidth: 30 }}>{p.perf}%</span>
-                                                    </div>
-                                                </div>
-                                                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: p.perf >= spentPct ? '#C6F6D5' : '#FED7D7', color: p.perf >= spentPct ? '#22543D' : '#9B2C2C' }}>{p.perf >= spentPct ? '효율적' : '저조'}</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })()}
 
                     {/* F-04: 최근 활동 위젯 */}
                     {(() => {
