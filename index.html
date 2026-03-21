@@ -4845,27 +4845,33 @@
                             <h2>카테고리별 집행 현황</h2>
                         </div>
                         {(() => {
-                            const catData = {};
+                            // subcategory별 예산 맵 구축
+                            const subcatBudgets = {};
+                            BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sc => {
+                                subcatBudgets[sc.name] = (subcatBudgets[sc.name] || 0) + sc.budget;
+                            }));
+                            // subcategory별 집행액 합산
+                            const catSpent = {};
                             (data?.budgetExecutions || []).forEach(ex => {
                                 const cat = ex.subcategory_name || ex.category_name || '기타';
-                                catData[cat] = (catData[cat] || 0) + (ex.amount || 0);
+                                catSpent[cat] = (catSpent[cat] || 0) + (ex.amount || 0);
                             });
-                            const cats = Object.entries(catData).sort((a, b) => b[1] - a[1]);
-                            const totalCat = cats.reduce((s, [, v]) => s + v, 0);
-                            return cats.length > 0 ? (
+                            // 예산이 있는 subcategory 기준으로 정렬 (집행률 높은 순)
+                            const items = Object.keys(subcatBudgets).map(name => ({
+                                name, budget: subcatBudgets[name], spent: catSpent[name] || 0
+                            })).map(i => ({ ...i, pct: i.budget > 0 ? Math.round((i.spent / i.budget) * 100) : 0 }))
+                              .sort((a, b) => b.pct - a.pct);
+                            return items.length > 0 ? (
                                 <div style={{ padding: '8px 0' }}>
-                                    {cats.map(([name, amount]) => {
-                                        const pct = totalCat > 0 ? ((amount / totalCat) * 100).toFixed(1) : 0;
-                                        return (
-                                            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                                <span style={{ fontSize: 13, fontWeight: 500, minWidth: 80, color: '#2D3748' }}>{name}</span>
-                                                <div style={{ flex: 1, background: '#EDF2F7', borderRadius: 4, height: 20, overflow: 'hidden' }}>
-                                                    <div style={{ width: `${pct}%`, background: '#1B6B5A', height: '100%', borderRadius: 4, minWidth: 2 }} />
-                                                </div>
-                                                <span style={{ fontSize: 12, color: '#4A5568', minWidth: 100, textAlign: 'right' }}>{fmt(amount)}원 ({pct}%)</span>
+                                    {items.map(i => (
+                                        <div key={i.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                            <span style={{ fontSize: 13, fontWeight: 500, minWidth: 80, color: '#2D3748' }}>{i.name}</span>
+                                            <div style={{ flex: 1, background: '#EDF2F7', borderRadius: 4, height: 20, overflow: 'hidden' }}>
+                                                <div style={{ width: `${Math.min(i.pct, 100)}%`, background: i.pct > 100 ? '#EF4444' : i.pct > 80 ? '#F59E0B' : '#1B6B5A', height: '100%', borderRadius: 4, minWidth: i.spent > 0 ? 2 : 0 }} />
                                             </div>
-                                        );
-                                    })}
+                                            <span style={{ fontSize: 12, color: i.pct > 100 ? '#EF4444' : '#4A5568', minWidth: 140, textAlign: 'right' }}>{fmt(i.spent)} / {fmt(i.budget)}원 ({i.pct}%)</span>
+                                        </div>
+                                    ))}
                                 </div>
                             ) : <div style={{ textAlign: 'center', color: '#9C9690', padding: 20, fontSize: 13 }}>아직 집행 데이터가 없습니다.</div>;
                         })()}
