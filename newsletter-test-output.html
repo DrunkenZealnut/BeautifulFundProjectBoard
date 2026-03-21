@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>청년노동레터</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; }
+  .line-clamp-1 { overflow:hidden; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
+  .line-clamp-2 { overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .page-enter { animation: fadeUp 0.25s ease both; }
+  @media print { .no-print{display:none!important} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+// ─────────────────────────────────────────────
+// AI-REPROCESSED DATA (원본: Supabase → AI 재가공)
+// ─────────────────────────────────────────────
+const ARTICLES = [
+  {
+    id: 1,
+    issue: "Vol.3 · No.3",
+    date: "2026년 3월 21일",
+    badge: { label: "주요 이슈", variant: "accent" },
+    kicker: "순회 캠페인",
+    readTime: "4분",
+    title: "개학맞이 등교길에서 만난 노동권 — 전국 4개교 순회 캠페인 시작",
+    lede: "2026년 1학기 개학 시즌을 맞아 청년노동자인권센터가 전국 반도체 특성화고 4곳을 찾아갑니다. 등교하는 학생들에게 '노동안전'이라는 말이 낯설지 않도록, 현장에서 직접 만납니다.",
+    body: [
+      "청년노동자인권센터는 3월 첫째 주부터 둘째 주까지 인천반도체고, 충남반도체고, 한국반도체고, 대구반도체고 총 4개교를 순회하며 개학맞이 등교 캠페인을 진행합니다.",
+      "이번 캠페인은 '알면 지킬 수 있다'를 슬로건으로, 졸업 후 산업 현장에 투입될 학생들에게 노동자로서의 기본 권리와 산업안전 정보를 전달하는 것이 목표입니다. 센터가 직접 제작한 소개카드와 엑스배너를 활용해 학교 정문 앞에서 캠페인을 진행합니다.",
+      "첫 번째 일정인 3월 3일 인천반도체고 캠페인에서는 바람이 강하게 불었음에도 불구하고 학생들과 교사들의 따뜻한 호응을 얻었습니다. 특히 담당 선생님께 센터 명함을 전달하며 향후 교내 특강과 연계할 수 있는 접점도 마련했습니다.",
+      "3월 4일 충남반도체고(충남 예산 소재), 3월 9일 한국반도체고, 3월 10일 대구반도체고 순으로 캠페인이 이어질 예정이며, 각 학교에서의 반응과 현장 기록은 센터 갤러리를 통해 공유됩니다.",
+      "센터는 이번 순회 캠페인을 통해 수집한 학생들의 목소리와 반응을 하반기 교과서 개발 사업의 기초 자료로 활용할 계획입니다. 현장에서 '가장 궁금한 것'을 묻는 미니 설문도 함께 진행합니다.",
+    ],
+    quote: {
+      text: "바람이 불었지만 잘 받아주었고 선생님께 명함도 주고 왔어요~",
+      author: "인천반도체고 캠페인 현장 후기, 김창수 활동가"
+    },
+    tags: ["순회캠페인", "개학맞이", "반도체특성화고", "노동안전"],
+    // 원본 출처: boards - "3월 첫번째 순회 캠페인" (notice) + galleries - "인천반도체고 개학캠페인"
+  },
+  {
+    id: 2,
+    issue: "Vol.3 · No.3",
+    date: "2026년 3월 21일",
+    badge: { label: "사업 소식", variant: "green" },
+    kicker: "교과서 연구",
+    readTime: "3분",
+    title: "교과서 기초연구 본격 착수 — 노동환경건강연구소 자문 회의 개최",
+    lede: "반도체 특성화고를 위한 노동안전보건 교과서 개발의 첫걸음, 노동환경건강연구소(녹색병원)를 방문하여 전문가 자문을 받았습니다.",
+    body: [
+      "3월 6일, 청년노동자인권센터 활동가들이 서울 녹색병원 내 노동환경건강연구소를 방문하여 교과서 기초연구를 위한 전문가 자문 회의를 진행했습니다.",
+      "이번 자문에서는 반도체 제조 공정에서 청년 노동자들이 마주하는 주요 유해·위험 요인과, 이를 교과서에 어떤 방식으로 녹여낼 것인지에 대한 방향을 논의했습니다. 연구소 측은 기존 산업보건 연구 데이터와 사례를 공유하며 교과서의 현장 밀착도를 높이는 데 협력하기로 했습니다.",
+      "이 교과서 개발 사업은 아름다운재단 인큐베이팅 지원사업의 핵심 과제 중 하나로, 특성화고 재학 중 또는 졸업 직후 산업 현장에 투입되는 청년들이 자신의 권리와 안전 수칙을 체계적으로 배울 수 있는 교재를 목표로 합니다.",
+      "센터는 2월 28일 운영위원회에서 교과서 개발 로드맵을 확정한 바 있으며, 상반기 중 집필진 구성을 완료하고 하반기에 파일럿 테스트를 거칠 예정입니다.",
+    ],
+    tags: ["교과서개발", "기초연구", "녹색병원", "산업안전"],
+    // 원본 출처: schedules - "노동환경건강연구소방문" + boards - "수행가이드"
+  },
+  {
+    id: 3,
+    issue: "Vol.3 · No.3",
+    date: "2026년 3월 21일",
+    badge: { label: "활동 기록", variant: "orange" },
+    kicker: "홍보물 제작",
+    readTime: "2분",
+    title: "센터의 첫 홍보물이 탄생했습니다 — 소개카드와 엑스배너 공개",
+    lede: "청년노동자인권센터의 정체성을 담은 첫 번째 홍보물이 완성되었습니다. 센터 소개카드와 캠페인용 엑스배너를 소개합니다.",
+    body: [
+      "순회 캠페인을 앞두고 센터의 첫 공식 홍보물이 제작되었습니다. '노동안전 동아리'라는 키워드를 중심으로 디자인된 소개카드와 학생들의 시선을 끌 수 있는 캠페인 엑스배너가 그 주인공입니다.",
+      "소개카드에는 센터의 설립 취지, 주요 활동 영역, 연락처가 담겨 있으며, 학생과 교사 모두에게 전달할 수 있도록 간결하고 친근한 톤으로 제작되었습니다. 엑스배너는 등교길 캠페인 현장에서 센터의 존재를 알리는 랜드마크 역할을 합니다.",
+      "이 홍보물들은 인천반도체고 캠페인을 시작으로 전국 4개 학교 순회에 모두 활용됩니다. 향후 온라인 홍보 자료로도 변환하여 SNS 채널에서 활용할 계획입니다.",
+    ],
+    tags: ["홍보물", "소개카드", "엑스배너", "디자인"],
+    // 원본 출처: galleries - "센터 소개카드", "첫 캠페인 엑스배너"
+  },
+];
+
+const EVENTS = [
+  {
+    id: 1, month: "Mar", day: "06",
+    title: "노동환경건강연구소 방문 — 교과서 기초연구 자문",
+    time: "종일", location: "노동환경건강연구소(녹색병원), 서울",
+    type: "오프라인", fee: "내부 업무",
+    desc: "반도체 특성화고 노동안전보건 교과서 개발을 위한 전문가 자문 회의입니다. 산업보건 전문가들과 교과서 구성 방향, 유해·위험 요인 분류 체계, 현장 사례 수집 방법 등을 논의합니다.",
+    register: false
+  },
+  {
+    id: 2, month: "Mar", day: "04",
+    title: "충남반도체고 개학맞이 등교 캠페인",
+    time: "등교 시간대", location: "충남 예산 · 충남반도체고 정문",
+    type: "오프라인", fee: "캠페인",
+    desc: "충남 예산 소재 충남반도체고를 찾아 개학 첫날 등교하는 학생들에게 노동권 정보를 전달합니다. 센터 소개카드 배포와 미니 설문 진행.",
+    register: false
+  },
+  {
+    id: 3, month: "Mar", day: "03",
+    title: "인천반도체고 등교 캠페인 — 첫 번째 순회",
+    time: "등교 시간대", location: "인천반도체고 정문",
+    type: "오프라인", fee: "캠페인",
+    desc: "2026년 순회 캠페인의 첫 번째 학교. 인천반도체고 정문에서 엑스배너를 설치하고 소개카드를 배포합니다. 바람에도 불구하고 학생·교사 호응을 얻었습니다.",
+    register: false
+  },
+  {
+    id: 4, month: "Feb", day: "28",
+    title: "2월 운영위원회 — 상반기 사업 점검",
+    time: "종일", location: "종각",
+    type: "오프라인", fee: "내부 회의",
+    desc: "2026년 상반기 사업 진행 상황을 점검하고 교과서 개발 로드맵, 캠페인 일정, 예산 집행 현황을 논의합니다. 운영위원 전원 참석.",
+    register: false
+  },
+];
+
+const GALLERIES = [
+  {
+    id: 1,
+    title: "인천반도체고 개학캠페인",
+    category: "캠페인",
+    image: "https://exnloiyzmdzbhljwwxrs.supabase.co/storage/v1/object/public/attachments/gallery/fcf81c01-ec9d-41c6-9068-1f12a207a703/1772526410882_IMG_6134.jpeg",
+    photographer: "김창수",
+    location: "인천반도체고",
+    caption: "2026년 3월 3일, 인천반도체고 정문 앞에서 첫 번째 순회 캠페인을 진행했습니다. 바람이 강하게 불었지만 학생들과 선생님의 따뜻한 반응을 얻었습니다.",
+  },
+  {
+    id: 2,
+    title: "센터 소개카드",
+    category: "결과물",
+    image: "https://exnloiyzmdzbhljwwxrs.supabase.co/storage/v1/object/public/attachments/gallery/31673618-0acb-45da-babf-fe8ab6895ea1/1772160466152__________________________.jpeg",
+    photographer: "김창수",
+    location: "도꼬마리",
+    caption: "청년노동자인권센터의 첫 공식 홍보물. '노동안전 동아리 · 학습지원'을 핵심 메시지로 담은 소개카드입니다. 순회 캠페인에서 학생과 교사에게 배포합니다.",
+  },
+  {
+    id: 3,
+    title: "첫 캠페인 엑스배너",
+    category: "결과물",
+    image: "https://exnloiyzmdzbhljwwxrs.supabase.co/storage/v1/object/public/attachments/gallery/509ebac7-4b75-44f2-8ea9-e49db8125846/1772156880471_KakaoTalk_Photo_2026-02-27-10-47-12.jpeg",
+    photographer: "김창수",
+    location: "도꼬마리",
+    caption: "등교길 캠페인 현장에서 센터의 존재를 알리는 엑스배너. 학교 정문 앞에 설치하여 지나가는 학생들이 자연스럽게 센터를 인지할 수 있도록 디자인되었습니다.",
+  },
+];
+
+const ISSUES = [
+  { vol: "Vol.3 · No.3", date: "2026년 3월 21일", headline: "개학맞이 전국 순회 캠페인 · 교과서 기초연구 착수", count: 3 },
+  { vol: "Vol.3 · No.2", date: "2026년 2월 28일", headline: "운영위원회 개최 · 홍보물 제작 완료", count: 2 },
+];
+
+// ─────────────────────────────────────────────
+// SHARED COMPONENTS (newsletter-full.jsx 기반)
+// ─────────────────────────────────────────────
+const Badge = ({ children, variant = "default" }) => {
+  const s = {
+    default: "bg-slate-100 text-slate-600 border-slate-200",
+    accent: "bg-blue-50 text-blue-700 border-blue-200",
+    green: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    orange: "bg-orange-50 text-orange-700 border-orange-200",
+    red: "bg-red-50 text-red-700 border-red-200",
+    pink: "bg-pink-50 text-pink-600 border-pink-200",
+    amber: "bg-amber-50 text-amber-600 border-amber-200",
+    purple: "bg-purple-50 text-purple-600 border-purple-200",
+  };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${s[variant] || s.default}`}>{children}</span>;
+};
+
+const Card = ({ children, className = "", onClick }) => (
+  <div onClick={onClick} className={`bg-white border border-slate-200 rounded-xl shadow-sm ${onClick ? "cursor-pointer hover:border-slate-300 hover:shadow-md transition-all" : ""} ${className}`}>
+    {children}
+  </div>
+);
+
+const TopNav = ({ page, setPage, back }) => (
+  <div className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-100">
+    <div className="max-w-[680px] mx-auto px-4 h-12 flex items-center justify-between">
+      <button onClick={() => setPage(back || "home")}
+        className="flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        {back ? "돌아가기" : "청년노동레터"}
+      </button>
+      <div className="flex items-center gap-1">
+        {[
+          { id: "home", icon: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" },
+          { id: "archive", icon: "M4 4h16v4H4zM4 10h16v10H4zM9 14h6" },
+          { id: "events", icon: "M8 2v4M16 2v4M3 8h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" },
+          { id: "subscribe", icon: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6" },
+        ].map(({ id, icon }) => (
+          <button key={id} onClick={() => setPage(id)}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${page === id ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:text-slate-700 hover:bg-slate-50"}`}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={icon}/></svg>
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────
+// PAGE: HOME
+// ─────────────────────────────────────────────
+const HomePage = ({ setPage, setSelected }) => {
+  return (
+    <div className="space-y-4">
+      {/* Hero */}
+      <Card className="overflow-hidden">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 px-7 pt-7 pb-5">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-white/70 text-xs font-medium tracking-wide flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>최신 호
+            </span>
+            <span className="text-white/50 text-xs font-mono">Vol.3 · No.3</span>
+          </div>
+          <h1 className="text-2xl font-bold text-white leading-snug mb-1.5">개학맞이 등교길에서<br/>노동권을 이야기합니다</h1>
+          <p className="text-blue-200 text-xs">2026년 3월 21일 · 청년노동자인권센터</p>
+          <div className="flex gap-2 mt-4">
+            {["순회캠페인", "교과서 연구", "홍보물 제작"].map(t => (
+              <span key={t} className="px-2 py-1 rounded-md text-[11px] font-medium bg-white/15 text-white/80">{t}</span>
+            ))}
+          </div>
+        </div>
+        <div className="px-7 py-3 flex gap-2 border-b border-slate-100 overflow-x-auto">
+          {["최신 호", "이전 호", "일정", "구독"].map((t, i) => (
+            <button key={t} onClick={() => setPage(["home","archive","events","subscribe"][i])}
+              className="flex-shrink-0 text-xs font-medium text-slate-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors">{t}</button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Featured article with image */}
+      <Card className="overflow-hidden" onClick={() => { setSelected(ARTICLES[0]); setPage("article"); }}>
+        <img src={GALLERIES[0].image} alt="" className="w-full h-48 object-cover" />
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Badge variant="accent">{ARTICLES[0].badge.label}</Badge>
+            <span className="text-[11px] text-slate-400">{ARTICLES[0].kicker}</span>
+            <span className="text-xs text-slate-400 ml-auto">{ARTICLES[0].readTime} 읽기</span>
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 leading-snug mb-2">{ARTICLES[0].title}</h2>
+          <p className="text-sm text-slate-500 leading-relaxed line-clamp-2">{ARTICLES[0].lede}</p>
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+            <div className="flex gap-1.5">
+              {ARTICLES[0].tags.slice(0,3).map(t => (
+                <span key={t} className="text-[11px] text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">#{t}</span>
+              ))}
+            </div>
+            <span className="text-xs text-blue-600 font-medium flex items-center gap-1">
+              읽기 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Other articles */}
+      <div className="grid grid-cols-1 gap-3">
+        {ARTICLES.slice(1).map(a => (
+          <Card key={a.id} className="p-4" onClick={() => { setSelected(a); setPage("article"); }}>
+            <div className="flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Badge variant={a.badge.variant}>{a.badge.label}</Badge>
+                  <span className="text-[11px] text-slate-400">{a.kicker} · {a.readTime} 읽기</span>
+                </div>
+                <h3 className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">{a.title}</h3>
+                <p className="text-xs text-slate-400 mt-1 line-clamp-1">{a.lede}</p>
+              </div>
+              <svg className="flex-shrink-0 mt-1 text-slate-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Stats */}
+      <Card className="p-5">
+        <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">이번 호 주요 수치</p>
+        <div className="grid grid-cols-3 divide-x divide-slate-100">
+          {[
+            ["4개교", "순회 캠페인 대상", "text-blue-600"],
+            ["3건", "갤러리 현장 기록", "text-orange-500"],
+            ["1건", "전문가 자문 완료", "text-emerald-600"],
+          ].map(([v,l,c]) => (
+            <div key={l} className="text-center px-2">
+              <div className={`text-2xl font-bold tabular-nums ${c}`}>{v}</div>
+              <div className="text-[11px] text-slate-400 mt-0.5 leading-tight">{l}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Notice */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3.5 flex gap-3 items-start">
+        <svg className="flex-shrink-0 mt-0.5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>
+          <p className="text-sm font-semibold text-amber-800 mb-0.5">수행가이드 공유</p>
+          <p className="text-xs text-amber-700 leading-relaxed">2026년 아름다운재단 인큐베이팅 지원사업 수행가이드가 자료실에 등록되었습니다. 사업 수행 절차와 예산 집행 기준을 확인하세요.</p>
+        </div>
+      </div>
+
+      {/* Upcoming events */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-slate-800">다가오는 일정</p>
+          <button onClick={() => setPage("events")} className="text-xs text-blue-600 font-medium hover:underline">전체 보기</button>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {EVENTS.slice(0,2).map(e => (
+            <div key={e.id} className="flex gap-4 items-center py-2.5">
+              <div className="text-center w-10 flex-shrink-0">
+                <div className="text-[10px] text-blue-500 font-semibold uppercase tracking-widest">{e.month}</div>
+                <div className="text-xl font-bold text-slate-800 leading-none">{e.day}</div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-slate-800 line-clamp-1">{e.title}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{e.time} · {e.location}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Gallery preview */}
+      <Card className="p-5">
+        <p className="text-sm font-semibold text-slate-800 mb-3">📸 현장 기록</p>
+        <div className="grid grid-cols-3 gap-2">
+          {GALLERIES.map(g => (
+            <div key={g.id} className="rounded-lg overflow-hidden border border-slate-100 group cursor-pointer" onClick={() => setPage("gallery")}>
+              <img src={g.image} alt={g.title} className="w-full h-24 object-cover group-hover:scale-105 transition-transform duration-300" />
+              <div className="px-2 py-1.5">
+                <div className="text-[10px] font-medium text-slate-600 line-clamp-1">{g.title}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Subscribe CTA */}
+      <Card className="overflow-hidden">
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-6 py-6 text-center">
+          <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-3">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" strokeWidth="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <h3 className="text-base font-bold text-white mb-1">청년노동레터 구독하기</h3>
+          <p className="text-xs text-slate-400 mb-4 leading-relaxed">격주 금요일, 청년 노동 이슈와 센터 소식을<br/>가장 먼저 받아보세요.</p>
+          <button onClick={() => setPage("subscribe")}
+            className="w-full max-w-xs mx-auto py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            무료 구독 신청
+          </button>
+          <div className="flex justify-center gap-4 mt-4">
+            {[["📬","격주 발송"],["📊","보고서 사전 배포"],["🔔","행사 우선 알림"]].map(([icon, text]) => (
+              <div key={text} className="text-center">
+                <div className="text-base mb-0.5">{icon}</div>
+                <div className="text-[10px] text-slate-500">{text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {/* Footer */}
+      <div className="text-center py-6 space-y-1">
+        <p className="text-xs font-medium text-slate-500">청년노동자인권센터</p>
+        <p className="text-[11px] text-slate-400">아름다운재단 2026 공익단체 인큐베이팅 지원사업</p>
+        <p className="text-[10px] text-slate-300 mt-2">ⓒ 2026 청년노동자인권센터. All rights reserved.</p>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// PAGE: ARTICLE DETAIL
+// ─────────────────────────────────────────────
+const ArticlePage = ({ article, setPage }) => {
+  if (!article) return null;
+  const [liked, setLiked] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  // Find matching gallery image
+  const matchedGallery = article.id === 1 ? GALLERIES[0] : null;
+
+  return (
+    <div className="space-y-4">
+      <Card className="overflow-hidden">
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-7 pt-7 pb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Badge variant={article.badge.variant}>{article.badge.label}</Badge>
+            <span className="text-slate-400 text-xs">{article.kicker} · {article.readTime} 읽기</span>
+          </div>
+          <h1 className="text-xl font-bold text-white leading-snug mb-3">{article.title}</h1>
+          <div className="flex items-center gap-2 text-slate-400 text-xs">
+            <span>{article.issue}</span><span>·</span><span>{article.date}</span>
+          </div>
+        </div>
+      </Card>
+
+      {matchedGallery && (
+        <Card className="overflow-hidden">
+          <img src={matchedGallery.image} alt="" className="w-full h-56 object-cover" />
+          <div className="px-5 py-2 bg-slate-50">
+            <p className="text-[11px] text-slate-400">📷 {matchedGallery.photographer} · {matchedGallery.location}</p>
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-6">
+        <div className="rounded-lg bg-blue-50 border-l-4 border-blue-400 px-4 py-3 mb-5">
+          <p className="text-sm text-blue-800 leading-relaxed font-medium">{article.lede}</p>
+        </div>
+        <div className="space-y-4">
+          {article.body.map((para, i) => (
+            <div key={i}>
+              {article.quote && i === 2 && (
+                <div className="relative rounded-xl bg-slate-50 border border-slate-200 px-5 py-4 mb-4">
+                  <svg className="absolute top-3 left-4 text-slate-200 w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M14.017 21v-7.391c0-5.704 3.748-9.57 9-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.995zm-14 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.999v10h-9.999z"/>
+                  </svg>
+                  <p className="text-sm text-slate-700 leading-relaxed pl-6 font-medium italic">{article.quote.text}</p>
+                  <p className="text-xs text-slate-400 pl-6 mt-2">— {article.quote.author}</p>
+                </div>
+              )}
+              <p className="text-sm text-slate-600 leading-relaxed">{para}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-6 pt-5 border-t border-slate-100">
+          {article.tags.map(t => (
+            <span key={t} className="text-xs text-slate-400 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-md">#{t}</span>
+          ))}
+        </div>
+        <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
+          <div className="flex gap-2">
+            <button onClick={() => setLiked(!liked)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${liked ? "bg-red-50 border-red-200 text-red-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+              좋아요
+            </button>
+            <button onClick={() => setBookmarked(!bookmarked)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${bookmarked ? "bg-blue-50 border-blue-200 text-blue-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill={bookmarked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+              저장
+            </button>
+          </div>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            공유
+          </button>
+        </div>
+      </Card>
+
+      <div>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1 mb-3">다른 기사</p>
+        <div className="space-y-2">
+          {ARTICLES.filter(a => a.id !== article.id).slice(0,2).map(a => (
+            <Card key={a.id} className="p-4" onClick={() => { setSelected(a); }}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <Badge variant={a.badge.variant}>{a.badge.label}</Badge>
+                  <h4 className="text-sm font-semibold text-slate-800 leading-snug mt-1.5 line-clamp-2">{a.title}</h4>
+                </div>
+                <svg className="flex-shrink-0 mt-1 text-slate-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// PAGE: ARCHIVE
+// ─────────────────────────────────────────────
+const ArchivePage = ({ setPage, setSelected }) => {
+  const [search, setSearch] = useState("");
+  const filtered = ARTICLES.filter(a =>
+    a.title.includes(search) || a.tags.some(t => t.includes(search)) || a.kicker.includes(search)
+  );
+  return (
+    <div className="space-y-4">
+      <Card className="p-5">
+        <h2 className="text-base font-bold text-slate-900 mb-1">아카이브</h2>
+        <p className="text-xs text-slate-500 mb-4">전체 기사 · 발행호 목록</p>
+        <div className="relative mb-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" placeholder="기사 검색..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+        </div>
+      </Card>
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-2">기사 ({filtered.length})</p>
+        <div className="space-y-2">
+          {filtered.map(a => (
+            <Card key={a.id} className="p-4" onClick={() => { setSelected(a); setPage("article"); }}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Badge variant={a.badge.variant}>{a.badge.label}</Badge>
+                    <span className="text-[11px] text-slate-400 font-mono">{a.issue}</span>
+                  </div>
+                  <h3 className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">{a.title}</h3>
+                  <p className="text-xs text-slate-400 mt-1 line-clamp-1">{a.lede}</p>
+                  <div className="flex gap-1 mt-2">
+                    {a.tags.slice(0,2).map(t => (<span key={t} className="text-[11px] text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">#{t}</span>))}
+                  </div>
+                </div>
+                <svg className="flex-shrink-0 mt-1 text-slate-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-2 mt-2">발행호</p>
+        <div className="space-y-2">
+          {ISSUES.map((issue, i) => (
+            <Card key={i} className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-mono font-semibold text-blue-600">{issue.vol}</span>
+                    {i === 0 && <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded font-medium">최신</span>}
+                  </div>
+                  <p className="text-sm font-medium text-slate-700 leading-snug">{issue.headline}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{issue.date} · 기사 {issue.count}개</p>
+                </div>
+                <svg className="text-slate-300 flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// PAGE: EVENTS
+// ─────────────────────────────────────────────
+const EventsPage = ({ setPage }) => (
+  <div className="space-y-4">
+    <Card className="p-5">
+      <h2 className="text-base font-bold text-slate-900 mb-0.5">일정</h2>
+      <p className="text-xs text-slate-500">센터 주요 활동 및 캠페인 일정</p>
+    </Card>
+    {EVENTS.map(e => (
+      <Card key={e.id} className="p-5">
+        <div className="flex gap-4 items-start">
+          <div className="text-center w-12 flex-shrink-0 bg-slate-50 border border-slate-100 rounded-lg py-2">
+            <div className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">{e.month}</div>
+            <div className="text-2xl font-bold text-slate-800 leading-none">{e.day}</div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${e.fee.includes('캠페인') ? 'bg-pink-50 text-pink-600 border-pink-200' : e.fee.includes('회의') ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                {e.fee}
+              </span>
+              <span className="text-[11px] text-slate-400">{e.type}</span>
+            </div>
+            <h3 className="text-sm font-semibold text-slate-800 leading-snug mb-1">{e.title}</h3>
+            <p className="text-xs text-slate-400">{e.time} · {e.location}</p>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">{e.desc}</p>
+          </div>
+        </div>
+      </Card>
+    ))}
+  </div>
+);
+
+// ─────────────────────────────────────────────
+// PAGE: SUBSCRIBE
+// ─────────────────────────────────────────────
+const SubscribePage = () => {
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [prefs, setPrefs] = useState([]);
+  const topics = ["산업안전", "교과서·교육", "캠페인·행사", "정책·제도", "연구·보고서"];
+  const togglePref = (t) => setPrefs(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t]);
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">뉴스레터 구독</h2>
+            <p className="text-xs text-slate-500">격주 금요일 오전 발송</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-4">
+          {[1,2,3].map(s => (
+            <div key={s} className="flex items-center gap-2">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${step >= s ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400"}`}>
+                {step > s ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg> : s}
+              </div>
+              {s < 3 && <div className={`flex-1 h-0.5 w-8 rounded ${step > s ? "bg-blue-600" : "bg-slate-100"}`}/>}
+            </div>
+          ))}
+          <span className="ml-1 text-xs text-slate-400">{["정보 입력","관심사 선택","완료"][step-1]}</span>
+        </div>
+      </Card>
+
+      {step === 1 && (
+        <Card className="p-6">
+          <h3 className="text-sm font-semibold text-slate-800 mb-4">기본 정보</h3>
+          <div className="space-y-3">
+            <div><label className="block text-xs font-medium text-slate-600 mb-1.5">이름 (선택)</label>
+              <input type="text" placeholder="홍길동" value={name} onChange={e => setName(e.target.value)} className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" /></div>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1.5">이메일 <span className="text-red-500">*</span></label>
+              <input type="email" placeholder="hello@example.com" value={email} onChange={e => setEmail(e.target.value)} className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" /></div>
+          </div>
+          <button onClick={() => email && setStep(2)} className={`w-full mt-5 py-2.5 text-sm font-semibold rounded-lg transition-colors ${email ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>다음 단계</button>
+        </Card>
+      )}
+
+      {step === 2 && (
+        <Card className="p-6">
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">관심 주제 선택</h3>
+          <p className="text-xs text-slate-500 mb-4">선택한 주제의 콘텐츠를 더 자세히 받아볼 수 있습니다.</p>
+          <div className="flex flex-wrap gap-2 mb-6">
+            {topics.map(t => (
+              <button key={t} onClick={() => togglePref(t)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${prefs.includes(t) ? "bg-blue-600 text-white border-blue-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{t}</button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setStep(1)} className="px-4 py-2.5 text-sm font-medium border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">이전</button>
+            <button onClick={() => setStep(3)} className="flex-1 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700">구독 완료</button>
+          </div>
+        </Card>
+      )}
+
+      {step === 3 && (
+        <Card className="p-8 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h3 className="text-base font-bold text-slate-900 mb-1">구독 완료!</h3>
+          <p className="text-sm text-slate-500 mb-1">{name || "독자님"}, 환영합니다.</p>
+          <p className="text-xs text-slate-400 mb-6">{email} 로 다음 호부터 발송됩니다.</p>
+          {prefs.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-1.5 mb-6">
+              {prefs.map(t => <Badge key={t} variant="accent">{t}</Badge>)}
+            </div>
+          )}
+          <div className="rounded-lg bg-slate-50 border border-slate-100 p-4 text-left">
+            <p className="text-xs font-semibold text-slate-700 mb-1">다음 호 예정 · Vol.3 No.4</p>
+            <p className="text-xs text-slate-500">2026년 4월 4일 (금) 오전 9시</p>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// PAGE: GALLERY
+// ─────────────────────────────────────────────
+const GalleryPage = () => {
+  const [selected, setSelected] = useState(null);
+  return (
+    <div className="space-y-4">
+      <Card className="p-5">
+        <h2 className="text-base font-bold text-slate-900 mb-0.5">📸 현장 기록</h2>
+        <p className="text-xs text-slate-500">캠페인 현장과 센터 결과물 사진</p>
+      </Card>
+      {GALLERIES.map(g => (
+        <Card key={g.id} className="overflow-hidden" onClick={() => setSelected(selected === g.id ? null : g.id)}>
+          <img src={g.image} alt={g.title} className="w-full h-52 object-cover" />
+          <div className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Badge variant={g.category === "캠페인" ? "pink" : "green"}>{g.category}</Badge>
+              <span className="text-[11px] text-slate-400">📷 {g.photographer}</span>
+            </div>
+            <h3 className="text-sm font-semibold text-slate-800">{g.title}</h3>
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{g.caption}</p>
+            {selected === g.id && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <div className="text-[11px] text-slate-400">📍 {g.location}</div>
+              </div>
+            )}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// ROOT APP
+// ─────────────────────────────────────────────
+function App() {
+  const [page, setPage] = useState("home");
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const backMap = { article: "home", "event-detail": "events", gallery: "home" };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans">
+      <TopNav page={page} setPage={setPage} back={backMap[page]} />
+      <div className="max-w-[640px] mx-auto px-4 py-5 page-enter" key={page}>
+        {page === "home" && <HomePage setPage={setPage} setSelected={setSelectedArticle} />}
+        {page === "article" && <ArticlePage article={selectedArticle || ARTICLES[0]} setPage={setPage} />}
+        {page === "archive" && <ArchivePage setPage={setPage} setSelected={setSelectedArticle} />}
+        {page === "events" && <EventsPage setPage={setPage} />}
+        {page === "subscribe" && <SubscribePage />}
+        {page === "gallery" && <GalleryPage />}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
