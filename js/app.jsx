@@ -1,0 +1,9024 @@
+// app.jsx — Main application component
+// Dependencies: config.js, documents.jsx, LoginPage.jsx (loaded via script tags)
+
+        function ProjectManagementSystem() {
+            // 인증 상태
+            const [currentUser, setCurrentUser] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('bf_user_session');
+                    if (!saved) return null;
+                    const session = JSON.parse(saved);
+                    // 세션 만료 확인
+                    if (!session.expiresAt || Date.now() > session.expiresAt) {
+                        localStorage.removeItem('bf_user_session');
+                        return null;
+                    }
+                    return session;
+                } catch { return null; }
+            });
+
+            const [currentPage, setCurrentPage] = useState("dashboard");
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [data, setData] = useState({
+                schedules: [],
+                galleries: [],
+                boards: [],
+                budgetExecutions: [],
+                stats: {}
+            });
+
+            // 게시판 공통 상태
+            const [boardView, setBoardView] = useState('list'); // list | detail | write
+            const [boardCategory, setBoardCategory] = useState('all');
+            const [boardSearchQuery, setBoardSearchQuery] = useState('');
+            const [boardCurrentPage, setBoardCurrentPage] = useState(1);
+            const [selectedPost, setSelectedPost] = useState(null);
+            const [boardWriteData, setBoardWriteData] = useState({
+                title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: ''
+            });
+            const [editingPost, setEditingPost] = useState(null); // null이면 새글, 객체면 수정모드
+
+            // 갤러리 상태
+            const [galleryView, setGalleryView] = useState('list'); // list | detail | write
+            const [galleryCategory, setGalleryCategory] = useState('all');
+            const [gallerySearchQuery, setGallerySearchQuery] = useState('');
+            const [galleryCurrentPage, setGalleryCurrentPage] = useState(1);
+            const [selectedGalleryItem, setSelectedGalleryItem] = useState(null);
+            const [galleryWriteData, setGalleryWriteData] = useState({
+                title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: ''
+            });
+            const [editingGalleryItem, setEditingGalleryItem] = useState(null);
+
+            // ===== 캘린더 & Google Calendar 상태 =====
+            const [calendarView, setCalendarView] = useState('month'); // month | list
+            const [calendarDate, setCalendarDate] = useState(new Date());
+            const [selectedDate, setSelectedDate] = useState(null);
+            const [scheduleModal, setScheduleModal] = useState(null); // null | 'create' | 'detail' | 'edit'
+            const [selectedSchedule, setSelectedSchedule] = useState(null);
+            const [scheduleForm, setScheduleForm] = useState({
+                title: '', description: '', category: '교육', subcategory: '',
+                start_date: '', end_date: '', start_time: '', end_time: '',
+                location: '', max_participants: '', status: 'planned'
+            });
+
+            // Google Calendar 상태
+            const GOOGLE_CLIENT_ID = '661991001901-i6onuk7mdpe9jfss70u23j0g29bf83s2.apps.googleusercontent.com';
+            const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar';
+            const [googleConnected, setGoogleConnected] = useState(false);
+            const [googleSyncing, setGoogleSyncing] = useState(false);
+            const [googleEvents, setGoogleEvents] = useState([]);
+            const [googleTokenClient, setGoogleTokenClient] = useState(null);
+            const gapiInited = useRef(false);
+            const gisInited = useRef(false);
+
+            // ===== 뉴스레터 상태 =====
+            const [newsletterConfig, setNewsletterConfig] = useState({
+                title: '', issueNumber: '', publishDate: new Date().toISOString().split('T')[0],
+                greeting: '', closing: '', dateFrom: '', dateTo: '',
+                scheduleCategory: 'all', boardCategory: 'all',
+            });
+            const [selectedScheduleIds, setSelectedScheduleIds] = useState(new Set());
+            const [selectedBoardIds, setSelectedBoardIds] = useState(new Set());
+            const [boardImageUrls, setBoardImageUrls] = useState({});
+            const [selectedGalleryNewsletterIds, setSelectedGalleryNewsletterIds] = useState(new Set());
+            const [galleryThumbUrls, setGalleryThumbUrls] = useState({});
+            const [rewrittenContents, setRewrittenContents] = useState({});
+            const [rewritingBoardId, setRewritingBoardId] = useState(null);
+
+            // Load board attachment images when newsletter selection changes
+            const selectedBoardKey = useMemo(() => Array.from(selectedBoardIds).sort().join(','), [selectedBoardIds]);
+            useEffect(() => {
+                if (!selectedBoardKey) return;
+                const ids = selectedBoardKey.split(',').filter(Boolean);
+                const loadImages = async () => {
+                    const newUrls = {};
+                    for (const bid of ids) {
+                        const { data: atts } = await supabase.from('attachments')
+                            .select('file_path, file_type').eq('board_id', bid).order('created_at', { ascending: true });
+                        const imgs = (atts || []).filter(a => a.file_type?.startsWith('image/'));
+                        newUrls[bid] = imgs.map(img => { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); return u?.publicUrl || null; }).filter(Boolean);
+                    }
+                    setBoardImageUrls(newUrls);
+                };
+                loadImages();
+            }, [selectedBoardKey]);
+
+            // Load gallery thumbnail images when selection changes
+            const selectedGalleryKey = useMemo(() => Array.from(selectedGalleryNewsletterIds).sort().join(','), [selectedGalleryNewsletterIds]);
+            useEffect(() => {
+                if (!selectedGalleryKey) return;
+                const ids = selectedGalleryKey.split(',').filter(Boolean);
+                const loadGalleryThumbs = async () => {
+                    const urls = {};
+                    for (const gid of ids) {
+                        if (galleryThumbUrls[gid]) { urls[gid] = galleryThumbUrls[gid]; continue; }
+                        const { data: atts } = await supabase.from('attachments')
+                            .select('file_path, file_type').eq('gallery_id', gid).order('created_at', { ascending: true });
+                        const img = (atts || []).find(a => a.file_type?.startsWith('image/'));
+                        if (img) { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); urls[gid] = u?.publicUrl || null; }
+                    }
+                    setGalleryThumbUrls(urls);
+                };
+                loadGalleryThumbs();
+            }, [selectedGalleryKey]);
+
+            // AI rewrite handler
+            const handleRewriteBoard = async (boardId, originalText) => {
+                setRewritingBoardId(boardId);
+                try {
+                    const apiBase = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'https://beautifulfundboard.vercel.app' : '';
+                    const resp = await fetch(apiBase + '/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: (originalText || '').replace(/<[^>]*>/g, '') }) });
+                    if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || `AI 재가공 실패 (${resp.status})`); return; }
+                    const d = await resp.json();
+                    if (d.rewritten) setRewrittenContents(prev => ({ ...prev, [boardId]: d.rewritten }));
+                    else alert(d.error || 'AI 재가공 실패');
+                } catch (e) { alert('AI 서버 연결 실패'); }
+                finally { setRewritingBoardId(null); }
+            };
+
+            // Google API 초기화
+            useEffect(() => {
+                const initGapi = () => {
+                    if (window.gapi) {
+                        window.gapi.load('client', async () => {
+                            try {
+                                await window.gapi.client.init({
+                                    discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
+                                });
+                                gapiInited.current = true;
+                                console.log('✅ Google API client 초기화 완료');
+                            } catch (err) {
+                                console.error('❌ GAPI 초기화 실패:', err);
+                            }
+                        });
+                    } else {
+                        setTimeout(initGapi, 500);
+                    }
+                };
+
+                const initGis = () => {
+                    if (window.google?.accounts?.oauth2) {
+                        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+                            client_id: GOOGLE_CLIENT_ID,
+                            scope: GOOGLE_SCOPES,
+                            callback: (tokenResponse) => {
+                                if (tokenResponse.access_token) {
+                                    setGoogleConnected(true);
+                                    console.log('✅ Google 인증 성공');
+                                    loadGoogleCalendarEvents();
+                                }
+                            },
+                        });
+                        setGoogleTokenClient(tokenClient);
+                        gisInited.current = true;
+                        console.log('✅ Google Identity Services 초기화 완료');
+                    } else {
+                        setTimeout(initGis, 500);
+                    }
+                };
+
+                initGapi();
+                initGis();
+            }, []);
+
+            // Google Calendar 로그인
+            const handleGoogleLogin = useCallback(() => {
+                if (!googleTokenClient) {
+                    alert('Google API가 아직 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+                    return;
+                }
+                if (window.gapi.client.getToken() === null) {
+                    googleTokenClient.requestAccessToken({ prompt: 'consent' });
+                } else {
+                    googleTokenClient.requestAccessToken({ prompt: '' });
+                }
+            }, [googleTokenClient]);
+
+            // Google Calendar 로그아웃
+            const handleGoogleLogout = useCallback(() => {
+                const token = window.gapi.client.getToken();
+                if (token) {
+                    window.google.accounts.oauth2.revoke(token.access_token);
+                    window.gapi.client.setToken('');
+                }
+                setGoogleConnected(false);
+                setGoogleEvents([]);
+                console.log('🔓 Google 연결 해제');
+            }, []);
+
+            // Google Calendar 이벤트 로드
+            const loadGoogleCalendarEvents = useCallback(async () => {
+                if (!gapiInited.current || !window.gapi.client.getToken()) return;
+
+                try {
+                    const year = calendarDate.getFullYear();
+                    const month = calendarDate.getMonth();
+                    const timeMin = new Date(year, month - 1, 1).toISOString();
+                    const timeMax = new Date(year, month + 2, 0).toISOString();
+
+                    const response = await window.gapi.client.calendar.events.list({
+                        calendarId: 'primary',
+                        timeMin,
+                        timeMax,
+                        showDeleted: false,
+                        singleEvents: true,
+                        maxResults: 250,
+                        orderBy: 'startTime',
+                    });
+
+                    const events = response.result.items || [];
+                    setGoogleEvents(events);
+                    console.log(`📅 Google Calendar 이벤트 ${events.length}개 로드`);
+                } catch (err) {
+                    console.error('❌ Google Calendar 이벤트 로드 실패:', err);
+                }
+            }, [calendarDate]);
+
+            // calendarDate 변경 시 Google Calendar 이벤트 다시 로드
+            useEffect(() => {
+                if (googleConnected) {
+                    loadGoogleCalendarEvents();
+                }
+            }, [calendarDate, googleConnected, loadGoogleCalendarEvents]);
+
+            // Supabase → Google Calendar 동기화 (일정 추가)
+            const syncToGoogleCalendar = useCallback(async (schedule) => {
+                if (!googleConnected || !gapiInited.current) {
+                    alert('Google Calendar에 연결되지 않았습니다. 먼저 연결해주세요.');
+                    return;
+                }
+
+                try {
+                    setGoogleSyncing(true);
+
+                    // 시간 형식 정규화: "HH:MM" → "HH:MM:SS", "HH:MM:SS" → 그대로
+                    const normalizeTime = (t) => {
+                        if (!t) return null;
+                        const parts = t.split(':');
+                        if (parts.length === 2) return `${t}:00`;
+                        return t;
+                    };
+
+                    const startTime = normalizeTime(schedule.start_time);
+                    const endTime = normalizeTime(schedule.end_time);
+                    const hasTime = !!startTime;
+
+                    // 종일 이벤트의 end.date는 종료일 다음 날이어야 함 (Google Calendar API 규칙)
+                    // toISOString()은 UTC 변환하므로 KST(+9)에서 날짜가 밀림 → 로컬 메서드 사용
+                    const getNextDay = (dateStr) => {
+                        const [y, m, d] = dateStr.split('-').map(Number);
+                        const next = new Date(y, m - 1, d + 1);
+                        return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+                    };
+
+                    const endDateStr = schedule.end_date || schedule.start_date;
+
+                    let event;
+                    if (hasTime) {
+                        event = {
+                            summary: schedule.title,
+                            description: schedule.description || '',
+                            location: schedule.location || '',
+                            start: {
+                                dateTime: `${schedule.start_date}T${startTime}+09:00`,
+                                timeZone: 'Asia/Seoul',
+                            },
+                            end: {
+                                dateTime: `${endDateStr}T${endTime || startTime}+09:00`,
+                                timeZone: 'Asia/Seoul',
+                            },
+                        };
+                    } else {
+                        // 종일 이벤트: date 필드만 사용, dateTime/timeZone 없이
+                        event = {
+                            summary: schedule.title,
+                            description: schedule.description || '',
+                            location: schedule.location || '',
+                            start: {
+                                date: schedule.start_date,
+                            },
+                            end: {
+                                date: getNextDay(endDateStr),
+                            },
+                        };
+                    }
+
+                    console.log('📤 Google Calendar 전송 데이터:', JSON.stringify(event, null, 2));
+
+                    const response = await window.gapi.client.calendar.events.insert({
+                        calendarId: 'primary',
+                        resource: event,
+                    });
+
+                    console.log('✅ Google Calendar 동기화 완료:', response.result.htmlLink);
+                    await loadGoogleCalendarEvents();
+                    return response.result;
+                } catch (err) {
+                    console.error('❌ Google Calendar 동기화 실패:', err);
+                    const detail = err?.result?.error?.message || err?.message || JSON.stringify(err);
+                    console.error('❌ 상세 오류:', detail);
+                    alert(`Google Calendar 동기화에 실패했습니다.\n\n원인: ${detail}`);
+                } finally {
+                    setGoogleSyncing(false);
+                }
+            }, [googleConnected, loadGoogleCalendarEvents]);
+
+            // Google Calendar → Supabase 가져오기
+            const importFromGoogleCalendar = useCallback(async (googleEvent) => {
+                try {
+                    const startDate = googleEvent.start.dateTime
+                        ? googleEvent.start.dateTime.split('T')[0]
+                        : googleEvent.start.date;
+                    const endDate = googleEvent.end.dateTime
+                        ? googleEvent.end.dateTime.split('T')[0]
+                        : googleEvent.end.date;
+                    const startTime = googleEvent.start.dateTime
+                        ? googleEvent.start.dateTime.split('T')[1].substring(0, 5)
+                        : null;
+                    const endTime = googleEvent.end.dateTime
+                        ? googleEvent.end.dateTime.split('T')[1].substring(0, 5)
+                        : null;
+
+                    // Duplicate check: skip if same title + start date already exists in Supabase
+                    const title = googleEvent.summary || '(제목 없음)';
+                    const duplicate = data.schedules.some(s =>
+                        s.title === title && s.start_date === startDate
+                    );
+                    if (duplicate) {
+                        alert(`"${title}" 일정은 이미 등록되어 있습니다.`);
+                        return;
+                    }
+
+                    const { data: newSchedule, error } = await supabase
+                        .from('schedules')
+                        .insert({
+                            title: googleEvent.summary || '(제목 없음)',
+                            description: googleEvent.description || '',
+                            location: googleEvent.location || '',
+                            start_date: startDate,
+                            end_date: endDate !== startDate ? endDate : null,
+                            start_time: startTime,
+                            end_time: endTime,
+                            category: '기타',
+                            status: 'planned',
+                            created_by: currentUser.id,
+                            is_public: true,
+                        })
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+
+                    setData(prev => ({
+                        ...prev,
+                        schedules: [...prev.schedules, newSchedule].sort((a, b) =>
+                            new Date(a.start_date) - new Date(b.start_date)
+                        )
+                    }));
+
+                    console.log('✅ Google → Supabase 가져오기 완료:', newSchedule.title);
+                    return newSchedule;
+                } catch (err) {
+                    console.error('❌ Google 이벤트 가져오기 실패:', err);
+                    alert('이벤트 가져오기에 실패했습니다.');
+                }
+            }, [currentUser, data.schedules]);
+
+            // Sync all Supabase schedules to Google Calendar (skips already-synced items)
+            const syncAllToGoogle = useCallback(async () => {
+                if (!googleConnected) return;
+                setGoogleSyncing(true);
+                try {
+                    let synced = 0;
+                    let skipped = 0;
+                    for (const schedule of data.schedules) {
+                        // Skip if an event with the same title + start date already exists in Google
+                        const alreadySynced = googleEvents.some(ge => {
+                            const geDate = ge.start.dateTime
+                                ? ge.start.dateTime.split('T')[0]
+                                : ge.start.date;
+                            return ge.summary === schedule.title && geDate === schedule.start_date;
+                        });
+                        if (alreadySynced) { skipped++; continue; }
+                        await syncToGoogleCalendar(schedule);
+                        synced++;
+                    }
+                    alert(`${synced}개 일정이 Google Calendar에 동기화되었습니다.${skipped > 0 ? `\n(${skipped}개 중복 건너뜀)` : ''}`);
+                } catch (err) {
+                    console.error('❌ 전체 동기화 실패:', err);
+                } finally {
+                    setGoogleSyncing(false);
+                }
+            }, [googleConnected, data.schedules, googleEvents, syncToGoogleCalendar]);
+
+            // 일정 저장 (신규/수정)
+            const handleSaveSchedule = useCallback(async () => {
+                if (!scheduleForm.title || !scheduleForm.start_date) {
+                    alert('제목과 시작일은 필수입니다.');
+                    return;
+                }
+
+                try {
+                    const payload = {
+                        title: scheduleForm.title,
+                        description: scheduleForm.description,
+                        category: scheduleForm.category,
+                        subcategory: scheduleForm.subcategory || null,
+                        start_date: scheduleForm.start_date,
+                        end_date: scheduleForm.end_date || null,
+                        start_time: scheduleForm.start_time || null,
+                        end_time: scheduleForm.end_time || null,
+                        location: scheduleForm.location || null,
+                        max_participants: scheduleForm.max_participants ? parseInt(scheduleForm.max_participants) : null,
+                        status: scheduleForm.status,
+                    };
+
+                    if (scheduleModal === 'edit' && selectedSchedule) {
+                        // 수정
+                        const { data: updated, error } = await supabase
+                            .from('schedules')
+                            .update(payload)
+                            .eq('id', selectedSchedule.id)
+                            .select()
+                            .single();
+
+                        if (error) throw error;
+
+                        setData(prev => ({
+                            ...prev,
+                            schedules: prev.schedules.map(s => s.id === updated.id ? updated : s)
+                        }));
+                    } else {
+                        // 신규
+                        payload.created_by = currentUser.id;
+                        payload.is_public = true;
+
+                        const { data: created, error } = await supabase
+                            .from('schedules')
+                            .insert(payload)
+                            .select()
+                            .single();
+
+                        if (error) throw error;
+
+                        setData(prev => ({
+                            ...prev,
+                            schedules: [...prev.schedules, created].sort((a, b) =>
+                                new Date(a.start_date) - new Date(b.start_date)
+                            )
+                        }));
+
+                        // Google Calendar에도 동기화
+                        if (googleConnected) {
+                            await syncToGoogleCalendar(created);
+                        }
+                    }
+
+                    setScheduleModal(null);
+                    setSelectedSchedule(null);
+                } catch (err) {
+                    console.error('❌ 일정 저장 실패:', err);
+                    alert('일정 저장에 실패했습니다: ' + err.message);
+                }
+            }, [scheduleForm, scheduleModal, selectedSchedule, currentUser, googleConnected, syncToGoogleCalendar]);
+
+            // 일정 삭제
+            const handleDeleteSchedule = useCallback(async (scheduleId) => {
+                if (!confirm('이 일정을 삭제하시겠습니까?')) return;
+
+                try {
+                    const { error, count } = await supabase
+                        .from('schedules')
+                        .delete()
+                        .eq('id', scheduleId)
+                        .select();
+
+                    if (error) {
+                        console.error('❌ Supabase 삭제 오류:', error.message, error.details, error.hint);
+                        throw error;
+                    }
+
+                    console.log('✅ 일정 삭제 완료, id:', scheduleId);
+
+                    setData(prev => ({
+                        ...prev,
+                        schedules: prev.schedules.filter(s => s.id !== scheduleId)
+                    }));
+                    setScheduleModal(null);
+                    setSelectedSchedule(null);
+                } catch (err) {
+                    console.error('❌ 일정 삭제 실패:', err);
+                    alert('일정 삭제에 실패했습니다: ' + (err.message || ''));
+                }
+            }, []);
+
+            // 캘린더 유틸리티 함수
+            const getCalendarDays = useCallback((year, month) => {
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const startDay = firstDay.getDay(); // 0=일
+                const daysInMonth = lastDay.getDate();
+
+                const days = [];
+
+                // 이전 달
+                const prevLastDay = new Date(year, month, 0).getDate();
+                for (let i = startDay - 1; i >= 0; i--) {
+                    days.push({ day: prevLastDay - i, month: month - 1, year, isOtherMonth: true });
+                }
+
+                // 이번 달
+                for (let d = 1; d <= daysInMonth; d++) {
+                    days.push({ day: d, month, year, isOtherMonth: false });
+                }
+
+                // 다음 달
+                const remaining = 42 - days.length;
+                for (let d = 1; d <= remaining; d++) {
+                    days.push({ day: d, month: month + 1, year, isOtherMonth: true });
+                }
+
+                return days;
+            }, []);
+
+            const getEventsForDate = useCallback((dateStr) => {
+                const supabaseEvents = data.schedules.filter(s => {
+                    if (s.start_date === dateStr) return true;
+                    if (s.end_date && s.start_date <= dateStr && s.end_date >= dateStr) return true;
+                    return false;
+                });
+
+                const gEvents = googleEvents.filter(e => {
+                    const eDate = e.start.dateTime ? e.start.dateTime.split('T')[0] : e.start.date;
+                    const eEndDate = e.end.dateTime ? e.end.dateTime.split('T')[0] : e.end.date;
+                    if (eDate === dateStr) return true;
+                    if (eDate <= dateStr && eEndDate >= dateStr) return true;
+                    return false;
+                }).filter(ge => {
+                    // 이미 Supabase에 같은 제목+날짜가 있으면 중복 제거
+                    return !supabaseEvents.some(se => se.title === ge.summary && se.start_date === (ge.start.dateTime ? ge.start.dateTime.split('T')[0] : ge.start.date));
+                });
+
+                return { supabaseEvents, googleEvents: gEvents };
+            }, [data.schedules, googleEvents]);
+
+            const formatDateStr = (year, month, day) => {
+                return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            };
+
+            const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+            const MONTHS_KR = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+
+            // 링크 미리보기 상태
+            const [linkPreviews, setLinkPreviews] = useState([]);
+            const [linkPreviewLoading, setLinkPreviewLoading] = useState(false);
+            const boardWriteDebounceRef = useRef(null);
+
+            // 첨부파일 상태
+            const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+            const MAX_FILE_COUNT = 5;
+            const [boardAttachments, setBoardAttachments] = useState([]);
+            const [galleryAttachments, setGalleryAttachments] = useState([]);
+            const [detailAttachments, setDetailAttachments] = useState([]);
+            const boardFileInputRef = useRef(null);
+            const galleryFileInputRef = useRef(null);
+            const [budgetAttachments, setBudgetAttachments] = useState([]);
+            const budgetFileInputRef = useRef(null);
+            const [executionAttachmentsMap, setExecutionAttachmentsMap] = useState({});
+            const executionFileInputRef = useRef(null);
+            const activeUploadExecutionIdRef = useRef(null);
+            const [executionDocsMap, setExecutionDocsMap] = useState({});
+            // { [execId]: { [docName]: { file_path, file_name, file_size } } }
+            const docUploadFileInputRef = useRef(null);
+            const activeDocUploadRef = useRef(null); // { execId, docName }
+            const [formDocFiles, setFormDocFiles] = useState({});
+            // { [docName]: File } — 등록 폼 서류 첨부 (등록 완료 후 업로드)
+            const formDocFileInputRef = useRef(null);
+            const activeFormDocNameRef = useRef(null);
+            const boardEditorRef = useRef(null);
+            const galleryEditorRef = useRef(null);
+            // ── 대시보드 차트 refs ────────────────────────────────────────
+            const monthlyChartRef = useRef(null);
+            const monthlyChartInst = useRef(null);
+
+            // 회계가이드 상태
+            const [guideTab, setGuideTab] = useState('principles');
+            const [selectedAccount, setSelectedAccount] = useState(null);
+            const [withholdingAmount, setWithholdingAmount] = useState('');
+            const [expenseRate, setExpenseRate] = useState(60);
+
+            // 예산관리 상태
+            const [budgetTab, setBudgetTab] = useState("dashboard");
+            const [budgetPeriod, setBudgetPeriod] = useState("total"); // total | h1 | h2
+            const [ratioTab, setRatioTab] = useState('project'); // 비용비율 내부 탭: 'project' | 'operating'
+            // ── 집행내역 정렬/필터/검색 상태 ──────────────────────────────
+            const [execSortBy, setExecSortBy] = useState('execution_date');
+            const [execSortDir, setExecSortDir] = useState('desc');
+            const [execFilterCategory, setExecFilterCategory] = useState('');
+            const [execFilterSubcategory, setExecFilterSubcategory] = useState('');
+            const [execFilterStatus, setExecFilterStatus] = useState('');
+            const [execFilterPayment, setExecFilterPayment] = useState('');
+            const [execFilterDateFrom, setExecFilterDateFrom] = useState('');
+            const [execFilterDateTo, setExecFilterDateTo] = useState('');
+            const [execSearchQuery, setExecSearchQuery] = useState('');
+            // ── 신규 기능 상태 ──────────────────────────────
+            const [execCalMonth, setExecCalMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; });
+            const [execCalSelectedDate, setExecCalSelectedDate] = useState(null);
+            const [dismissedAlerts, setDismissedAlerts] = useState(() => { try { return JSON.parse(sessionStorage.getItem('bf_dismissed_alerts') || '[]'); } catch { return []; } });
+            const [attendanceData, setAttendanceData] = useState(() => { try { return JSON.parse(localStorage.getItem('bf_attendance') || '{}'); } catch { return {}; } });
+            const [profileModal, setProfileModal] = useState(false);
+            const [profileForm, setProfileForm] = useState({ name: '', email: '', phone: '', currentPassword: '', newPassword: '', confirmPassword: '' });
+            const [profileMsg, setProfileMsg] = useState('');
+            const [selectedExecIds, setSelectedExecIds] = useState(new Set());
+            const [comments, setComments] = useState([]);
+            const [newComment, setNewComment] = useState('');
+            const [activityLogs, setActivityLogs] = useState([]);
+            const [formData, setFormData] = useState({
+                subcategory_id: '',
+                subcategory_name: '',
+                category_name: '',
+                budget_item_id: '',
+                budget_item_name: '',
+                type: '',
+                description: '',
+                amount: '',
+                payment_method: '',
+                execution_date: new Date().toISOString().split('T')[0],
+                recipient: ''
+            });
+            const [calculatorAmount, setCalculatorAmount] = useState('');
+            const [calculationResult, setCalculationResult] = useState(null);
+            const [calcIncomeType, setCalcIncomeType] = useState('강사료');
+            const [calcPersons, setCalcPersons] = useState([{ name: '', amount: '' }]);
+            const [calcMultiResults, setCalcMultiResults] = useState(null);
+            const [calcMode, setCalcMode] = useState('single'); // single | multi
+
+            // 예산관리 helper functions
+            // 원천징수 계산: 원단위 절사 (국세, 지방세 따로 계산 후 절사)
+            const calculateWithholdingTax = (amount) => {
+                if (amount <= CONFIG.WITHHOLDING_THRESHOLD) {
+                    return { income: 0, local: 0, total: 0, net: amount, taxable: false };
+                }
+                const incomeTax = Math.floor(amount * CONFIG.INCOME_TAX_RATE);   // 국세: 8% 후 원단위 절사
+                const localTax = Math.floor(incomeTax * CONFIG.LOCAL_TAX_RATE);  // 지방세: 국세의 10% 후 원단위 절사
+                return {
+                    income: incomeTax,
+                    local: localTax,
+                    total: incomeTax + localTax,
+                    net: amount - (incomeTax + localTax),
+                    taxable: true
+                };
+            };
+
+            const calculateMultiPersonTax = () => {
+                const results = calcPersons
+                    .filter(p => p.amount && parseInt(p.amount) > 0)
+                    .map(p => ({
+                        name: p.name || '(이름없음)',
+                        amount: parseInt(p.amount),
+                        ...calculateWithholdingTax(parseInt(p.amount))
+                    }));
+                const summary = results.reduce((acc, r) => ({
+                    totalAmount: acc.totalAmount + r.amount,
+                    totalIncome: acc.totalIncome + r.income,
+                    totalLocal: acc.totalLocal + r.local,
+                    totalTax: acc.totalTax + r.total,
+                    totalNet: acc.totalNet + r.net
+                }), { totalAmount: 0, totalIncome: 0, totalLocal: 0, totalTax: 0, totalNet: 0 });
+                setCalcMultiResults({ persons: results, summary });
+            };
+
+            // 소득유형별 정보
+            const INCOME_TYPE_INFO = {
+                '강사료': {
+                    label: '강사료',
+                    desc: '외부 강사 초빙 시 지급하는 강의 대가',
+                    docs: ['강의확인서 (인적사항, 강의일시/장소/주제, 소속/직위)', '강사료 지급내역서 (등급, 강사료, 공제액, 실지급액, 입금계좌)', '이체증', '강의 유인물 또는 강의자료 또는 강의사진 중 1가지', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['외래강사에 한하여 지급 (단체 직원, 임직원 지급 불가)', '금액 불문 계좌입금 원칙', '강사 등급에 맞는 이력사항 기재 필수', '야외 현장 강의 시 강의사진 첨부 필수']
+                },
+                '단순인건비': {
+                    label: '단순인건비',
+                    desc: '일용직 형태로 고용한 임시 근로자에게 지급하는 인건비',
+                    docs: ['고용 계획서 (고용목적, 기간, 인적사항, 지급단가)', '업무일지 또는 참여확인서', '지급내역서 (이름, 업무, 근무기간, 인건비, 공제액, 실지급액, 입금계좌)', '이체증', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['단체 구성원이나 임직원에게 지급 불가', '반드시 계좌이체 (현금지급 불가)', '고용 전 내부 품의 결재 필요', '주민번호 취합 필요 (연말 기타소득지급명세서 제출용)']
+                },
+                '회의참석수당': {
+                    label: '회의참석수당 / 심사비 / 토론비 / 발제비',
+                    desc: '전문가 자문회의 등 참가자에게 지급하는 수당',
+                    docs: ['회의참석 확인서 (인적사항, 회의명, 일시/장소)', '회의 참석수당 지급내역서', '회의록 사본', '이체증', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['1일 1회 한하여 지급 (최대 15만원)', '기본료 2시간 이내: 100,000원', '초과료 2시간 초과 시: +50,000원 (시간 무관)', '단체 임직원, 단순 청중에게 지급 불가', '토론비/발제비는 회의참석수당 적용 (강사수당 불가)', '금액 불문 계좌이체 원칙']
+                },
+                '원고료': {
+                    label: '원고료',
+                    desc: '외부 기고, 번역, 원고 작성 등에 대한 대가',
+                    docs: ['원고 수령 확인서', '지급내역서', '이체증', '원천징수 신고/납부내역서 (125,000원 초과 시)'],
+                    rules: ['외부인에 한하여 지급', '계좌이체 원칙']
+                }
+            };
+
+            const getRequiredDocuments = (type, paymentMethod) => {
+                if (!DOCUMENT_RULES[type]) return [];
+
+                const rule = DOCUMENT_RULES[type];
+                let docs = [...rule.base, ...rule.required];
+
+                // 조건부 서류 추가
+                if (rule.conditional && rule.conditional.length > 0) {
+                    docs.push(...rule.conditional);
+                }
+
+                return docs;
+            };
+
+            // 시기별 예산 조회 헬퍼
+            const getBudgetByPeriod = (item, period) => {
+                if (period === 'total') return item.budget;
+                return item[period] || 0;
+            };
+
+            const getAllSubcategories = () => {
+                const subcategories = [];
+                BUDGET_DATA.categories.forEach(category => {
+                    category.subcategories.forEach(subcategory => {
+                        subcategories.push({
+                            ...subcategory,
+                            categoryName: category.name
+                        });
+                    });
+                });
+                return subcategories;
+            };
+
+            const getAllBudgetItems = (subcategoryId) => {
+                const subcategories = getAllSubcategories();
+                const subcategory = subcategories.find(s => s.id === subcategoryId);
+                return subcategory ? subcategory.items : [];
+            };
+
+            // ── 집행내역 필터링/정렬 파이프라인 ─────────────────────────
+            const filteredExecutions = useMemo(() => {
+                let result = data?.budgetExecutions || [];
+                if (execFilterCategory) result = result.filter(e => e.category_name === execFilterCategory);
+                if (execFilterSubcategory) result = result.filter(e => e.subcategory_name === execFilterSubcategory);
+                if (execFilterStatus) result = result.filter(e => e.status === execFilterStatus);
+                if (execFilterPayment) result = result.filter(e => e.payment_method === execFilterPayment);
+                if (execFilterDateFrom) result = result.filter(e => e.execution_date >= execFilterDateFrom);
+                if (execFilterDateTo) result = result.filter(e => e.execution_date <= execFilterDateTo);
+                if (execSearchQuery.trim()) {
+                    const q = execSearchQuery.trim().toLowerCase();
+                    result = result.filter(e =>
+                        (e.budget_item_name || '').toLowerCase().includes(q) ||
+                        (e.description || '').toLowerCase().includes(q) ||
+                        (e.recipient || '').toLowerCase().includes(q)
+                    );
+                }
+                result = [...result].sort((a, b) => {
+                    let va = a[execSortBy], vb = b[execSortBy];
+                    if (execSortBy === 'amount') {
+                        va = va || 0; vb = vb || 0;
+                        return execSortDir === 'asc' ? va - vb : vb - va;
+                    }
+                    va = va || ''; vb = vb || '';
+                    const cmp = va.localeCompare(vb);
+                    return execSortDir === 'asc' ? cmp : -cmp;
+                });
+                return result;
+            }, [data?.budgetExecutions, execFilterCategory, execFilterSubcategory, execFilterStatus, execFilterPayment, execFilterDateFrom, execFilterDateTo, execSearchQuery, execSortBy, execSortDir]);
+
+            const resetExecFilters = () => {
+                setExecSortBy('execution_date'); setExecSortDir('desc');
+                setExecFilterCategory(''); setExecFilterSubcategory('');
+                setExecFilterStatus(''); setExecFilterPayment('');
+                setExecFilterDateFrom(''); setExecFilterDateTo('');
+                setExecSearchQuery('');
+                setSelectedExecIds(new Set());
+            };
+
+            // ── F-01: 알림 생성 ──────────────────────────────
+            const getDashboardAlerts = () => {
+                const alerts = [];
+                const today = new Date();
+                (data?.schedules || []).forEach(s => {
+                    if (!s.start_date) return;
+                    const diff = Math.ceil((new Date(s.start_date) - today) / 86400000);
+                    if (diff < 0 || diff > 7) return;
+                    const id = `sched-${s.id}`;
+                    if (dismissedAlerts.includes(id)) return;
+                    alerts.push({ id, level: diff <= 1 ? 'urgent' : diff <= 3 ? 'warning' : 'info', text: `[D-${diff === 0 ? 'Day' : diff}] ${s.title} (${s.start_date})`, sort: diff });
+                });
+                const pendingCount = (data?.budgetExecutions || []).filter(e => e.status === 'pending').length;
+                if (pendingCount > 0 && !dismissedAlerts.includes('pending-execs'))
+                    alerts.push({ id: 'pending-execs', level: 'warning', text: `미승인 집행건 ${pendingCount}건 처리 필요`, sort: 2 });
+                [{ date: `${today.getFullYear()}-06-30`, label: '상반기 정산 마감' }, { date: `${today.getFullYear()}-12-31`, label: '하반기 정산 마감' }].forEach(h => {
+                    const diff = Math.ceil((new Date(h.date) - today) / 86400000);
+                    if (diff >= 0 && diff <= 30 && !dismissedAlerts.includes(`dl-${h.date}`))
+                        alerts.push({ id: `dl-${h.date}`, level: diff <= 3 ? 'urgent' : diff <= 7 ? 'warning' : 'info', text: `[D-${diff}] ${h.label} (${h.date})`, sort: diff });
+                });
+                BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sub => {
+                    const totalBudget = sub.items.reduce((s, i) => s + i.amount, 0);
+                    const spent = (data?.budgetExecutions || []).filter(e => e.subcategory_id === sub.id).reduce((s, e) => s + (e.amount || 0), 0);
+                    const rate = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
+                    if (rate >= 85 && !dismissedAlerts.includes(`bw-${sub.id}`))
+                        alerts.push({ id: `bw-${sub.id}`, level: rate >= 95 ? 'urgent' : 'warning', text: `${sub.name} 예산 소진율 ${Math.round(rate)}%`, sort: 5 });
+                }));
+                return alerts.sort((a, b) => ({ urgent: 0, warning: 1, info: 2 }[a.level] || 3) - ({ urgent: 0, warning: 1, info: 2 }[b.level] || 3) || a.sort - b.sort);
+            };
+            const dismissAlert = (id) => { const u = [...dismissedAlerts, id]; setDismissedAlerts(u); sessionStorage.setItem('bf_dismissed_alerts', JSON.stringify(u)); };
+
+            // ── F-02: 댓글 CRUD ──────────────────────────────
+            const loadComments = async (parentType, parentId) => {
+                try {
+                    const { data: c } = await supabase.from('comments').select('*').eq('parent_type', parentType).eq('parent_id', parentId).order('created_at', { ascending: true });
+                    setComments(c || []);
+                } catch { setComments([]); }
+            };
+            const addComment = async (parentType, parentId) => {
+                if (!newComment.trim()) return;
+                try {
+                    await supabase.from('comments').insert({ parent_type: parentType, parent_id: parentId, content: newComment.trim(), author_id: currentUser?.id, author_name: currentUser?.name || '익명' });
+                    setNewComment('');
+                    await loadComments(parentType, parentId);
+                    logActivity('댓글 작성', parentType, parentId, newComment.trim().slice(0, 50));
+                } catch (err) { console.error('댓글 저장 실패:', err); }
+            };
+            const deleteComment = async (commentId, parentType, parentId) => {
+                if (!confirm('댓글을 삭제하시겠습니까?')) return;
+                try {
+                    await supabase.from('comments').delete().eq('id', commentId);
+                    await loadComments(parentType, parentId);
+                } catch (err) { console.error('댓글 삭제 실패:', err); }
+            };
+
+            // ── F-03: 프로필 수정 ──────────────────────────────
+            const openProfileModal = () => {
+                setProfileForm({ name: currentUser?.name || '', email: currentUser?.email || '', phone: currentUser?.phone || '', currentPassword: '', newPassword: '', confirmPassword: '' });
+                setProfileMsg('');
+                setProfileModal(true);
+            };
+            const getPasswordStrength = (pw) => {
+                if (!pw) return null;
+                let score = 0;
+                if (pw.length >= 6) score++;
+                if (pw.length >= 10) score++;
+                if (/[A-Z]/.test(pw)) score++;
+                if (/[0-9]/.test(pw)) score++;
+                if (/[^A-Za-z0-9]/.test(pw)) score++;
+                if (score <= 1) return { label: '약함', color: '#E53E3E', width: '33%' };
+                if (score <= 3) return { label: '보통', color: '#F59E0B', width: '66%' };
+                return { label: '강함', color: '#22C55E', width: '100%' };
+            };
+            const saveProfile = async () => {
+                setProfileMsg('');
+                if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmPassword) { setProfileMsg('새 비밀번호가 일치하지 않습니다.'); return; }
+                if (profileForm.newPassword && profileForm.newPassword.length < 4) { setProfileMsg('비밀번호는 4자 이상이어야 합니다.'); return; }
+                try {
+                    // 비밀번호 변경 시 현재 비밀번호 검증
+                    if (profileForm.newPassword) {
+                        if (!profileForm.currentPassword) { setProfileMsg('현재 비밀번호를 입력해주세요.'); return; }
+                        const hashedCurrent = await hashPassword(profileForm.currentPassword);
+                        const { data: userRow } = await supabase.from('users').select('password_hash').eq('id', currentUser.id).single();
+                        if (userRow?.password_hash !== hashedCurrent) { setProfileMsg('현재 비밀번호가 일치하지 않습니다.'); return; }
+                    }
+                    const updates = { name: profileForm.name, email: profileForm.email, phone: profileForm.phone };
+                    if (profileForm.newPassword) updates.password_hash = await hashPassword(profileForm.newPassword);
+                    const { error } = await supabase.from('users').update(updates).eq('id', currentUser.id);
+                    if (error) throw error;
+                    setCurrentUser(prev => ({ ...prev, name: updates.name, email: updates.email, phone: updates.phone }));
+                    const session = JSON.parse(localStorage.getItem('bf_user_session'));
+                    if (session) { session.user = { ...session.user, name: updates.name, email: updates.email, phone: updates.phone }; localStorage.setItem('bf_user_session', JSON.stringify(session)); }
+                    setProfileMsg('저장되었습니다!');
+                    logActivity('프로필 수정', 'user', currentUser.id, profileForm.name);
+                } catch (err) { setProfileMsg('저장 실패: ' + err.message); }
+            };
+
+            // ── F-04: 활동 로그 ──────────────────────────────
+            const logActivity = async (action, targetType, targetId, details) => {
+                try {
+                    await supabase.from('activity_logs').insert({ user_id: currentUser?.id, user_name: currentUser?.name, action, target_type: targetType, target_id: targetId, details });
+                } catch { /* 테이블 미생성 시 무시 */ }
+            };
+            const [logFilterUser, setLogFilterUser] = useState('');
+            const [logFilterAction, setLogFilterAction] = useState('');
+            const [logFilterDateFrom, setLogFilterDateFrom] = useState('');
+            const [logFilterDateTo, setLogFilterDateTo] = useState('');
+            const loadActivityLogs = async () => {
+                try {
+                    const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100);
+                    setActivityLogs(logs || []);
+                } catch { setActivityLogs([]); }
+            };
+            const filteredLogs = activityLogs.filter(l => {
+                if (logFilterUser && l.user_name !== logFilterUser) return false;
+                if (logFilterAction && !l.action.includes(logFilterAction)) return false;
+                if (logFilterDateFrom && l.created_at < logFilterDateFrom) return false;
+                if (logFilterDateTo && l.created_at > logFilterDateTo + 'T23:59:59') return false;
+                return true;
+            });
+
+            // ── F-07: 출석 관리 ──────────────────────────────
+            const getAttendance = (scheduleId) => attendanceData[scheduleId] || {};
+            const setAttendance = (scheduleId, name, status) => {
+                const updated = { ...attendanceData, [scheduleId]: { ...attendanceData[scheduleId], [name]: status } };
+                setAttendanceData(updated);
+                localStorage.setItem('bf_attendance', JSON.stringify(updated));
+                // F-07: Supabase 영속 저장
+                supabase.from('system_settings').upsert({ setting_key: 'attendance_data', setting_value: JSON.stringify(updated) }, { onConflict: 'setting_key' }).catch(() => {});
+            };
+            // F-07: 앱 시작 시 Supabase에서 출석 데이터 로딩
+            React.useEffect(() => {
+                supabase.from('system_settings').select('setting_value').eq('setting_key', 'attendance_data').single()
+                    .then(({ data: row }) => {
+                        if (row?.setting_value) {
+                            try {
+                                const parsed = JSON.parse(row.setting_value);
+                                setAttendanceData(prev => {
+                                    const merged = { ...parsed, ...prev };
+                                    localStorage.setItem('bf_attendance', JSON.stringify(merged));
+                                    return merged;
+                                });
+                            } catch {}
+                        }
+                    }).catch(() => {});
+            }, []);
+
+            // ── F-10: 대량 작업 ──────────────────────────────
+            const toggleExecSelect = (id) => {
+                setSelectedExecIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+            };
+            const toggleAllExecs = () => {
+                if (selectedExecIds.size === filteredExecutions.length) setSelectedExecIds(new Set());
+                else setSelectedExecIds(new Set(filteredExecutions.map(e => e.id)));
+            };
+            const bulkChangeStatus = async (newStatus) => {
+                if (selectedExecIds.size === 0) return;
+                if (!confirm(`${selectedExecIds.size}건을 '${EXECUTION_STATUS[newStatus]?.label}'(으)로 변경하시겠습니까?`)) return;
+                try {
+                    for (const id of selectedExecIds) {
+                        await supabase.from('budget_executions').update({ status: newStatus }).eq('id', id);
+                    }
+                    logActivity('일괄 상태 변경', 'budget_executions', null, `${selectedExecIds.size}건 → ${newStatus}`);
+                    setSelectedExecIds(new Set());
+                    await refreshExecutions();
+                } catch (err) { alert('일괄 변경 오류: ' + err.message); }
+            };
+            const bulkDelete = async () => {
+                if (selectedExecIds.size === 0) return;
+                if (!confirm(`${selectedExecIds.size}건을 삭제하시겠습니까? 되돌릴 수 없습니다.`)) return;
+                try {
+                    for (const id of selectedExecIds) {
+                        await supabase.from('budget_executions').delete().eq('id', id);
+                    }
+                    logActivity('일괄 삭제', 'budget_executions', null, `${selectedExecIds.size}건`);
+                    setSelectedExecIds(new Set());
+                    await refreshExecutions();
+                } catch (err) { alert('일괄 삭제 오류: ' + err.message); }
+            };
+
+            // 데이터 로딩 함수들
+            const loadSchedules = useCallback(async () => {
+                try {
+                    console.log('🔍 스케줄 데이터 로딩 시작...');
+                    console.log('🔗 Supabase 연결 확인:', { url: supabaseUrl, key: supabaseKey?.substring(0, 10) + '...' });
+
+                    // Supabase 클라이언트 연결 테스트
+                    console.log('🔗 연결 테스트 수행 중...');
+                    try {
+                        const { data: pingTest, error: pingError } = await supabase.auth.getSession();
+                        console.log('🏓 연결 테스트 결과:', { pingError });
+                    } catch (pingErr) {
+                        console.error('🏓 연결 테스트 실패:', pingErr);
+                    }
+
+                    // 먼저 테이블 존재 확인
+                    console.log('📋 테이블 존재 확인 중...');
+                    const { data: tableCheck, error: tableError } = await supabase
+                        .from('schedules')
+                        .select('count', { count: 'exact', head: true });
+
+                    console.log('📊 테이블 확인 결과:', { count: tableCheck, error: tableError });
+
+                    // 실제 데이터 조회
+                    const { data: schedules, error } = await supabase
+                        .from('schedules')
+                        .select('*')
+                        .order('start_date', { ascending: true });
+
+                    console.log('📊 Supabase 스케줄 응답:', {
+                        data: schedules,
+                        error,
+                        count: schedules ? schedules.length : 0
+                    });
+
+                    if (error) {
+                        console.error('❌ 스케줄 로딩 오류:', error);
+                        console.error('❌ 오류 상세:', error.message, error.details, error.hint);
+                        console.error('❌ 전체 오류 객체:', JSON.stringify(error, null, 2));
+
+                        if (error.message === 'Invalid API key') {
+                            console.error('🔑 API 키 문제 감지. Supabase 대시보드에서 API 키를 확인하세요.');
+                        }
+                        throw error;
+                    }
+
+                    if (schedules && schedules.length > 0) {
+                        console.log('✅ 로딩된 스케줄들:', schedules.map(s => ({ id: s.id, title: s.title, date: s.start_date })));
+                    } else {
+                        console.warn('⚠️ 스케줄이 없습니다. RLS 정책을 확인해주세요.');
+                    }
+
+                    return schedules || [];
+                } catch (err) {
+                    console.error('💥 스케줄 로딩 중 예외 발생:', err);
+                    console.error('💥 예외 상세:', err.message, err.stack);
+                    return [];
+                }
+            }, []);
+
+            const loadGalleries = useCallback(async () => {
+                try {
+                    const { data: galleries, error } = await supabase
+                        .from('galleries')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+                    return galleries || [];
+                } catch (err) {
+                    console.error('Error loading galleries:', err);
+                    return [];
+                }
+            }, []);
+
+            const loadBoards = useCallback(async () => {
+                try {
+                    const { data: boards, error } = await supabase
+                        .from('boards')
+                        .select('*, author:users(name)')
+                        .eq('status', 'published')
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+                    return boards || [];
+                } catch (err) {
+                    console.error('Error loading boards:', err);
+                    return [];
+                }
+            }, []);
+
+            const loadBudgetExecutions = useCallback(async () => {
+                try {
+                    const { data: executions, error } = await supabase
+                        .from('budget_executions')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+                    return executions || [];
+                } catch (err) {
+                    console.error('Error loading budget executions:', err);
+                    return [];
+                }
+            }, []);
+
+            // 통계 계산
+            const calculateStats = useCallback((schedules, galleries, boards, executions) => {
+                const totalBudget = CONFIG.TOTAL_BUDGET;
+                const usedBudget = executions.reduce((sum, exec) => sum + (exec.amount || 0), 0);
+                const usageRate = Math.round((usedBudget / totalBudget) * 100);
+
+                const upcomingSchedules = schedules.filter(s =>
+                    new Date(s.start_date) >= new Date()
+                ).length;
+
+                return {
+                    usageRate,
+                    usedBudget,
+                    totalBudget,
+                    upcomingSchedules,
+                    totalSchedules: schedules.length,
+                    totalGalleries: galleries.length,
+                    totalBoards: boards.length
+                };
+            }, []);
+
+            // 초기 데이터 로딩
+            useEffect(() => {
+                const loadAllData = async () => {
+                    try {
+                        setLoading(true);
+                        setError(null);
+
+                        const [schedules, galleries, boards, executions, recipientsData, settingsData] = await Promise.all([
+                            loadSchedules(),
+                            loadGalleries(),
+                            loadBoards(),
+                            loadBudgetExecutions(),
+                            supabase.from('recipients').select('id,name,birth_date,address,phone')
+                                .eq('is_active', true).order('name').then(r => r.data || []),
+                            supabase.from('system_settings').select('setting_key,setting_value')
+                                .in('setting_key', [
+                                    'org_name', 'org_phone',
+                                    'org_representative', 'org_address', 'org_registration_number', 'org_seal',
+                                    'perf_textbook_team', 'perf_textbook_report',
+                                    'perf_campaign_count', 'perf_app_released', 'perf_committee_count'
+                                ])
+                                .then(r => r.data || [])
+                        ]);
+
+                        setRecipients(recipientsData);
+                        const merged = { org_name: '', org_phone: '', org_representative: '', org_address: '', org_registration_number: '', org_seal: '' };
+                        const perfMerged = {
+                            perf_textbook_team: '0', perf_textbook_report: '0',
+                            perf_campaign_count: '0', perf_app_released: '0', perf_committee_count: '0'
+                        };
+                        settingsData.forEach(row => {
+                            if (row.setting_key in merged) merged[row.setting_key] = row.setting_value || '';
+                            if (row.setting_key in perfMerged) perfMerged[row.setting_key] = row.setting_value || '0';
+                        });
+                        setOrgSettings(merged);
+                        setPerfIndicators(perfMerged);
+
+                        const stats = calculateStats(schedules, galleries, boards, executions);
+
+                        setData({
+                            schedules,
+                            galleries,
+                            boards,
+                            budgetExecutions: executions,
+                            stats
+                        });
+
+                    } catch (err) {
+                        setError('데이터를 불러오는 중 오류가 발생했습니다: ' + err.message);
+                        console.error('Error loading data:', err);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                loadAllData();
+                // F-04: 활동 로그 초기 로딩 (대시보드 위젯용)
+                loadActivityLogs();
+            }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
+
+            // ── 대시보드 차트 ─────────────────────────────────────────────
+            const renderMonthlyChart = useCallback(() => {
+                if (!data?.budgetExecutions?.length) return;
+                if (!monthlyChartRef.current) return;
+
+                // 카테고리별 월별 집계 (누적 바차트용)
+                const CATEGORY_COLORS = { '사업비': '#134E42', '운영비': '#D97706' };
+                const FALLBACK_COLORS = ['#7C3AED', '#0891B2', '#E53E3E', '#38A169'];
+                const categoriesFound = [...new Set(data.budgetExecutions.map(e => e.category_name).filter(Boolean))];
+                const monthlyByCategory = {};
+                categoriesFound.forEach(cat => { monthlyByCategory[cat] = Array(12).fill(0); });
+                data.budgetExecutions.forEach(e => {
+                    const m = parseInt((e.execution_date || '').slice(5, 7)) - 1;
+                    if (m >= 0 && m < 12 && e.category_name) monthlyByCategory[e.category_name][m] += e.amount || 0;
+                });
+                const datasets = categoriesFound.map((cat, i) => ({
+                    label: cat,
+                    data: monthlyByCategory[cat],
+                    backgroundColor: CATEGORY_COLORS[cat] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+                    borderRadius: 4,
+                    stack: 'stack0'
+                }));
+
+                if (monthlyChartInst.current) monthlyChartInst.current.destroy();
+                monthlyChartInst.current = new window.Chart(monthlyChartRef.current.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+                        datasets
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } },
+                            tooltip: {
+                                callbacks: {
+                                    footer: items => {
+                                        const total = items.reduce((s, i) => s + i.parsed.y, 0);
+                                        return '합계: ' + (total >= 10000 ? Math.floor(total / 10000) + '만' : total) + '원';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { stacked: true },
+                            y: { stacked: true, ticks: { callback: v => (v >= 10000 ? Math.floor(v / 10000) + '만' : v) + '원' } }
+                        }
+                    }
+                });
+            }, [data?.budgetExecutions]);
+
+            useEffect(() => {
+                renderMonthlyChart();
+                return () => {
+                    if (monthlyChartInst.current) { monthlyChartInst.current.destroy(); monthlyChartInst.current = null; }
+                };
+            }, [renderMonthlyChart]);
+
+            // 집행 내역 탭: 증빙서류 업로드 현황 로드
+            useEffect(() => {
+                if (budgetTab !== 'history') return;
+                if (Object.keys(executionDocsMap).length > 0) return;
+                const loadDocs = async () => {
+                    try {
+                        const { data: docs } = await supabase
+                            .from('documents')
+                            .select('*')
+                            .order('created_at', { ascending: true });
+                        const map = {};
+                        (docs || []).forEach(d => {
+                            if (!map[d.execution_id]) map[d.execution_id] = {};
+                            map[d.execution_id][d.document_name] = d;
+                        });
+                        setExecutionDocsMap(map);
+                    } catch (err) {
+                        console.error('Error loading execution documents:', err);
+                    }
+                };
+                loadDocs();
+            }, [budgetTab]);
+
+            // 집행 내역 탭이 열릴 때 첨부파일 로드 (이미 로드된 경우 재조회 생략)
+            useEffect(() => {
+                if (budgetTab !== 'history') return;
+                if (Object.keys(executionAttachmentsMap).length > 0) return;
+                const loadExecutionAttachments = async () => {
+                    try {
+                        const { data: atts } = await supabase
+                            .from('attachments')
+                            .select('*')
+                            .not('execution_id', 'is', null)
+                            .order('created_at', { ascending: true });
+                        if (atts) {
+                            const map = {};
+                            atts.forEach(a => {
+                                if (!map[a.execution_id]) map[a.execution_id] = [];
+                                map[a.execution_id].push(a);
+                            });
+                            setExecutionAttachmentsMap(map);
+                        }
+                    } catch (err) {
+                        console.error('Error loading execution attachments:', err);
+                    }
+                };
+                loadExecutionAttachments();
+            }, [budgetTab]);
+
+            // 페이지 렌더링 함수들
+            // Gallery thumbnails for dashboard (auto-load images from attachments)
+            const DashboardGalleryThumb = ({ item, catInfo, onClick }) => {
+                const [thumbUrl, setThumbUrl] = React.useState(
+                    item.image_path && item.image_path !== 'placeholder' ? item.image_path : null
+                );
+                React.useEffect(() => {
+                    // thumbUrl이 없을 때만 첨부파일에서 이미지 로드
+                    // thumbUrl을 deps에서 제거: if(!thumbUrl)로 이미 방어되어 있으므로
+                    // 포함하면 setThumbUrl 후 effect가 불필요하게 재실행됨
+                    if (!thumbUrl) {
+                        (async () => {
+                            const { data: atts } = await supabase.from('attachments')
+                                .select('file_path, file_type').eq('gallery_id', item.id)
+                                .order('created_at', { ascending: true });
+                            const img = atts?.find(a => a.file_type?.startsWith('image/'));
+                            if (img) {
+                                const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path);
+                                if (u?.publicUrl) setThumbUrl(u.publicUrl);
+                            }
+                        })();
+                    }
+                }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+                return (
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={onClick}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+                        style={{ cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid #EBE8E1', transition: 'box-shadow 0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)'}
+                        onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                        <div style={{ height: 100, background: '#F8F6F1', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            {thumbUrl
+                                ? <img src={thumbUrl} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                : <span style={{ fontSize: 28 }}>📷</span>
+                            }
+                        </div>
+                        <div style={{ padding: '8px 10px' }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#2D2D2D', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                            <div style={{ fontSize: 11, color: catInfo.color, marginTop: 2 }}>{catInfo.icon} {item.category}</div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderDashboard = () => {
+                const alerts = getDashboardAlerts();
+                // F-05: 예산 소진 분석
+                const today = new Date();
+                const yearStart = new Date(today.getFullYear(), 0, 1);
+                const yearEnd = new Date(today.getFullYear(), 11, 31);
+                const periodPct = Math.round(((today - yearStart) / (yearEnd - yearStart)) * 100);
+                const totalSpent = (data?.budgetExecutions || []).reduce((s, e) => s + (e.amount || 0), 0);
+                const budgetPct = Math.round((totalSpent / CONFIG.TOTAL_BUDGET) * 100);
+                const burnRatio = periodPct > 0 ? (budgetPct / periodPct).toFixed(1) : 0;
+                const remainingMonths = 12 - today.getMonth();
+                const monthlyAvail = remainingMonths > 0 ? Math.round((CONFIG.TOTAL_BUDGET - totalSpent) / remainingMonths) : 0;
+
+                return (
+                <div>
+                    <h1 className="section-title">🏠 전체 현황</h1>
+                    <p className="section-subtitle">청년노동자인권센터 2026년 공익단체 인큐베이팅 지원사업의 전체 현황을 확인할 수 있습니다.</p>
+
+                    {/* F-01: 알림 배너 */}
+                    {alerts.length > 0 && (
+                        <div className="alert-banner">
+                            {alerts.slice(0, 5).map(a => (
+                                <div key={a.id} className={`alert-item ${a.level}`}>
+                                    <span>{a.level === 'urgent' ? '🔴' : a.level === 'warning' ? '🟠' : '🔵'}</span>
+                                    <span style={{ flex: 1 }}>{a.text}</span>
+                                    <button className="alert-dismiss" onClick={() => dismissAlert(a.id)}>&times;</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* F-05: 예산 소진 분석 */}
+                    <div className="card" style={{ marginBottom: '16px', padding: '16px 20px' }}>
+                        <h3 style={{ fontSize: '15px', fontWeight: '600', margin: '0 0 12px 0' }}>📈 예산 소진 분석</h3>
+                        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                <div style={{ fontSize: '12px', color: '#6B6560', marginBottom: '4px' }}>기간 경과율</div>
+                                <div className="burn-rate-bar">
+                                    <div className="burn-rate-fill" style={{ width: `${periodPct}%`, background: '#94A3B8' }}></div>
+                                    <span className="burn-rate-label">{periodPct}%</span>
+                                </div>
+                            </div>
+                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                <div style={{ fontSize: '12px', color: '#6B6560', marginBottom: '4px' }}>예산 집행률</div>
+                                <div className="burn-rate-bar">
+                                    <div className="burn-rate-fill" style={{ width: `${Math.min(budgetPct, 100)}%`, background: budgetPct > periodPct * 1.2 ? '#EF4444' : budgetPct > periodPct ? '#F59E0B' : '#22C55E' }}></div>
+                                    <span className="burn-rate-label">{budgetPct}%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '13px' }}>
+                            <span>{burnRatio > 1.2 ? '⚠️' : burnRatio > 1 ? '🟡' : '🟢'} 집행 속도: 기간 대비 <strong>{burnRatio}배</strong></span>
+                            <span>💰 남은 {remainingMonths}개월간 월평균 <strong>{fmt(monthlyAvail)}원</strong> 사용 가능</span>
+                        </div>
+                        {/* F-08: 분기별 보고서 자동 생성 */}
+                        <button className="btn btn-secondary" style={{ fontSize: 12, padding: '4px 12px', marginTop: 8 }} onClick={() => {
+                            const pw = window.open('', '_blank', 'width=900,height=700');
+                            const execs = data?.budgetExecutions || [];
+                            const qLabels = ['1분기 (1-3월)', '2분기 (4-6월)', '3분기 (7-9월)', '4분기 (10-12월)'];
+                            const qData = [[], [], [], []];
+                            execs.forEach(e => { if (e.execution_date) { const m = parseInt(e.execution_date.slice(5, 7)); qData[Math.floor((m - 1) / 3)].push(e); } });
+                            const totalBudget = BUDGET_DATA.categories.reduce((s, c) => s + c.subcategories.reduce((ss, sc) => ss + sc.items.reduce((si, i) => si + i.amount, 0), 0), 0);
+                            let html = `<!DOCTYPE html><html><head><title>분기별 사업 진행 보고서</title><style>body{font-family:sans-serif;padding:20px}h1{color:#134E42;text-align:center;font-size:18px}h2{color:#1B6B5A;margin-top:24px;font-size:15px}.qbox{border:1px solid #ddd;border-radius:8px;padding:12px;margin:8px 0}.stat{display:inline-block;padding:8px 16px;background:#f8f6f1;border-radius:6px;margin:4px;text-align:center}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #ddd;padding:4px 8px;font-size:12px}th{background:#134E42;color:white}@media print{body{padding:0}}</style></head><body><h1>분기별 사업 진행 보고서</h1><p style="text-align:center;color:#666;font-size:13px">청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}</p>`;
+                            qLabels.forEach((label, qi) => {
+                                const items = qData[qi];
+                                const sum = items.reduce((s, e) => s + (e.amount || 0), 0);
+                                const cumulSum = qData.slice(0, qi + 1).flat().reduce((s, e) => s + (e.amount || 0), 0);
+                                html += `<div class="qbox"><h2>${label}</h2><div class="stat">건수: <b>${items.length}건</b></div><div class="stat">집행액: <b>${sum.toLocaleString()}원</b></div><div class="stat">누적 집행률: <b>${totalBudget > 0 ? ((cumulSum/totalBudget)*100).toFixed(1) : 0}%</b></div>`;
+                                if (items.length > 0) {
+                                    html += `<table><thead><tr><th>집행일</th><th>항목</th><th>금액</th><th>상태</th></tr></thead><tbody>`;
+                                    items.slice(0, 10).forEach(e => { html += `<tr><td>${e.execution_date}</td><td>${e.budget_item_name||''}</td><td style="text-align:right">${(e.amount||0).toLocaleString()}원</td><td>${e.status||''}</td></tr>`; });
+                                    if (items.length > 10) html += `<tr><td colspan="4" style="text-align:center;color:#999">외 ${items.length - 10}건...</td></tr>`;
+                                    html += '</tbody></table>';
+                                } else { html += '<p style="color:#999;font-size:13px">해당 분기 집행 내역 없음</p>'; }
+                                html += '</div>';
+                            });
+                            html += '</body></html>';
+                            pw.document.write(html); pw.document.close(); pw.print();
+                        }}>📑 분기별 보고서</button>
+                    </div>
+
+                    {/* F-05: 카테고리별 과부족 분석 */}
+                    {(() => {
+                        const execs = data?.budgetExecutions || [];
+                        if (execs.length === 0) return null;
+                        // Build subcategory budget from BUDGET_DATA
+                        const subcatBudgets = {};
+                        BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sc => {
+                            const budget = sc.items.reduce((s, i) => s + i.amount, 0);
+                            subcatBudgets[sc.name] = (subcatBudgets[sc.name] || 0) + budget;
+                        }));
+                        // Sum spent per subcategory_name
+                        const spent = {};
+                        execs.forEach(e => { const k = e.subcategory_name || '기타'; spent[k] = (spent[k] || 0) + (e.amount || 0); });
+                        const items = Object.keys(subcatBudgets).map(name => ({ name, budget: subcatBudgets[name], spent: spent[name] || 0 }))
+                            .filter(i => i.budget > 0)
+                            .map(i => ({ ...i, diff: i.budget - i.spent, pct: Math.round((i.spent / i.budget) * 100) }))
+                            .sort((a, b) => b.pct - a.pct);
+                        const over = items.filter(i => i.pct > 100);
+                        const warn = items.filter(i => i.pct >= 80 && i.pct <= 100);
+                        if (over.length === 0 && warn.length === 0) return null;
+                        return (
+                            <div className="card" style={{ marginBottom: 16, padding: '16px 20px' }}>
+                                <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px 0' }}>⚖️ 카테고리별 과부족 현황</h3>
+                                {over.length > 0 && <div style={{ fontSize: 12, color: '#E53E3E', marginBottom: 8, fontWeight: 600 }}>🔴 초과 항목</div>}
+                                {over.map(i => (
+                                    <div key={i.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                                        <span style={{ minWidth: 80, fontWeight: 500 }}>{i.name}</span>
+                                        <div style={{ flex: 1, background: '#FED7D7', borderRadius: 4, height: 16, overflow: 'hidden' }}>
+                                            <div style={{ width: `${Math.min(i.pct, 200) / 2}%`, background: '#E53E3E', height: '100%', borderRadius: 4 }} />
+                                        </div>
+                                        <span style={{ fontSize: 11, color: '#E53E3E', minWidth: 120, textAlign: 'right' }}>{i.pct}% ({fmt(Math.abs(i.diff))}원 초과)</span>
+                                    </div>
+                                ))}
+                                {warn.length > 0 && <div style={{ fontSize: 12, color: '#D69E2E', marginBottom: 8, marginTop: over.length > 0 ? 8 : 0, fontWeight: 600 }}>🟡 주의 항목 (80%+)</div>}
+                                {warn.map(i => (
+                                    <div key={i.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                                        <span style={{ minWidth: 80, fontWeight: 500 }}>{i.name}</span>
+                                        <div style={{ flex: 1, background: '#FEFCBF', borderRadius: 4, height: 16, overflow: 'hidden' }}>
+                                            <div style={{ width: `${i.pct}%`, background: '#D69E2E', height: '100%', borderRadius: 4 }} />
+                                        </div>
+                                        <span style={{ fontSize: 11, color: '#D69E2E', minWidth: 120, textAlign: 'right' }}>{i.pct}% (잔여 {fmt(i.diff)}원)</span>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })()}
+
+                    <div className="stats-grid">
+                        <div
+                            className="stat-card"
+                            style={{ cursor: 'pointer', position: 'relative' }}
+                            onClick={() => setCurrentPage('budget')}
+                        >
+                            <div className="stat-value">{data.stats.usageRate || 0}%</div>
+                            <div className="stat-label">예산 집행률</div>
+                            <div style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                fontSize: '14px',
+                                opacity: '0.6'
+                            }}>
+                                💰
+                            </div>
+                        </div>
+                        <div className="stat-card" onClick={() => setCurrentPage('schedule')} style={{ cursor: 'pointer' }}>
+                            <div className="stat-value">{data.stats.upcomingSchedules || 0}</div>
+                            <div className="stat-label">예정된 일정</div>
+                            <div style={{ fontSize: '12px', color: '#9C9690', marginTop: '4px' }}>
+                                전체: {data.schedules ? data.schedules.length : 0}개
+                                {data.schedules && data.schedules.length === 0 && (
+                                    <div>⚠️ 스케줄 데이터 없음</div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="stat-card" role="button" tabIndex={0} onClick={() => setCurrentPage('gallery')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('gallery'); } }} style={{ cursor: 'pointer' }}>
+                            <div className="stat-value">{data.stats.totalGalleries || 0}</div>
+                            <div className="stat-label">갤러리 사진</div>
+                        </div>
+                        <div className="stat-card" role="button" tabIndex={0} onClick={() => setCurrentPage('board')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('board'); } }} style={{ cursor: 'pointer' }}>
+                            <div className="stat-value">{data.stats.totalBoards || 0}</div>
+                            <div className="stat-label">게시글</div>
+                        </div>
+                    </div>
+
+                    {/* 성과지표 달성현황 */}
+                    <div className="card" style={{ marginBottom: '24px' }}>
+                        <div className="card-header">
+                            <h2 className="card-title">🎯 성과지표 달성현황</h2>
+                            {currentUser && currentUser.role === 'admin' && !perfEditing && (
+                                <button
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => { setPerfEditing(true); setPerfDraft({ ...perfIndicators }); setPerfMsg(''); }}
+                                >수정</button>
+                            )}
+                            {perfEditing && (
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                                        onClick={() => { setPerfEditing(false); setPerfDraft(null); setPerfMsg(''); }}
+                                        disabled={perfSaving}
+                                    >취소</button>
+                                    <button
+                                        className="btn btn-primary"
+                                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                                        onClick={handleSavePerfIndicators}
+                                        disabled={perfSaving}
+                                    >{perfSaving ? '저장 중...' : '저장'}</button>
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', padding: '8px 0' }}>
+                            {/* 교과서기초연구 */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>📚 교과서기초연구</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6B6560' }}>팀 구성</span>
+                                        {perfEditing ? (
+                                            <select
+                                                value={perfDraft.perf_textbook_team}
+                                                onChange={e => setPerfDraft(d => ({ ...d, perf_textbook_team: e.target.value }))}
+                                                style={{ fontSize: '12px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9' }}
+                                            >
+                                                <option value="0">❌ 미완료</option>
+                                                <option value="1">✅ 완료</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`badge ${perfIndicators.perf_textbook_team === '1' ? 'badge-success' : 'badge-warning'}`}>
+                                                {perfIndicators.perf_textbook_team === '1' ? '✅ 완료' : '❌ 미완료'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '13px', color: '#6B6560' }}>보고서 완료</span>
+                                        {perfEditing ? (
+                                            <select
+                                                value={perfDraft.perf_textbook_report}
+                                                onChange={e => setPerfDraft(d => ({ ...d, perf_textbook_report: e.target.value }))}
+                                                style={{ fontSize: '12px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9' }}
+                                            >
+                                                <option value="0">❌ 미완료</option>
+                                                <option value="1">✅ 완료</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`badge ${perfIndicators.perf_textbook_report === '1' ? 'badge-success' : 'badge-warning'}`}>
+                                                {perfIndicators.perf_textbook_report === '1' ? '✅ 완료' : '❌ 미완료'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {/* 캠페인 */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>📣 캠페인</div>
+                                {(() => {
+                                    const count = perfEditing ? parseInt(perfDraft.perf_campaign_count, 10) || 0 : parseInt(perfIndicators.perf_campaign_count, 10) || 0;
+                                    const pct = Math.min(100, Math.round(count / 30 * 100));
+                                    return (
+                                        <React.Fragment>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <span style={{ fontSize: '13px', color: '#6B6560' }}>진행 횟수 / 30회</span>
+                                                {perfEditing ? (
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="30"
+                                                        value={perfDraft.perf_campaign_count}
+                                                        onChange={e => setPerfDraft(d => ({ ...d, perf_campaign_count: e.target.value }))}
+                                                        style={{ width: '60px', fontSize: '13px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9', textAlign: 'center' }}
+                                                    />
+                                                ) : (
+                                                    <span style={{ fontWeight: '700', fontSize: '18px', color: '#5B21B6' }}>{count}<span style={{ fontWeight: '400', fontSize: '13px', color: '#9C9690' }}>/30</span></span>
+                                                )}
+                                            </div>
+                                            <div style={{ background: '#E8E0F0', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
+                                                <div style={{ width: `${pct}%`, height: '100%', background: '#7C3AED', borderRadius: '6px', transition: 'width 0.4s' }} />
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: '#9C9690', marginTop: '4px', textAlign: 'right' }}>{pct}% 달성</div>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </div>
+                            {/* APP */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>📱 APP</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', color: '#6B6560' }}>네이티브 APP 출시</span>
+                                    {perfEditing ? (
+                                        <select
+                                            value={perfDraft.perf_app_released}
+                                            onChange={e => setPerfDraft(d => ({ ...d, perf_app_released: e.target.value }))}
+                                            style={{ fontSize: '12px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9' }}
+                                        >
+                                            <option value="0">❌ 미출시</option>
+                                            <option value="1">✅ 출시</option>
+                                        </select>
+                                    ) : (
+                                        <span className={`badge ${perfIndicators.perf_app_released === '1' ? 'badge-success' : 'badge-warning'}`}>
+                                            {perfIndicators.perf_app_released === '1' ? '✅ 출시' : '❌ 미출시'}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            {/* 운영위원회 */}
+                            <div style={{ background: '#F9F7F4', borderRadius: '10px', padding: '16px' }}>
+                                <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '12px', color: '#3D3530' }}>🏛️ 운영위원회</div>
+                                {(() => {
+                                    const count = perfEditing ? parseInt(perfDraft.perf_committee_count, 10) || 0 : parseInt(perfIndicators.perf_committee_count, 10) || 0;
+                                    const pct = Math.min(100, Math.round(count / 12 * 100));
+                                    return (
+                                        <React.Fragment>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <span style={{ fontSize: '13px', color: '#6B6560' }}>진행 횟수 / 12회</span>
+                                                {perfEditing ? (
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="12"
+                                                        value={perfDraft.perf_committee_count}
+                                                        onChange={e => setPerfDraft(d => ({ ...d, perf_committee_count: e.target.value }))}
+                                                        style={{ width: '60px', fontSize: '13px', padding: '2px 6px', borderRadius: '6px', border: '1px solid #D4CFC9', textAlign: 'center' }}
+                                                    />
+                                                ) : (
+                                                    <span style={{ fontWeight: '700', fontSize: '18px', color: '#1D6B4A' }}>{count}<span style={{ fontWeight: '400', fontSize: '13px', color: '#9C9690' }}>/12</span></span>
+                                                )}
+                                            </div>
+                                            <div style={{ background: '#D4EDDA', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
+                                                <div style={{ width: `${pct}%`, height: '100%', background: '#1D6B4A', borderRadius: '6px', transition: 'width 0.4s' }} />
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: '#9C9690', marginTop: '4px', textAlign: 'right' }}>{pct}% 달성</div>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                        {perfMsg && (
+                            <div style={{ fontSize: '13px', color: perfMsg.includes('오류') ? '#dc3545' : '#28a745', marginTop: '8px' }}>{perfMsg}</div>
+                        )}
+                    </div>
+
+                    {/* 집행 추이 차트 */}
+                    {data.budgetExecutions && data.budgetExecutions.length > 0 && (
+                        <div className="card" style={{ marginBottom: '24px' }}>
+                            <div className="card-header">
+                                <h2 className="card-title">📈 월별 집행 추이 (카테고리별)</h2>
+                            </div>
+                            <canvas ref={node => { monthlyChartRef.current = node; if (node) renderMonthlyChart(); }} />
+                        </div>
+                    )}
+
+                    <div className="grid-2">
+                        <div className="card">
+                            <div className="card-header">
+                                <h2 className="card-title">📅 최근 일정</h2>
+                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => setCurrentPage('schedule')}>전체보기</button>
+                            </div>
+                            {data.schedules.slice(0, 5).map(schedule => (
+                                <div key={schedule.id} className="item-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                        setSelectedDate(schedule.start_date);
+                                        setSelectedSchedule(schedule);
+                                        setScheduleModal('detail');
+                                        setCurrentPage('schedule');
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedDate(schedule.start_date);
+                                            setSelectedSchedule(schedule);
+                                            setScheduleModal('detail');
+                                            setCurrentPage('schedule');
+                                        }
+                                    }}>
+                                    <div className="item-title">{schedule.title}</div>
+                                    <div className="item-meta">
+                                        📅 {schedule.start_date}<br/>
+                                        📍 {schedule.location}<br/>
+                                        🏷️ {schedule.category}
+                                        {schedule.subcategory && ` > ${schedule.subcategory}`}
+                                    </div>
+                                </div>
+                            ))}
+                            {data.schedules.length === 0 && (
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
+                                    등록된 일정이 없습니다.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="card">
+                            <div className="card-header">
+                                <h2 className="card-title">📋 최근 게시글</h2>
+                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => setCurrentPage('board')}>전체보기</button>
+                            </div>
+                            {data.boards.slice(0, 5).map(board => {
+                                const typeInfo = BOARD_TYPE_MAP[board.board_type] || { label: board.board_type, badge: 'badge-info', icon: '📄' };
+                                return (
+                                    <div
+                                        key={board.id}
+                                        className="item-card"
+                                        onClick={() => {
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
+                                            setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
+                                            setBoardView('detail');
+                                            setCurrentPage('board');
+                                            loadAttachments('board', board.id).then(setDetailAttachments);
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div className="item-title">{board.title}</div>
+                                                <div className="item-meta">
+                                                    ✍️ {board.author?.name || '관리자'} •
+                                                    📅 {new Date(board.created_at).toLocaleDateString()} •
+                                                    👁️ {board.view_count || 0}회
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '4px', marginLeft: '8px', flexShrink: 0 }}>
+                                                {board.is_pinned && (
+                                                    <span className="badge badge-warning">📌</span>
+                                                )}
+                                                <span className={`badge ${typeInfo.badge}`}>{typeInfo.label}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {data.boards.length === 0 && (
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
+                                    등록된 게시글이 없습니다.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* F-08: 월별 집행 추이 */}
+                    <div className="card" style={{ marginTop: '20px' }}>
+                        <div className="card-header">
+                            <h2 className="card-title">📊 월별 집행 추이</h2>
+                        </div>
+                        {(() => {
+                            const monthlyData = {};
+                            (data?.budgetExecutions || []).forEach(ex => {
+                                if (ex.execution_date) {
+                                    const m = ex.execution_date.slice(0, 7);
+                                    monthlyData[m] = (monthlyData[m] || 0) + (ex.amount || 0);
+                                }
+                            });
+                            const months = Object.keys(monthlyData).sort();
+                            const maxAmt = Math.max(...Object.values(monthlyData), 1);
+                            return months.length > 0 ? (
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 120, padding: '8px 0' }}>
+                                    {months.map(m => {
+                                        const h = Math.max(8, (monthlyData[m] / maxAmt) * 100);
+                                        return (
+                                            <div key={m} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                                <div style={{ fontSize: 10, color: '#6B6560', fontWeight: 600 }}>{fmt(monthlyData[m])}</div>
+                                                <div style={{ width: '100%', maxWidth: 40, height: `${h}%`, background: '#1B6B5A', borderRadius: '4px 4px 0 0', minHeight: 8 }} />
+                                                <div style={{ fontSize: 10, color: '#9C9690' }}>{m.split('-')[1]}월</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : <div style={{ textAlign: 'center', color: '#9C9690', padding: 20, fontSize: 13 }}>아직 집행 데이터가 없습니다.</div>;
+                        })()}
+                    </div>
+
+                    {/* F-08: 카테고리별 집행 현황 */}
+                    <div className="card" style={{ marginTop: '20px' }}>
+                        <div className="card-header">
+                            <h2 className="card-title">🏷️ 카테고리별 집행 현황</h2>
+                        </div>
+                        {(() => {
+                            const catData = {};
+                            (data?.budgetExecutions || []).forEach(ex => {
+                                const cat = ex.category_name || '기타';
+                                catData[cat] = (catData[cat] || 0) + (ex.amount || 0);
+                            });
+                            const cats = Object.entries(catData).sort((a, b) => b[1] - a[1]);
+                            const totalCat = cats.reduce((s, [, v]) => s + v, 0);
+                            return cats.length > 0 ? (
+                                <div style={{ padding: '8px 0' }}>
+                                    {cats.map(([name, amount]) => {
+                                        const pct = totalCat > 0 ? ((amount / totalCat) * 100).toFixed(1) : 0;
+                                        return (
+                                            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                <span style={{ fontSize: 13, fontWeight: 500, minWidth: 80, color: '#2D3748' }}>{name}</span>
+                                                <div style={{ flex: 1, background: '#EDF2F7', borderRadius: 4, height: 20, overflow: 'hidden' }}>
+                                                    <div style={{ width: `${pct}%`, background: '#1B6B5A', height: '100%', borderRadius: 4, minWidth: 2 }} />
+                                                </div>
+                                                <span style={{ fontSize: 12, color: '#4A5568', minWidth: 100, textAlign: 'right' }}>{fmt(amount)}원 ({pct}%)</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : <div style={{ textAlign: 'center', color: '#9C9690', padding: 20, fontSize: 13 }}>아직 집행 데이터가 없습니다.</div>;
+                        })()}
+                    </div>
+
+                    {/* F-08: 예산 vs 성과 상관관계 */}
+                    {(() => {
+                        const execs = data?.budgetExecutions || [];
+                        if (execs.length === 0) return null;
+                        const catSpent = {};
+                        execs.forEach(e => { const c = e.category_name || '기타'; catSpent[c] = (catSpent[c] || 0) + (e.amount || 0); });
+                        const perfItems = [
+                            { name: '교과서기초연구', perf: perfIndicators.perf_textbook_team === '1' && perfIndicators.perf_textbook_report === '1' ? 100 : perfIndicators.perf_textbook_team === '1' || perfIndicators.perf_textbook_report === '1' ? 50 : 0 },
+                            { name: '캠페인', perf: Math.min(100, Math.round((parseInt(perfIndicators.perf_campaign_count) || 0) / 30 * 100)) },
+                            { name: 'APP', perf: perfIndicators.perf_app_released === '1' ? 100 : 0 },
+                            { name: '운영위원회', perf: Math.min(100, Math.round((parseInt(perfIndicators.perf_committee_count) || 0) / 12 * 100)) }
+                        ];
+                        const totalExec = Object.values(catSpent).reduce((s, v) => s + v, 0) || 1;
+                        return (
+                            <div className="card" style={{ marginTop: 20 }}>
+                                <div className="card-header"><h2 className="card-title">🔗 예산 vs 성과 상관관계</h2></div>
+                                <div style={{ padding: '8px 0' }}>
+                                    {perfItems.map(p => {
+                                        const spent = catSpent[p.name] || 0;
+                                        const spentPct = Math.round((spent / totalExec) * 100);
+                                        return (
+                                            <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 13 }}>
+                                                <span style={{ minWidth: 80, fontWeight: 500 }}>{p.name}</span>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 2 }}>
+                                                        <span style={{ fontSize: 10, color: '#718096', minWidth: 32 }}>집행</span>
+                                                        <div style={{ flex: 1, height: 8, background: '#EDF2F7', borderRadius: 4, overflow: 'hidden' }}>
+                                                            <div style={{ width: `${spentPct}%`, height: '100%', background: '#3182CE', borderRadius: 4 }} />
+                                                        </div>
+                                                        <span style={{ fontSize: 10, color: '#4A5568', minWidth: 30 }}>{spentPct}%</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                                        <span style={{ fontSize: 10, color: '#718096', minWidth: 32 }}>성과</span>
+                                                        <div style={{ flex: 1, height: 8, background: '#EDF2F7', borderRadius: 4, overflow: 'hidden' }}>
+                                                            <div style={{ width: `${p.perf}%`, height: '100%', background: '#38A169', borderRadius: 4 }} />
+                                                        </div>
+                                                        <span style={{ fontSize: 10, color: '#4A5568', minWidth: 30 }}>{p.perf}%</span>
+                                                    </div>
+                                                </div>
+                                                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: p.perf >= spentPct ? '#C6F6D5' : '#FED7D7', color: p.perf >= spentPct ? '#22543D' : '#9B2C2C' }}>{p.perf >= spentPct ? '효율적' : '저조'}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* F-04: 최근 활동 위젯 */}
+                    {(() => {
+                        const recentLogs = activityLogs.slice(0, 5);
+                        if (recentLogs.length === 0) return null;
+                        const logIcon = (action) => {
+                            if (action.includes('삭제')) return '🗑️';
+                            if (action.includes('등록') || action.includes('추가')) return '➕';
+                            if (action.includes('수정') || action.includes('변경')) return '✏️';
+                            if (action.includes('승인')) return '✅';
+                            if (action.includes('로그인')) return '🔑';
+                            return '📋';
+                        };
+                        return (
+                            <div className="card" style={{ marginTop: '20px' }}>
+                                <div className="card-header">
+                                    <h2 className="card-title">🕐 최근 활동</h2>
+                                    <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
+                                        onClick={() => { setCurrentPage('admin'); }}>전체보기</button>
+                                </div>
+                                <div style={{ padding: '4px 0' }}>
+                                    {recentLogs.map(log => (
+                                        <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #F0EDE8', fontSize: 13 }}>
+                                            <span>{logIcon(log.action)}</span>
+                                            <span style={{ flex: 1 }}><b>{log.user_name || '시스템'}</b> {log.action}{log.details ? ` — ${log.details}` : ''}</span>
+                                            <span style={{ color: '#9C9690', fontSize: 11, flexShrink: 0 }}>{new Date(log.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* F-07: 참여율 통계 위젯 */}
+                    {(() => {
+                        const schedules = data?.schedules || [];
+                        let totalP = 0, presentP = 0;
+                        schedules.forEach(s => {
+                            if (s.participants) {
+                                const names = s.participants.split(',').map(n => n.trim()).filter(Boolean);
+                                const att = attendanceData[s.id] || {};
+                                totalP += names.length;
+                                presentP += names.filter(n => att[n] === 'present').length;
+                            }
+                        });
+                        if (totalP === 0) return null;
+                        const rate = Math.round((presentP / totalP) * 100);
+                        return (
+                            <div className="card" style={{ marginTop: '20px', padding: '16px 20px' }}>
+                                <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px 0' }}>📋 참여율 현황</h3>
+                                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                                    <div style={{ width: 60, height: 60, borderRadius: '50%', background: `conic-gradient(#1B6B5A ${rate * 3.6}deg, #EDF2F7 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#1B6B5A' }}>{rate}%</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 13, color: '#4A5568' }}>전체 참여 대상: <b>{totalP}명</b></div>
+                                        <div style={{ fontSize: 13, color: '#22543D' }}>출석: <b>{presentP}명</b></div>
+                                        <div style={{ fontSize: 13, color: '#9C9690' }}>평균 참여율: <b>{rate}%</b></div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Recent gallery */}
+                    {data.galleries.length > 0 && (
+                        <div className="card" style={{ marginTop: '20px' }}>
+                            <div className="card-header">
+                                <h2 className="card-title">📸 최근 갤러리</h2>
+                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
+                                    onClick={() => setCurrentPage('gallery')}>전체보기</button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', padding: '4px 0' }}>
+                                {data.galleries.slice(0, 6).map(item => {
+                                    const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
+                                    return (
+                                        <DashboardGalleryThumb key={item.id} item={item} catInfo={catInfo}
+                                            onClick={() => {
+                                                // Fire-and-forget view count increment
+                                                supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id).catch(console.error);
+                                                setSelectedGalleryItem({ ...item, view_count: (item.view_count || 0) + 1 });
+                                                setGalleryView('detail');
+                                                setCurrentPage('gallery');
+                                                loadAttachments('gallery', item.id).then(setDetailAttachments);
+                                            }} />
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+            };
+
+            const renderScheduleModal = () => {
+                if (!scheduleModal) return null;
+
+                // 상세 보기 모달
+                if (scheduleModal === 'detail' && selectedSchedule) {
+                    const isGoogleEvent = !!selectedSchedule.htmlLink;
+                    return (
+                        <div className="schedule-modal-overlay" onClick={() => { setScheduleModal(null); setSelectedSchedule(null); }}>
+                            <div className="schedule-modal" onClick={e => e.stopPropagation()}>
+                                <div className="schedule-modal-header">
+                                    <h3>{selectedSchedule.title || selectedSchedule.summary}</h3>
+                                    <button className="schedule-modal-close" onClick={() => { setScheduleModal(null); setSelectedSchedule(null); }}>&times;</button>
+                                </div>
+                                <div className="schedule-modal-body">
+                                    {isGoogleEvent && <div className="google-badge" style={{ marginBottom: 12 }}>G Google Calendar</div>}
+                                    {!isGoogleEvent && selectedSchedule.category && (
+                                        <span className={`badge badge-info`} style={{ marginBottom: 12, display: 'inline-block' }}>
+                                            {selectedSchedule.category}
+                                        </span>
+                                    )}
+
+                                    <div className="schedule-detail-row">
+                                        <span className="schedule-detail-icon">📅</span>
+                                        <span className="schedule-detail-label">날짜</span>
+                                        <span className="schedule-detail-value">
+                                            {isGoogleEvent
+                                                ? (selectedSchedule.start.dateTime || selectedSchedule.start.date)
+                                                : `${selectedSchedule.start_date}${selectedSchedule.end_date ? ' ~ ' + selectedSchedule.end_date : ''}`
+                                            }
+                                        </span>
+                                    </div>
+
+                                    {(isGoogleEvent ? selectedSchedule.start.dateTime : selectedSchedule.start_time) && (
+                                        <div className="schedule-detail-row">
+                                            <span className="schedule-detail-icon">🕒</span>
+                                            <span className="schedule-detail-label">시간</span>
+                                            <span className="schedule-detail-value">
+                                                {isGoogleEvent
+                                                    ? `${selectedSchedule.start.dateTime?.split('T')[1]?.substring(0,5) || ''} - ${selectedSchedule.end.dateTime?.split('T')[1]?.substring(0,5) || ''}`
+                                                    : `${selectedSchedule.start_time} - ${selectedSchedule.end_time || ''}`
+                                                }
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {(isGoogleEvent ? selectedSchedule.location : selectedSchedule.location) && (
+                                        <div className="schedule-detail-row">
+                                            <span className="schedule-detail-icon">📍</span>
+                                            <span className="schedule-detail-label">장소</span>
+                                            <span className="schedule-detail-value">{selectedSchedule.location}</span>
+                                        </div>
+                                    )}
+
+                                    {!isGoogleEvent && (
+                                        <div className="schedule-detail-row">
+                                            <span className="schedule-detail-icon">👥</span>
+                                            <span className="schedule-detail-label">참여자</span>
+                                            <span className="schedule-detail-value">
+                                                {selectedSchedule.current_participants || 0}/{selectedSchedule.max_participants || '-'}명
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {!isGoogleEvent && (
+                                        <div className="schedule-detail-row">
+                                            <span className="schedule-detail-icon">📋</span>
+                                            <span className="schedule-detail-label">상태</span>
+                                            <span className="schedule-detail-value">
+                                                <span className={`badge ${
+                                                    selectedSchedule.status === 'completed' ? 'badge-success' :
+                                                    selectedSchedule.status === 'ongoing' ? 'badge-warning' : 'badge-info'
+                                                }`}>
+                                                    {selectedSchedule.status === 'completed' ? '완료' :
+                                                     selectedSchedule.status === 'ongoing' ? '진행중' :
+                                                     selectedSchedule.status === 'cancelled' ? '취소' : '예정'}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {(selectedSchedule.description || selectedSchedule.description) && (
+                                        <div className="schedule-detail-row" style={{ flexDirection: 'column' }}>
+                                            <span style={{ fontSize: 13, color: '#9C9690', marginBottom: 6 }}>📝 설명</span>
+                                            <span style={{ fontSize: 14, color: '#2D2D2D', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                                                {selectedSchedule.description}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* F-07: 참여자 출석 관리 */}
+                                    {!isGoogleEvent && selectedSchedule.participants && (() => {
+                                        const names = selectedSchedule.participants.split(',').map(n => n.trim()).filter(Boolean);
+                                        if (names.length === 0) return null;
+                                        const att = getAttendance(selectedSchedule.id);
+                                        return (
+                                            <div style={{ marginTop: 16, padding: 16, background: '#F7FAFC', borderRadius: 12 }}>
+                                                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#1B6B5A' }}>📋 출석 관리</div>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                    {names.map(name => {
+                                                        const status = att[name] || 'none';
+                                                        return (
+                                                            <div key={name} className="attendance-item" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'white', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                                                                <span style={{ fontSize: 13 }}>{name}</span>
+                                                                <select value={status} onChange={e => setAttendance(selectedSchedule.id, name, e.target.value)}
+                                                                    style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4, border: '1px solid #CBD5E0',
+                                                                        background: status === 'present' ? '#C6F6D5' : status === 'absent' ? '#FED7D7' : status === 'late' ? '#FEFCBF' : 'white',
+                                                                        color: status === 'present' ? '#22543D' : status === 'absent' ? '#9B2C2C' : status === 'late' ? '#744210' : '#4A5568'
+                                                                    }}>
+                                                                    <option value="none">-</option>
+                                                                    <option value="present">출석</option>
+                                                                    <option value="absent">결석</option>
+                                                                    <option value="late">지각</option>
+                                                                </select>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: 12, color: '#718096' }}>
+                                                        출석 {Object.values(att).filter(v => v === 'present').length} / 결석 {Object.values(att).filter(v => v === 'absent').length} / 지각 {Object.values(att).filter(v => v === 'late').length} / 미체크 {names.length - Object.values(att).filter(v => v !== 'none').length}
+                                                    </span>
+                                                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: '3px 10px' }} onClick={() => {
+                                                        const pw = window.open('', '_blank', 'width=700,height=500');
+                                                        const rows = names.map(n => `<tr><td style="padding:6px 12px;border:1px solid #ddd">${n}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:center">${att[n] === 'present' ? '출석' : att[n] === 'absent' ? '결석' : att[n] === 'late' ? '지각' : '-'}</td></tr>`).join('');
+                                                        pw.document.write(`<html><head><title>출석부</title><style>body{font-family:sans-serif;padding:20px}table{border-collapse:collapse;width:100%}th{background:#1B6B5A;color:white;padding:8px 12px;border:1px solid #ddd}</style></head><body><h2>${selectedSchedule.title} - 출석부</h2><p>일시: ${selectedSchedule.start_date || ''} ${selectedSchedule.start_time || ''}</p><table><thead><tr><th>이름</th><th>출석 상태</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:12px;font-size:13px;color:#666">출석 ${Object.values(att).filter(v=>v==='present').length} / 결석 ${Object.values(att).filter(v=>v==='absent').length} / 지각 ${Object.values(att).filter(v=>v==='late').length}</p></body></html>`);
+                                                        pw.document.close();
+                                                        pw.print();
+                                                    }}>🖨️ 출석부 인쇄</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                                <div className="schedule-modal-footer">
+                                    {isGoogleEvent && (
+                                        <button className="btn btn-primary" onClick={() => importFromGoogleCalendar(selectedSchedule)}>
+                                            Supabase에 가져오기
+                                        </button>
+                                    )}
+                                    {!isGoogleEvent && googleConnected && (
+                                        <button className="google-sync-btn" style={{ fontSize: 12 }} onClick={() => syncToGoogleCalendar(selectedSchedule)}>
+                                            G Google에 동기화
+                                        </button>
+                                    )}
+                                    {!isGoogleEvent && (
+                                        <>
+                                            <button className="btn" style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                                onClick={() => handleDeleteSchedule(selectedSchedule.id)}>
+                                                삭제
+                                            </button>
+                                            <button className="btn btn-primary" onClick={() => {
+                                                setScheduleForm({
+                                                    title: selectedSchedule.title,
+                                                    description: selectedSchedule.description || '',
+                                                    category: selectedSchedule.category,
+                                                    subcategory: selectedSchedule.subcategory || '',
+                                                    start_date: selectedSchedule.start_date,
+                                                    end_date: selectedSchedule.end_date || '',
+                                                    start_time: selectedSchedule.start_time || '',
+                                                    end_time: selectedSchedule.end_time || '',
+                                                    location: selectedSchedule.location || '',
+                                                    max_participants: selectedSchedule.max_participants || '',
+                                                    status: selectedSchedule.status || 'planned',
+                                                });
+                                                setScheduleModal('edit');
+                                            }}>
+                                                수정
+                                            </button>
+                                        </>
+                                    )}
+                                    <button className="btn" style={{ background: '#F8F6F1', border: '1px solid #EBE8E1', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                        onClick={() => { setScheduleModal(null); setSelectedSchedule(null); }}>
+                                        닫기
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // 생성/수정 모달
+                return (
+                    <div className="schedule-modal-overlay" onClick={() => { setScheduleModal(null); setSelectedSchedule(null); }}>
+                        <div className="schedule-modal" onClick={e => e.stopPropagation()}>
+                            <div className="schedule-modal-header">
+                                <h3>{scheduleModal === 'edit' ? '일정 수정' : '새 일정 등록'}</h3>
+                                <button className="schedule-modal-close" onClick={() => { setScheduleModal(null); setSelectedSchedule(null); }}>&times;</button>
+                            </div>
+                            <div className="schedule-modal-body">
+                                <div className="schedule-form-group">
+                                    <label>제목 *</label>
+                                    <input type="text" value={scheduleForm.title} placeholder="일정 제목"
+                                        onChange={e => setScheduleForm(p => ({ ...p, title: e.target.value }))} />
+                                </div>
+
+                                <div className="schedule-form-row">
+                                    <div className="schedule-form-group">
+                                        <label>카테고리 *</label>
+                                        <select value={scheduleForm.category}
+                                            onChange={e => setScheduleForm(p => ({ ...p, category: e.target.value }))}>
+                                            <option value="교육">교육</option>
+                                            <option value="캠페인">캠페인</option>
+                                            <option value="회의">회의</option>
+                                            <option value="평가">평가</option>
+                                            <option value="기타">기타</option>
+                                        </select>
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>세부 카테고리</label>
+                                        <input type="text" value={scheduleForm.subcategory} placeholder="선택사항"
+                                            onChange={e => setScheduleForm(p => ({ ...p, subcategory: e.target.value }))} />
+                                    </div>
+                                </div>
+
+                                <div className="schedule-form-row">
+                                    <div className="schedule-form-group">
+                                        <label>시작일 *</label>
+                                        <input type="date" value={scheduleForm.start_date}
+                                            onChange={e => setScheduleForm(p => ({ ...p, start_date: e.target.value }))} />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>종료일</label>
+                                        <input type="date" value={scheduleForm.end_date}
+                                            onChange={e => setScheduleForm(p => ({ ...p, end_date: e.target.value }))} />
+                                    </div>
+                                </div>
+
+                                <div className="schedule-form-row">
+                                    <div className="schedule-form-group">
+                                        <label>시작 시간</label>
+                                        <input type="time" value={scheduleForm.start_time}
+                                            onChange={e => setScheduleForm(p => ({ ...p, start_time: e.target.value }))} />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>종료 시간</label>
+                                        <input type="time" value={scheduleForm.end_time}
+                                            onChange={e => setScheduleForm(p => ({ ...p, end_time: e.target.value }))} />
+                                    </div>
+                                </div>
+
+                                <div className="schedule-form-group">
+                                    <label>장소</label>
+                                    <input type="text" value={scheduleForm.location} placeholder="장소"
+                                        onChange={e => setScheduleForm(p => ({ ...p, location: e.target.value }))} />
+                                </div>
+
+                                <div className="schedule-form-row">
+                                    <div className="schedule-form-group">
+                                        <label>최대 참여자 수</label>
+                                        <input type="number" value={scheduleForm.max_participants} placeholder="0"
+                                            onChange={e => setScheduleForm(p => ({ ...p, max_participants: e.target.value }))} />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>상태</label>
+                                        <select value={scheduleForm.status}
+                                            onChange={e => setScheduleForm(p => ({ ...p, status: e.target.value }))}>
+                                            <option value="planned">예정</option>
+                                            <option value="ongoing">진행중</option>
+                                            <option value="completed">완료</option>
+                                            <option value="cancelled">취소</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="schedule-form-group">
+                                    <label>설명</label>
+                                    <textarea rows="3" value={scheduleForm.description} placeholder="일정 설명"
+                                        onChange={e => setScheduleForm(p => ({ ...p, description: e.target.value }))} />
+                                </div>
+                            </div>
+                            <div className="schedule-modal-footer">
+                                <button className="btn" style={{ background: '#F8F6F1', border: '1px solid #EBE8E1', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                    onClick={() => { setScheduleModal(null); setSelectedSchedule(null); }}>
+                                    취소
+                                </button>
+                                <button className="btn btn-primary" onClick={handleSaveSchedule}>
+                                    {scheduleModal === 'edit' ? '수정' : '등록'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderScheduleCalendarView = () => {
+                const year = calendarDate.getFullYear();
+                const month = calendarDate.getMonth();
+                const today = new Date();
+                const todayStr = formatDateStr(today.getFullYear(), today.getMonth(), today.getDate());
+                const days = getCalendarDays(year, month);
+
+                return (
+                    <div className="calendar-grid">
+                        {WEEKDAYS.map(day => (
+                            <div key={day} className="calendar-day-header">{day}</div>
+                        ))}
+                        {days.map((d, idx) => {
+                            const dateStr = formatDateStr(
+                                d.month < 0 ? d.year - 1 : d.month > 11 ? d.year + 1 : d.year,
+                                d.month < 0 ? 11 : d.month > 11 ? 0 : d.month,
+                                d.day
+                            );
+                            const isToday = dateStr === todayStr;
+                            const isSelected = selectedDate === dateStr;
+                            const { supabaseEvents: sEvents, googleEvents: gEvents } = getEventsForDate(dateStr);
+                            const allEvents = [...sEvents.map(e => ({ ...e, type: 'supabase' })), ...gEvents.map(e => ({ ...e, type: 'google' }))];
+                            const maxShow = 3;
+
+                            return (
+                                <div key={idx}
+                                    className={`calendar-day${d.isOtherMonth ? ' other-month' : ''}${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}`}
+                                    onClick={() => {
+                                        setSelectedDate(dateStr);
+                                        if (!d.isOtherMonth) {
+                                            setScheduleForm(prev => ({ ...prev, start_date: dateStr }));
+                                        }
+                                    }}
+                                    onDoubleClick={() => {
+                                        if (!d.isOtherMonth) {
+                                            setScheduleForm({
+                                                title: '', description: '', category: '교육', subcategory: '',
+                                                start_date: dateStr, end_date: '', start_time: '', end_time: '',
+                                                location: '', max_participants: '', status: 'planned'
+                                            });
+                                            setScheduleModal('create');
+                                        }
+                                    }}>
+                                    <div className="calendar-day-number">
+                                        {d.day}
+                                    </div>
+                                    {allEvents.slice(0, maxShow).map((event, eIdx) => (
+                                        <div key={eIdx}
+                                            className={`calendar-event ${event.type === 'google' ? 'google-event' : `cat-${event.category}`}`}
+                                            title={event.type === 'google' ? event.summary : event.title}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedSchedule(event.type === 'google' ? event : event);
+                                                setScheduleModal('detail');
+                                            }}>
+                                            {event.type === 'google' ? event.summary : event.title}
+                                        </div>
+                                    ))}
+                                    {allEvents.length > maxShow && (
+                                        <div className="calendar-event-more"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedDate(dateStr);
+                                                setCalendarView('list');
+                                            }}>
+                                            +{allEvents.length - maxShow}개 더보기
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
+            const renderScheduleListView = () => {
+                const year = calendarDate.getFullYear();
+                const month = calendarDate.getMonth();
+                const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+                const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
+
+                const monthSchedules = data.schedules.filter(s => {
+                    return s.start_date >= monthStart && s.start_date <= monthEnd;
+                });
+
+                const monthGoogleEvents = googleEvents.filter(e => {
+                    const eDate = e.start.dateTime ? e.start.dateTime.split('T')[0] : e.start.date;
+                    return eDate >= monthStart && eDate <= monthEnd;
+                }).filter(ge => {
+                    return !monthSchedules.some(se => se.title === ge.summary);
+                });
+
+                const allItems = [
+                    ...monthSchedules.map(s => ({ ...s, type: 'supabase', sortDate: s.start_date })),
+                    ...monthGoogleEvents.map(e => ({ ...e, type: 'google', sortDate: e.start.dateTime ? e.start.dateTime.split('T')[0] : e.start.date }))
+                ].sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+
+                if (allItems.length === 0) {
+                    return (
+                        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9C9690' }}>
+                            <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
+                            <div style={{ fontSize: 16 }}>이번 달 등록된 일정이 없습니다.</div>
+                            <div style={{ fontSize: 13, marginTop: 8 }}>날짜를 더블클릭하거나 + 버튼으로 일정을 추가하세요.</div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div>
+                        {allItems.map((item, idx) => {
+                            const isGoogle = item.type === 'google';
+                            const dateObj = new Date(item.sortDate + 'T00:00:00');
+                            const monthStr = MONTHS_KR[dateObj.getMonth()];
+                            const dayStr = dateObj.getDate();
+                            const weekdayStr = WEEKDAYS[dateObj.getDay()];
+
+                            return (
+                                <div key={idx} className="schedule-list-card"
+                                    onClick={() => {
+                                        setSelectedSchedule(item);
+                                        setScheduleModal('detail');
+                                    }}>
+                                    <div className="schedule-list-date">
+                                        <div className="schedule-list-date-month">{monthStr}</div>
+                                        <div className="schedule-list-date-day">{dayStr}</div>
+                                        <div className="schedule-list-date-weekday">{weekdayStr}</div>
+                                    </div>
+                                    <div className="schedule-list-info">
+                                        <div className="schedule-list-title">
+                                            {isGoogle ? item.summary : item.title}
+                                            {isGoogle && <span className="google-badge" style={{ marginLeft: 8 }}>G</span>}
+                                        </div>
+                                        <div className="schedule-list-meta">
+                                            {!isGoogle && item.start_time && <span>🕒 {item.start_time}{item.end_time ? ` - ${item.end_time}` : ''}</span>}
+                                            {isGoogle && item.start.dateTime && <span>🕒 {item.start.dateTime.split('T')[1]?.substring(0,5)}</span>}
+                                            {(isGoogle ? item.location : item.location) && <span> &middot; 📍 {item.location}</span>}
+                                            {!isGoogle && <span> &middot; 🏷️ {item.category}</span>}
+                                            {!isGoogle && <span> &middot; 👥 {item.current_participants || 0}/{item.max_participants || '-'}</span>}
+                                        </div>
+                                    </div>
+                                    {!isGoogle && (
+                                        <span className={`badge ${
+                                            item.status === 'completed' ? 'badge-success' :
+                                            item.status === 'ongoing' ? 'badge-warning' : 'badge-info'
+                                        }`} style={{ alignSelf: 'center' }}>
+                                            {item.status === 'completed' ? '완료' :
+                                             item.status === 'ongoing' ? '진행중' :
+                                             item.status === 'cancelled' ? '취소' : '예정'}
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
+            const renderSchedule = () => (
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div>
+                            <h1 className="section-title">📅 일정 관리</h1>
+                            <p className="section-subtitle">사업 일정과 참여자를 관리합니다. 날짜를 더블클릭하여 일정을 추가하세요.</p>
+                        </div>
+                        <button className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}
+                            onClick={() => {
+                                const today = new Date();
+                                setScheduleForm({
+                                    title: '', description: '', category: '교육', subcategory: '',
+                                    start_date: formatDateStr(today.getFullYear(), today.getMonth(), today.getDate()),
+                                    end_date: '', start_time: '', end_time: '',
+                                    location: '', max_participants: '', status: 'planned'
+                                });
+                                setScheduleModal('create');
+                            }}>
+                            + 일정 추가
+                        </button>
+                    </div>
+
+                    {/* 캘린더 헤더: 월 네비게이션 + 뷰 토글 + Google 연동 */}
+                    <div className="calendar-header">
+                        <div className="calendar-nav">
+                            <button className="calendar-nav-btn" onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}>◀</button>
+                            <button className="calendar-nav-btn" onClick={() => setCalendarDate(new Date())} style={{ fontSize: 12 }}>오늘</button>
+                            <span className="calendar-month-title">{calendarDate.getFullYear()}년 {MONTHS_KR[calendarDate.getMonth()]}</span>
+                            <button className="calendar-nav-btn" onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}>▶</button>
+                        </div>
+
+                        <div className="calendar-actions">
+                            <div className="calendar-view-toggle">
+                                <button className={`calendar-view-btn ${calendarView === 'month' ? 'active' : ''}`}
+                                    onClick={() => setCalendarView('month')}>월간</button>
+                                <button className={`calendar-view-btn ${calendarView === 'list' ? 'active' : ''}`}
+                                    onClick={() => setCalendarView('list')}>목록</button>
+                            </div>
+
+                            {!googleConnected ? (
+                                <button className="google-sync-btn" onClick={handleGoogleLogin}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                                    Google Calendar 연결
+                                </button>
+                            ) : (
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                    <button className={`google-sync-btn connected ${googleSyncing ? 'syncing' : ''}`}
+                                        onClick={syncAllToGoogle} disabled={googleSyncing}>
+                                        <svg width="14" height="14" viewBox="0 0 24 24"><path fill="white" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="white" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/></svg>
+                                        {googleSyncing ? '동기화 중...' : '전체 동기화'}
+                                    </button>
+                                    <button className="calendar-nav-btn" style={{ fontSize: 11, color: '#e74c3c' }}
+                                        onClick={handleGoogleLogout}>
+                                        연결 해제
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Google 연결 상태 안내 */}
+                    {googleConnected && googleEvents.length > 0 && (
+                        <div style={{ background: '#E8F0FE', borderRadius: 8, padding: '8px 14px', marginBottom: 16, fontSize: 13, color: '#1A73E8' }}>
+                            Google Calendar에서 {googleEvents.length}개의 이벤트가 연동되었습니다.
+                        </div>
+                    )}
+
+                    {loading ? (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#9C9690' }}>
+                            데이터를 로딩 중입니다...
+                        </div>
+                    ) : error ? (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#e74c3c' }}>
+                            오류: {error}
+                        </div>
+                    ) : (
+                        calendarView === 'month' ? renderScheduleCalendarView() : renderScheduleListView()
+                    )}
+
+                    {/* 선택된 날짜의 일정 요약 (캘린더 뷰) */}
+                    {calendarView === 'month' && selectedDate && (() => {
+                        const { supabaseEvents: sEvents, googleEvents: gEvents } = getEventsForDate(selectedDate);
+                        const allSelected = [...sEvents, ...gEvents];
+                        if (allSelected.length === 0) return null;
+
+                        return (
+                            <div style={{ marginTop: 20, background: 'white', borderRadius: 12, border: '1px solid #EBE8E1', padding: 20 }}>
+                                <h3 style={{ fontSize: 16, fontWeight: 600, color: '#134E42', marginBottom: 12 }}>
+                                    📅 {selectedDate} 일정 ({allSelected.length}건)
+                                </h3>
+                                {sEvents.map(s => (
+                                    <div key={s.id} className="schedule-list-card" style={{ cursor: 'pointer' }}
+                                        onClick={() => { setSelectedSchedule(s); setScheduleModal('detail'); }}>
+                                        <div className="schedule-list-info">
+                                            <div className="schedule-list-title">{s.title}</div>
+                                            <div className="schedule-list-meta">
+                                                {s.start_time && <span>🕒 {s.start_time}</span>}
+                                                {s.location && <span> &middot; 📍 {s.location}</span>}
+                                                <span> &middot; 🏷️ {s.category}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {gEvents.map((ge, i) => (
+                                    <div key={`g-${i}`} className="schedule-list-card" style={{ cursor: 'pointer' }}
+                                        onClick={() => { setSelectedSchedule(ge); setScheduleModal('detail'); }}>
+                                        <div className="schedule-list-info">
+                                            <div className="schedule-list-title">
+                                                {ge.summary} <span className="google-badge">G</span>
+                                            </div>
+                                            <div className="schedule-list-meta">
+                                                {ge.start.dateTime && <span>🕒 {ge.start.dateTime.split('T')[1]?.substring(0,5)}</span>}
+                                                {ge.location && <span> &middot; 📍 {ge.location}</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })()}
+
+                    {/* 카테고리 범례 */}
+                    <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, color: '#9C9690' }}>
+                        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: '#D1ECF1', marginRight: 4, verticalAlign: 'middle' }}></span>교육</span>
+                        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: '#FFF3CD', marginRight: 4, verticalAlign: 'middle' }}></span>캠페인</span>
+                        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: '#E2D9F3', marginRight: 4, verticalAlign: 'middle' }}></span>회의</span>
+                        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: '#D4EDDA', marginRight: 4, verticalAlign: 'middle' }}></span>평가</span>
+                        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: '#F0E6D3', marginRight: 4, verticalAlign: 'middle' }}></span>기타</span>
+                        {googleConnected && <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: '#E8F0FE', border: '1px solid #4285F4', marginRight: 4, verticalAlign: 'middle' }}></span>Google</span>}
+                    </div>
+
+                    {renderScheduleModal()}
+                </div>
+            );
+
+            // ===== 게시판 템플릿 공통 유틸리티 =====
+
+            const BOARD_TYPE_MAP = {
+                notice: { label: '공지', badge: 'badge-warning', icon: '📢' },
+                materials: { label: '자료', badge: 'badge-success', icon: '📁' },
+                report: { label: '보고서', badge: 'badge-info', icon: '📊' },
+                free: { label: '자유', badge: 'badge-free', icon: '💬' }
+            };
+
+            const GALLERY_CATEGORY_MAP = {
+                '현장사진': { icon: '📷', color: '#1B6B5A' },
+                '결과물': { icon: '🎯', color: '#D97706' },
+                '교육자료': { icon: '📚', color: '#7C3AED' },
+                '캠페인': { icon: '📣', color: '#DC2626' },
+                '행사': { icon: '🎉', color: '#2563EB' },
+                '영수증': { icon: '🧾', color: '#059669' },
+                '기타': { icon: '📌', color: '#6B7280' }
+            };
+
+            const ITEMS_PER_PAGE = 10;
+
+            // 비밀번호 해시 유틸리티
+            const hashPassword = async (password) => {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(password);
+                const hash = await crypto.subtle.digest('SHA-256', data);
+                return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+            };
+
+            const verifyPostPassword = async (post, inputPassword) => {
+                if (!post.post_password) return true; // 비밀번호가 없는 글은 통과
+                const hashed = await hashPassword(inputPassword);
+                return hashed === post.post_password;
+            };
+
+            // 링크 미리보기 추출 - 텍스트에서 URL을 감지
+            const extractUrls = (text) => {
+                const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
+                return [...new Set(text.match(urlRegex) || [])];
+            };
+
+            // 링크 미리보기 데이터 가져오기 (CORS proxy 없이 기본 정보 표시)
+            const fetchLinkPreview = async (url) => {
+                try {
+                    setLinkPreviewLoading(true);
+                    // extract domain and path for display
+                    const urlObj = new URL(url);
+                    const domain = urlObj.hostname.replace('www.', '');
+                    const preview = {
+                        url: url,
+                        title: domain + (urlObj.pathname !== '/' ? urlObj.pathname : ''),
+                        description: url,
+                        domain: domain,
+                        image: null
+                    };
+
+                    // Try fetching via a simple proxy for og tags
+                    try {
+                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                        const response = await fetch(proxyUrl, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+
+                        if (response.ok) {
+                            const html = await response.text();
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(html, 'text/html');
+
+                            const ogTitle = doc.querySelector('meta[property="og:title"]')?.content;
+                            const ogDesc = doc.querySelector('meta[property="og:description"]')?.content;
+                            const ogImage = doc.querySelector('meta[property="og:image"]')?.content;
+                            const metaDesc = doc.querySelector('meta[name="description"]')?.content;
+                            const titleTag = doc.querySelector('title')?.textContent;
+
+                            if (ogTitle || titleTag) preview.title = ogTitle || titleTag;
+                            if (ogDesc || metaDesc) preview.description = ogDesc || metaDesc;
+                            if (ogImage) {
+                                // Handle relative image URLs
+                                preview.image = ogImage.startsWith('http') ? ogImage : new URL(ogImage, url).href;
+                            }
+                        }
+                    } catch (fetchErr) {
+                        // Fetch failed, use basic preview with domain info
+                        console.log('Link preview fetch skipped:', fetchErr.message);
+                    }
+
+                    return preview;
+                } catch (err) {
+                    return { url, title: url, description: '', domain: '', image: null };
+                } finally {
+                    setLinkPreviewLoading(false);
+                }
+            };
+
+            // 글 내용 변경 시 링크 미리보기 업데이트
+            const handleContentChangeWithPreview = async (content) => {
+                setBoardWriteData(prev => ({ ...prev, content }));
+                const urls = extractUrls(content);
+                const existingUrls = linkPreviews.map(p => p.url);
+                const newUrls = urls.filter(u => !existingUrls.includes(u));
+
+                // Remove previews for deleted URLs
+                setLinkPreviews(prev => prev.filter(p => urls.includes(p.url)));
+
+                // Fetch new previews
+                for (const url of newUrls.slice(0, 3)) { // max 3 previews
+                    const preview = await fetchLinkPreview(url);
+                    setLinkPreviews(prev => {
+                        if (prev.find(p => p.url === preview.url)) return prev;
+                        return [...prev, preview];
+                    });
+                }
+            };
+
+            // 링크 미리보기 카드 컴포넌트
+            const LinkPreviewCard = ({ key, preview, onRemove }) => (
+                <div key={key} style={{ position: 'relative', marginBottom: '8px' }}>
+                    <a href={preview.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                        <div className="link-preview-card">
+                            <div className="link-preview-image">
+                                {preview.image ? (
+                                    <img src={preview.image} alt="" onError={(e) => { e.target.style.display = 'none'; }} />
+                                ) : (
+                                    <span style={{ fontSize: '32px', opacity: 0.5 }}>🔗</span>
+                                )}
+                            </div>
+                            <div className="link-preview-info">
+                                <div className="link-preview-title">{preview.title}</div>
+                                {preview.description && (
+                                    <div className="link-preview-desc">{preview.description}</div>
+                                )}
+                                <div className="link-preview-url">{preview.domain || preview.url}</div>
+                            </div>
+                        </div>
+                    </a>
+                    {onRemove && (
+                        <button
+                            className="link-preview-remove"
+                            onClick={(e) => { e.preventDefault(); onRemove(preview.url); }}
+                            title="미리보기 제거"
+                        >×</button>
+                    )}
+                </div>
+            );
+
+            // ===== 게시판 템플릿: 공통 목록 헤더 =====
+            const BoardTemplateHeader = ({ title, subtitle, icon, onWrite, view, onBack, categories, activeCategory, onCategoryChange, searchQuery, onSearchChange }) => (
+                <div>
+                    {view !== 'list' ? (
+                        <div style={{ marginBottom: '16px' }}>
+                            <button className="btn btn-secondary" onClick={onBack}>
+                                ← 목록으로
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="board-header">
+                                <div>
+                                    <h1 className="section-title">{icon} {title}</h1>
+                                    <p className="section-subtitle">{subtitle}</p>
+                                </div>
+                                <div className="board-toolbar">
+                                    <div className="board-search">
+                                        <input
+                                            type="text"
+                                            placeholder="검색어를 입력하세요"
+                                            value={searchQuery}
+                                            onChange={(e) => onSearchChange(e.target.value)}
+                                        />
+                                    </div>
+                                    <button className="btn btn-primary" onClick={onWrite}>
+                                        ✏️ 글쓰기
+                                    </button>
+                                </div>
+                            </div>
+                            {categories && categories.length > 0 && (
+                                <div className="board-category-tabs">
+                                    <button
+                                        className={`board-category-tab ${activeCategory === 'all' ? 'active' : ''}`}
+                                        onClick={() => onCategoryChange('all')}
+                                    >전체</button>
+                                    {categories.map(cat => (
+                                        <button
+                                            key={cat.key}
+                                            className={`board-category-tab ${activeCategory === cat.key ? 'active' : ''}`}
+                                            onClick={() => onCategoryChange(cat.key)}
+                                        >{cat.icon} {cat.label}</button>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            );
+
+            // ===== 게시판 템플릿: 페이지네이션 =====
+            const BoardPagination = ({ totalItems, currentPage, onPageChange }) => {
+                const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+                if (totalPages <= 1) return null;
+
+                const pages = [];
+                const startPage = Math.max(1, currentPage - 2);
+                const endPage = Math.min(totalPages, startPage + 4);
+
+                return (
+                    <div className="board-pagination">
+                        <button
+                            onClick={() => onPageChange(1)}
+                            disabled={currentPage === 1}
+                        >«</button>
+                        <button
+                            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                            disabled={currentPage === 1}
+                        >‹</button>
+                        {Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map(page => (
+                            <button
+                                key={page}
+                                className={currentPage === page ? 'active' : ''}
+                                onClick={() => onPageChange(page)}
+                            >{page}</button>
+                        ))}
+                        <button
+                            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                            disabled={currentPage === totalPages}
+                        >›</button>
+                        <button
+                            onClick={() => onPageChange(totalPages)}
+                            disabled={currentPage === totalPages}
+                        >»</button>
+                    </div>
+                );
+            };
+
+            // ===== 첨부파일 유틸리티 =====
+            const formatFileSize = (bytes) => {
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            };
+
+            const getFileIcon = (type) => {
+                if (type.startsWith('image/')) return '🖼️';
+                if (type.startsWith('video/')) return '🎬';
+                if (type.includes('pdf')) return '📄';
+                if (type.includes('word') || type.includes('document')) return '📝';
+                if (type.includes('sheet') || type.includes('excel')) return '📊';
+                if (type.includes('presentation') || type.includes('powerpoint')) return '📑';
+                if (type.includes('zip') || type.includes('compressed')) return '🗜️';
+                return '📎';
+            };
+
+            const ALLOWED_MIME_TYPES = new Set([
+                'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.ms-powerpoint',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'text/plain', 'text/csv',
+                'application/zip', 'application/x-zip-compressed',
+                'application/haansofthwp', 'application/x-hwp', // 한글 문서
+            ]);
+
+            const validateFiles = (newFiles, existingFiles) => {
+                const errors = [];
+                const validFiles = [];
+                const totalCount = existingFiles.length;
+
+                for (const file of newFiles) {
+                    if (totalCount + validFiles.length >= MAX_FILE_COUNT) {
+                        errors.push(`최대 ${MAX_FILE_COUNT}개까지 첨부할 수 있습니다.`);
+                        break;
+                    }
+                    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+                        errors.push(`"${file.name}" - 허용되지 않는 파일 형식입니다. (${file.type || '알 수 없음'})`);
+                        continue;
+                    }
+                    if (file.size > MAX_FILE_SIZE) {
+                        errors.push(`"${file.name}" - 파일 크기가 10MB를 초과합니다. (${formatFileSize(file.size)})`);
+                        continue;
+                    }
+                    if (existingFiles.some(f => f.name === file.name && f.size === file.size)) {
+                        errors.push(`"${file.name}" - 이미 첨부된 파일입니다.`);
+                        continue;
+                    }
+                    validFiles.push(file);
+                }
+                return { validFiles, errors };
+            };
+
+            const handleFileSelect = (files, attachments, setAttachments) => {
+                const { validFiles, errors } = validateFiles(files, attachments);
+                if (errors.length > 0) {
+                    alert(errors.join('\n'));
+                }
+                if (validFiles.length > 0) {
+                    setAttachments(prev => [...prev, ...validFiles]);
+                }
+            };
+
+            const handleFileDrop = (e, attachments, setAttachments) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('dragging');
+                const files = Array.from(e.dataTransfer.files);
+                handleFileSelect(files, attachments, setAttachments);
+            };
+
+            // ===== 리치 텍스트 에디터 =====
+            const execEditorCommand = (command, value) => {
+                document.execCommand(command, false, value || null);
+            };
+
+            const getEditorContent = (editorRef) => {
+                return editorRef.current ? editorRef.current.innerHTML : '';
+            };
+
+            const getEditorText = (editorRef) => {
+                return editorRef.current ? editorRef.current.innerText : '';
+            };
+
+            const RichEditorToolbar = ({ editorRef }) => (
+                <div className="rich-editor-toolbar">
+                    <select
+                        defaultValue=""
+                        onChange={(e) => { if (e.target.value) { execEditorCommand('formatBlock', e.target.value); e.target.value = ''; } }}
+                    >
+                        <option value="" disabled>스타일</option>
+                        <option value="p">본문</option>
+                        <option value="h1">제목 1</option>
+                        <option value="h2">제목 2</option>
+                        <option value="h3">제목 3</option>
+                        <option value="blockquote">인용</option>
+                    </select>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('bold')} title="굵게 (Ctrl+B)"><b>B</b></button>
+                    <button onClick={() => execEditorCommand('italic')} title="기울임 (Ctrl+I)"><i>I</i></button>
+                    <button onClick={() => execEditorCommand('underline')} title="밑줄 (Ctrl+U)"><u>U</u></button>
+                    <button onClick={() => execEditorCommand('strikeThrough')} title="취소선"><s>S</s></button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('insertUnorderedList')} title="글머리 기호">•≡</button>
+                    <button onClick={() => execEditorCommand('insertOrderedList')} title="번호 매기기">1.</button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('justifyLeft')} title="왼쪽 정렬">≡←</button>
+                    <button onClick={() => execEditorCommand('justifyCenter')} title="가운데 정렬">≡↔</button>
+                    <button onClick={() => execEditorCommand('justifyRight')} title="오른쪽 정렬">≡→</button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => {
+                        const url = prompt('링크 URL을 입력하세요:');
+                        if (url) execEditorCommand('createLink', url);
+                    }} title="링크 삽입">🔗</button>
+                    <button onClick={() => execEditorCommand('removeFormat')} title="서식 지우기">✕</button>
+                    <div className="toolbar-separator" />
+                    <button onClick={() => execEditorCommand('undo')} title="실행 취소 (Ctrl+Z)">↩</button>
+                    <button onClick={() => execEditorCommand('redo')} title="다시 실행 (Ctrl+Y)">↪</button>
+                </div>
+            );
+
+            // ===== 첨부파일 영역 컴포넌트 =====
+            const FileUploadArea = ({ attachments, setAttachments, fileInputRef }) => (
+                <div className="form-group">
+                    <label className="form-label">📎 첨부파일 ({attachments.length}/{MAX_FILE_COUNT})</label>
+                    <div
+                        className="file-upload-area"
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('dragging'); }}
+                        onDragLeave={(e) => { e.currentTarget.classList.remove('dragging'); }}
+                        onDrop={(e) => handleFileDrop(e, attachments, setAttachments)}
+                    >
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                                handleFileSelect(Array.from(e.target.files), attachments, setAttachments);
+                                e.target.value = '';
+                            }}
+                        />
+                        <div className="file-upload-icon">📂</div>
+                        <div className="file-upload-text">클릭하거나 파일을 여기로 끌어다 놓으세요</div>
+                        <div className="file-upload-hint">최대 {MAX_FILE_COUNT}개, 파일당 10MB 이하</div>
+                    </div>
+                    {attachments.length > 0 && (
+                        <div className="file-list">
+                            {attachments.map((file, idx) => (
+                                <div key={`${file.name}-${idx}`} className="file-item">
+                                    <span className="file-item-icon">{getFileIcon(file.type)}</span>
+                                    <div className="file-item-info">
+                                        <div className="file-item-name">{file.name}</div>
+                                        <div className="file-item-size">{formatFileSize(file.size)}</div>
+                                    </div>
+                                    <button
+                                        className="file-item-remove"
+                                        onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                        title="삭제"
+                                    >×</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+
+            // ===== 일반게시판 글쓰기 (리치에디터 + 첨부파일 + 링크미리보기) =====
+            const BoardWriteForm = ({ writeData, setWriteData, onSubmit, onCancel, isEdit }) => {
+                const handleEditorInput = () => {
+                    const html = getEditorContent(boardEditorRef);
+                    const text = getEditorText(boardEditorRef);
+                    setWriteData(prev => ({ ...prev, content: html }));
+                    // Debounce link preview
+                    if (boardWriteDebounceRef.current) clearTimeout(boardWriteDebounceRef.current);
+                    boardWriteDebounceRef.current = setTimeout(() => {
+                        handleContentChangeWithPreview(text);
+                    }, 800);
+                };
+
+                return (
+                    <div className="board-write-form">
+                        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#134E42', marginBottom: '24px' }}>
+                            {isEdit ? '📝 글 수정' : '✏️ 새 글 작성'}
+                        </h2>
+
+                        <div className="form-group">
+                            <label className="form-label">분류</label>
+                            <select
+                                className="form-input"
+                                value={writeData.board_type}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, board_type: e.target.value }))}
+                            >
+                                {Object.entries(BOARD_TYPE_MAP).map(([key, val]) => (
+                                    <option key={key} value={key}>{val.icon} {val.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">제목</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="제목을 입력하세요"
+                                value={writeData.title}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, title: e.target.value }))}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">내용</label>
+                            <p style={{ fontSize: '12px', color: '#9C9690', margin: '0 0 8px 0' }}>
+                                URL을 입력하면 자동으로 링크 미리보기가 표시됩니다.
+                            </p>
+                            {RichEditorToolbar({ editorRef: boardEditorRef })}
+                            <div
+                                ref={boardEditorRef}
+                                className="rich-editor-body"
+                                contentEditable
+                                data-placeholder="내용을 입력하세요. 텍스트 서식을 적용하거나 URL을 포함하면 링크 미리보기가 자동 생성됩니다."
+                                onInput={handleEditorInput}
+                                onPaste={(e) => {
+                                    // Clean paste: strip external formatting
+                                    const clipboardData = e.clipboardData;
+                                    const html = clipboardData.getData('text/html');
+                                    const text = clipboardData.getData('text/plain');
+                                    if (html) {
+                                        // Allow paste with basic formatting
+                                    } else if (text) {
+                                        e.preventDefault();
+                                        document.execCommand('insertText', false, text);
+                                    }
+                                    setTimeout(handleEditorInput, 50);
+                                }}
+                            />
+                        </div>
+
+                        {/* 링크 미리보기 영역 */}
+                        {(linkPreviews.length > 0 || linkPreviewLoading) && (
+                            <div className="link-preview-container" style={{ marginBottom: '20px' }}>
+                                <label className="form-label" style={{ marginBottom: '8px' }}>🔗 링크 미리보기</label>
+                                {linkPreviewLoading && (
+                                    <div className="link-preview-loading">
+                                        <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', marginBottom: 0 }}></div>
+                                        링크 정보를 불러오는 중...
+                                    </div>
+                                )}
+                                {linkPreviews.map(preview =>
+                                    LinkPreviewCard({
+                                        key: preview.url,
+                                        preview,
+                                        onRemove: (url) => setLinkPreviews(prev => prev.filter(p => p.url !== url))
+                                    })
+                                )}
+                            </div>
+                        )}
+
+                        {/* 첨부파일 영역 */}
+                        {FileUploadArea({ attachments: boardAttachments, setAttachments: setBoardAttachments, fileInputRef: boardFileInputRef })}
+
+                        {!isEdit && (
+                            <div className="form-group">
+                                <label className="form-label">🔒 비밀번호 <span style={{ fontSize: '12px', color: '#9C9690', fontWeight: '400' }}>(수정/삭제 시 필요)</span></label>
+                                <input
+                                    type="password"
+                                    className="form-input"
+                                    placeholder="비밀번호를 입력하세요"
+                                    value={writeData.password}
+                                    onChange={(e) => setWriteData(prev => ({ ...prev, password: e.target.value }))}
+                                    style={{ maxWidth: '300px' }}
+                                />
+                            </div>
+                        )}
+
+                        {currentUser?.role === 'admin' && (
+                            <div className="form-group">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={writeData.is_pinned}
+                                        onChange={(e) => setWriteData(prev => ({ ...prev, is_pinned: e.target.checked }))}
+                                    />
+                                    <span className="form-label" style={{ margin: 0 }}>📌 상단 고정</span>
+                                </label>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                            <button className="btn btn-secondary" onClick={onCancel}>취소</button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={onSubmit}
+                                disabled={!writeData.title.trim() || !getEditorText(boardEditorRef).trim() || (!isEdit && !writeData.password.trim())}
+                            >{isEdit ? '수정' : '등록'}</button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== 갤러리 글쓰기 (리치에디터 + 첨부파일) =====
+            const GalleryWriteForm = ({ writeData, setWriteData, onSubmit, onCancel, isEdit }) => (
+                <div className="board-write-form">
+                    <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#134E42', marginBottom: '24px' }}>
+                        {isEdit ? '📝 사진 수정' : '📸 사진 등록'}
+                    </h2>
+
+                    <div className="form-group">
+                        <label className="form-label">카테고리</label>
+                        <select
+                            className="form-input"
+                            value={writeData.category}
+                            onChange={(e) => setWriteData(prev => ({ ...prev, category: e.target.value }))}
+                        >
+                            {Object.entries(GALLERY_CATEGORY_MAP).map(([key, val]) => (
+                                <option key={key} value={key}>{val.icon} {key}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">제목</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="사진 제목을 입력하세요"
+                            value={writeData.title}
+                            onChange={(e) => setWriteData(prev => ({ ...prev, title: e.target.value }))}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">설명</label>
+                        {RichEditorToolbar({ editorRef: galleryEditorRef })}
+                        <div
+                            ref={galleryEditorRef}
+                            className="rich-editor-body"
+                            contentEditable
+                            data-placeholder="사진에 대한 설명을 입력하세요"
+                            onInput={() => setWriteData(prev => ({
+                                ...prev,
+                                description: galleryEditorRef.current ? galleryEditorRef.current.innerHTML : ''
+                            }))}
+                            style={{ minHeight: '150px' }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div className="form-group">
+                            <label className="form-label">촬영일</label>
+                            <input
+                                type="date"
+                                className="form-input"
+                                value={writeData.taken_date}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, taken_date: e.target.value }))}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">촬영 장소</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="촬영 장소"
+                                value={writeData.location}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, location: e.target.value }))}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">촬영자</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="촬영자 이름"
+                            value={writeData.photographer}
+                            onChange={(e) => setWriteData(prev => ({ ...prev, photographer: e.target.value }))}
+                        />
+                    </div>
+
+                    {/* 기존 첨부파일 표시 (수정 모드) */}
+                    {isEdit && existingGalleryAttachments.length > 0 && (
+                        <div className="form-group">
+                            <label className="form-label">📎 기존 첨부파일 ({existingGalleryAttachments.length})</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                                {existingGalleryAttachments.filter(a => a.file_type?.startsWith('image/')).map(att => (
+                                    <div key={att.id} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid #EBE8E1' }}>
+                                        <img src={getAttachmentUrl(att.file_path)} alt={att.original_filename}
+                                            style={{ width: 120, height: 90, objectFit: 'cover', display: 'block' }} />
+                                        <button onClick={() => deleteExistingAttachment(att)}
+                                            style={{
+                                                position: 'absolute', top: 4, right: 4,
+                                                background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 22, height: 22, fontSize: 12,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>&times;</button>
+                                        <div style={{ fontSize: 11, padding: '4px 6px', color: '#6B6560', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: 120 }}>
+                                            {att.original_filename}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            {existingGalleryAttachments.filter(a => !a.file_type?.startsWith('image/')).map(att => (
+                                <div key={att.id} className="file-item" style={{ marginBottom: 6 }}>
+                                    <span className="file-item-icon">{getFileIcon(att.file_type)}</span>
+                                    <div className="file-item-info">
+                                        <div className="file-item-name">{att.original_filename}</div>
+                                        <div className="file-item-size">{formatFileSize(att.file_size)}</div>
+                                    </div>
+                                    <button className="btn btn-secondary"
+                                        style={{ padding: '4px 10px', fontSize: '11px', color: '#DC2626' }}
+                                        onClick={() => deleteExistingAttachment(att)}>삭제</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* 새 첨부파일 추가 영역 */}
+                    {FileUploadArea({ attachments: galleryAttachments, setAttachments: setGalleryAttachments, fileInputRef: galleryFileInputRef })}
+
+                    {!isEdit && (
+                        <div className="form-group">
+                            <label className="form-label">🔒 비밀번호 <span style={{ fontSize: '12px', color: '#9C9690', fontWeight: '400' }}>(수정/삭제 시 필요)</span></label>
+                            <input
+                                type="password"
+                                className="form-input"
+                                placeholder="비밀번호를 입력하세요"
+                                value={writeData.password}
+                                onChange={(e) => setWriteData(prev => ({ ...prev, password: e.target.value }))}
+                                style={{ maxWidth: '300px' }}
+                            />
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                        <button className="btn btn-secondary" onClick={onCancel}>취소</button>
+                        <button
+                            className="btn btn-primary"
+                            onClick={onSubmit}
+                            disabled={!writeData.title.trim() || (!isEdit && !writeData.password.trim())}
+                        >{isEdit ? '수정' : '등록'}</button>
+                    </div>
+                </div>
+            );
+
+            // ===== 첨부파일 목록 로드 =====
+            const loadAttachments = async (parentType, parentId) => {
+                try {
+                    const { data, error } = await supabase
+                        .from('attachments')
+                        .select('*')
+                        .eq(`${parentType}_id`, parentId)
+                        .order('created_at', { ascending: true });
+                    if (error) throw error;
+                    return data || [];
+                } catch (err) {
+                    console.error('첨부파일 로드 실패:', err);
+                    return [];
+                }
+            };
+
+            // 첨부파일 다운로드 URL 생성
+            const getAttachmentUrl = (filePath) => {
+                const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
+                return data?.publicUrl || '#';
+            };
+
+            // 파일 다운로드 실행 (blob fetch → 강제 다운로드)
+            const downloadFile = async (filePath, filename) => {
+                try {
+                    const { data, error } = await supabase.storage
+                        .from('attachments')
+                        .download(filePath);
+                    if (error) throw error;
+
+                    const url = URL.createObjectURL(data);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error('다운로드 실패:', err);
+                    // Fallback: public URL을 새 탭으로 열기
+                    window.open(getAttachmentUrl(filePath), '_blank');
+                }
+            };
+
+            // 첨부파일 표시 컴포넌트
+            const AttachmentListDisplay = ({ attachments }) => {
+                if (!attachments || attachments.length === 0) return null;
+                return (
+                    <div className="attachment-list">
+                        <div className="attachment-list-title">📎 첨부파일 ({attachments.length})</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {attachments.map(att => (
+                                <div key={att.id} className="file-item" style={{ cursor: 'default' }}>
+                                    <span className="file-item-icon">{getFileIcon(att.file_type)}</span>
+                                    <div className="file-item-info">
+                                        <div className="file-item-name">{att.original_filename}</div>
+                                        <div className="file-item-size">{formatFileSize(att.file_size)}</div>
+                                    </div>
+                                    <button
+                                        className="btn btn-secondary"
+                                        style={{ padding: '6px 12px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                                        onClick={() => downloadFile(att.file_path, att.original_filename)}
+                                    >⬇ 다운로드</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== F-02: 댓글 컴포넌트 =====
+            const CommentSection = ({ parentType, parentId }) => {
+                const [cmts, setCmts] = React.useState([]);
+                const [newCmt, setNewCmt] = React.useState('');
+                const [loading, setLoading] = React.useState(false);
+                const [editingCmtId, setEditingCmtId] = React.useState(null);
+                const [editCmtText, setEditCmtText] = React.useState('');
+
+                React.useEffect(() => {
+                    if (parentId) {
+                        setLoading(true);
+                        supabase.from('comments')
+                            .select('*')
+                            .eq('parent_type', parentType)
+                            .eq('parent_id', parentId)
+                            .order('created_at', { ascending: true })
+                            .then(({ data }) => { setCmts(data || []); setLoading(false); })
+                            .catch(() => setLoading(false));
+                    }
+                }, [parentType, parentId]);
+
+                const handleAdd = async () => {
+                    if (!newCmt.trim()) return;
+                    try {
+                        const { data: inserted } = await supabase.from('comments').insert([{
+                            parent_type: parentType, parent_id: parentId,
+                            content: newCmt.trim(), author_id: currentUser.id, author_name: currentUser.name
+                        }]).select();
+                        if (inserted) setCmts(prev => [...prev, ...inserted]);
+                        setNewCmt('');
+                        logActivity('댓글 작성', parentType, parentId, newCmt.trim().slice(0, 50));
+                    } catch (err) { console.error('댓글 작성 실패:', err); }
+                };
+
+                const handleEdit = async (id) => {
+                    if (!editCmtText.trim()) return;
+                    try {
+                        const { error } = await supabase.from('comments').update({ content: editCmtText.trim(), updated_at: new Date().toISOString() }).eq('id', id);
+                        if (!error) {
+                            setCmts(prev => prev.map(c => c.id === id ? { ...c, content: editCmtText.trim(), updated_at: new Date().toISOString() } : c));
+                            setEditingCmtId(null);
+                            setEditCmtText('');
+                        }
+                    } catch (err) { console.error('댓글 수정 실패:', err); }
+                };
+
+                const handleDelete = async (id) => {
+                    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+                    await supabase.from('comments').delete().eq('id', id);
+                    setCmts(prev => prev.filter(c => c.id !== id));
+                };
+
+                return (
+                    <div className="comment-section" style={{ marginTop: 24, borderTop: '1px solid #E2E8F0', paddingTop: 20 }}>
+                        <h4 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: '#1B6B5A' }}>💬 댓글 ({cmts.length})</h4>
+                        {loading ? <div style={{ color: '#9C9690', fontSize: 13 }}>로딩 중...</div> : (
+                            <>
+                                {cmts.map(c => (
+                                    <div key={c.id} className="comment-item" style={{ padding: '10px 0', borderBottom: '1px solid #F0F0F0' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <span style={{ fontSize: 13, fontWeight: 600, color: '#2D3748' }}>{c.author_name || '익명'}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <span style={{ fontSize: 11, color: '#A0AEC0' }}>{new Date(c.created_at).toLocaleString('ko-KR')}{c.updated_at && c.updated_at !== c.created_at ? ' (수정됨)' : ''}</span>
+                                                {c.author_id === currentUser.id && (
+                                                    <button onClick={() => { setEditingCmtId(c.id); setEditCmtText(c.content); }} style={{ background: 'none', border: 'none', color: '#3182CE', fontSize: 11, cursor: 'pointer' }}>수정</button>
+                                                )}
+                                                {(c.author_id === currentUser.id || currentUser.role === 'admin') && (
+                                                    <button onClick={() => handleDelete(c.id)} style={{ background: 'none', border: 'none', color: '#E53E3E', fontSize: 11, cursor: 'pointer' }}>삭제</button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {editingCmtId === c.id ? (
+                                            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                                <input type="text" className="form-input" value={editCmtText} onChange={e => setEditCmtText(e.target.value)}
+                                                    onKeyDown={e => { if (e.key === 'Enter') handleEdit(c.id); if (e.key === 'Escape') setEditingCmtId(null); }} style={{ flex: 1, fontSize: 13 }} autoFocus />
+                                                <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => handleEdit(c.id)}>저장</button>
+                                                <button className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => setEditingCmtId(null)}>취소</button>
+                                            </div>
+                                        ) : (
+                                            <div style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.5 }}>{c.content}</div>
+                                        )}
+                                    </div>
+                                ))}
+                                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                                    <input type="text" className="form-input" placeholder="댓글을 입력하세요..." value={newCmt} onChange={e => setNewCmt(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} style={{ flex: 1 }} />
+                                    <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: 13 }} onClick={handleAdd}>등록</button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                );
+            };
+
+            // ===== 게시글 상세보기 (일반게시판) =====
+            const BoardDetailView = ({ post, onBack, attachments, onEdit, onDelete }) => {
+                if (!post) return null;
+                const typeInfo = BOARD_TYPE_MAP[post.board_type] || { label: post.board_type, badge: 'badge-info' };
+
+                const contentText = post.content || '';
+                const contentUrls = extractUrls(contentText);
+                const isHtml = /<[a-z][\s\S]*>/i.test(contentText);
+
+                return (
+                    <div className="board-detail">
+                        <div className="board-detail-header">
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                                <span className={`badge ${typeInfo.badge}`}>{typeInfo.label}</span>
+                                {post.is_pinned && <span className="badge badge-info">📌 고정</span>}
+                            </div>
+                            <div className="board-detail-title">{post.title}</div>
+                            <div className="board-detail-meta">
+                                <span>✍️ {post.author?.name || '관리자'}</span>
+                                <span>📅 {new Date(post.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                <span>👁️ 조회 {post.view_count || 0}</span>
+                            </div>
+                        </div>
+
+                        {isHtml ? (
+                            <div className="board-detail-body" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(contentText) }} />
+                        ) : (
+                            <div className="board-detail-body">{contentText}</div>
+                        )}
+
+                        {/* 첨부파일 */}
+                        {AttachmentListDisplay({ attachments: attachments || [] })}
+
+                        {/* 본문 내 링크 미리보기 */}
+                        {contentUrls.length > 0 && (
+                            <div style={{ marginTop: '24px' }}>
+                                <div style={{ fontSize: '13px', color: '#9C9690', marginBottom: '8px' }}>🔗 관련 링크</div>
+                                {contentUrls.slice(0, 3).map(url => {
+                                    let domain = '';
+                                    try { domain = new URL(url).hostname.replace('www.', ''); } catch(e) {}
+                                    return (
+                                        <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', marginBottom: '6px' }}>
+                                            <div className="link-preview-card" style={{ maxWidth: '100%' }}>
+                                                <div className="link-preview-image" style={{ width: '80px', minHeight: '60px' }}>
+                                                    <span style={{ fontSize: '24px', opacity: 0.5 }}>🔗</span>
+                                                </div>
+                                                <div className="link-preview-info">
+                                                    <div className="link-preview-title">{domain || url}</div>
+                                                    <div className="link-preview-url">{url}</div>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* F-02: 댓글 섹션 */}
+                        <CommentSection parentType="board" parentId={post.id} />
+
+                        <div className="board-detail-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <button className="btn btn-secondary" onClick={onBack}>← 목록으로</button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="btn btn-secondary" onClick={() => onEdit(post)} style={{ fontSize: '13px' }}>✏️ 수정</button>
+                                <button className="btn btn-secondary" onClick={() => onDelete(post)} style={{ fontSize: '13px', color: '#DC2626', borderColor: '#FCA5A5' }}>🗑️ 삭제</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== 갤러리 상세보기 =====
+            const GalleryDetailView = ({ item, onBack, attachments, onEdit, onDelete }) => {
+                if (!item) return null;
+                const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
+                const isHtml = /<[a-z][\s\S]*>/i.test(item.description || '');
+
+                // 이미지 첨부파일 분리
+                const imageAttachments = (attachments || []).filter(a => a.file_type?.startsWith('image/'));
+                const otherAttachments = (attachments || []).filter(a => !a.file_type?.startsWith('image/'));
+
+                const [slideIdx, setSlideIdx] = React.useState(0);
+                const [lightbox, setLightbox] = React.useState(false);
+
+                // 슬라이드 이미지 목록: image_path가 유효하면 포함 + 이미지 첨부파일들
+                const slideImages = [];
+                if (item.image_path && item.image_path !== 'placeholder') {
+                    // image_path가 첨부파일과 중복되지 않도록 확인
+                    const isDuplicate = imageAttachments.some(a => {
+                        const url = getAttachmentUrl(a.file_path);
+                        return url === item.image_path;
+                    });
+                    if (!isDuplicate) {
+                        slideImages.push({ url: item.image_path, name: item.title });
+                    }
+                }
+                imageAttachments.forEach(a => {
+                    slideImages.push({ url: getAttachmentUrl(a.file_path), name: a.original_filename });
+                });
+
+                const safeSlideIdx = slideImages.length > 0 ? Math.min(slideIdx, slideImages.length - 1) : 0;
+
+                return (
+                    <div className="board-detail">
+                        {/* 이미지 슬라이드쇼 */}
+                        {slideImages.length > 0 ? (
+                            <div style={{ position: 'relative', marginBottom: 20 }}>
+                                <div className="gallery-detail-image" style={{ cursor: 'pointer', position: 'relative' }}
+                                    onClick={() => setLightbox(true)}>
+                                    <img src={slideImages[safeSlideIdx].url} alt={slideImages[safeSlideIdx].name}
+                                        style={{ width: '100%', maxHeight: '500px', objectFit: 'contain', background: '#1a1a1a', borderRadius: 12 }} />
+
+                                    {/* 슬라이드 카운터 */}
+                                    {slideImages.length > 1 && (
+                                        <div style={{
+                                            position: 'absolute', bottom: 12, right: 12,
+                                            background: 'rgba(0,0,0,0.6)', color: 'white',
+                                            padding: '4px 12px', borderRadius: 20, fontSize: 13
+                                        }}>
+                                            {safeSlideIdx + 1} / {slideImages.length}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 이전/다음 버튼 */}
+                                {slideImages.length > 1 && (
+                                    <>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i <= 0 ? slideImages.length - 1 : i - 1); }}
+                                            style={{
+                                                position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 40, height: 40, fontSize: 20,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>◀</button>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i >= slideImages.length - 1 ? 0 : i + 1); }}
+                                            style={{
+                                                position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 40, height: 40, fontSize: 20,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>▶</button>
+                                    </>
+                                )}
+
+                                {/* 썸네일 스트립 */}
+                                {slideImages.length > 1 && (
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', padding: '4px 0' }}>
+                                        {slideImages.map((img, idx) => (
+                                            <img key={idx} src={img.url} alt={img.name}
+                                                onClick={() => setSlideIdx(idx)}
+                                                style={{
+                                                    width: 72, height: 54, objectFit: 'cover', borderRadius: 8,
+                                                    cursor: 'pointer', border: idx === safeSlideIdx ? '3px solid #134E42' : '3px solid transparent',
+                                                    opacity: idx === safeSlideIdx ? 1 : 0.6, transition: 'all 0.2s',
+                                                    flexShrink: 0
+                                                }} />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="gallery-detail-image">
+                                <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                    <div style={{ fontSize: '64px', marginBottom: '12px' }}>📷</div>
+                                    <div>이미지가 등록되지 않았습니다.</div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 라이트박스 (전체화면 보기) */}
+                        {lightbox && slideImages.length > 0 && (
+                            <div style={{
+                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                                background: 'rgba(0,0,0,0.92)', zIndex: 2000,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexDirection: 'column'
+                            }} onClick={() => setLightbox(false)}>
+                                <button onClick={() => setLightbox(false)}
+                                    style={{
+                                        position: 'absolute', top: 20, right: 20,
+                                        background: 'none', border: 'none', color: 'white',
+                                        fontSize: 32, cursor: 'pointer', zIndex: 2001
+                                    }}>&times;</button>
+                                <img src={slideImages[safeSlideIdx].url} alt=""
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8 }} />
+
+                                {slideImages.length > 1 && (
+                                    <>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i <= 0 ? slideImages.length - 1 : i - 1); }}
+                                            style={{
+                                                position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 50, height: 50, fontSize: 24,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>◀</button>
+                                        <button onClick={(e) => { e.stopPropagation(); setSlideIdx(i => i >= slideImages.length - 1 ? 0 : i + 1); }}
+                                            style={{
+                                                position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
+                                                background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
+                                                borderRadius: '50%', width: 50, height: 50, fontSize: 24,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>▶</button>
+                                    </>
+                                )}
+                                <div style={{ color: 'white', marginTop: 12, fontSize: 14 }}>
+                                    {slideImages[safeSlideIdx].name} ({safeSlideIdx + 1}/{slideImages.length})
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="board-detail-header">
+                            <span className="gallery-card-category" style={{ background: `${catInfo.color}15`, color: catInfo.color }}>
+                                {catInfo.icon} {item.category}
+                            </span>
+                            <div className="board-detail-title" style={{ marginTop: '8px' }}>{item.title}</div>
+                            <div className="board-detail-meta">
+                                <span>📅 {item.taken_date || new Date(item.created_at).toLocaleDateString('ko-KR')}</span>
+                                <span>📍 {item.location || '미지정'}</span>
+                                <span>📷 {item.photographer || '관리자'}</span>
+                                <span>👁️ 조회 {item.view_count || 0}</span>
+                            </div>
+                        </div>
+
+                        {item.description && (
+                            isHtml ? (
+                                <div className="board-detail-body" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.description) }} />
+                            ) : (
+                                <div className="board-detail-body">{item.description}</div>
+                            )
+                        )}
+
+                        {/* 이미지 외 첨부파일 */}
+                        {AttachmentListDisplay({ attachments: otherAttachments })}
+
+                        {/* F-02: 댓글 섹션 */}
+                        <CommentSection parentType="gallery" parentId={item.id} />
+
+                        <div className="board-detail-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <button className="btn btn-secondary" onClick={onBack}>← 목록으로</button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="btn btn-secondary" onClick={() => onEdit(item)} style={{ fontSize: '13px' }}>✏️ 수정</button>
+                                <button className="btn btn-secondary" onClick={() => onDelete(item)} style={{ fontSize: '13px', color: '#DC2626', borderColor: '#FCA5A5' }}>🗑️ 삭제</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== 첨부파일 Supabase Storage 업로드 =====
+            const uploadAttachments = async (files, parentType, parentId) => {
+                const uploaded = [];
+                for (const file of files) {
+                    try {
+                        const timestamp = Date.now();
+                        const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                        const filePath = `${parentType}/${parentId}/${timestamp}_${safeName}`;
+
+                        // Upload to Supabase Storage
+                        const { data: storageData, error: storageError } = await supabase.storage
+                            .from('attachments')
+                            .upload(filePath, file);
+
+                        if (storageError) {
+                            console.warn('Storage upload failed, saving metadata only:', storageError.message);
+                        }
+
+                        // Save attachment metadata to DB
+                        const attachmentData = {
+                            [`${parentType}_id`]: parentId,
+                            file_path: storageData?.path || filePath,
+                            original_filename: file.name,
+                            file_size: file.size,
+                            file_type: file.type || 'application/octet-stream',
+                            uploaded_by: currentUser.id
+                        };
+
+                        const { error: dbError } = await supabase.from('attachments').insert([attachmentData]);
+                        if (dbError) console.error('Attachment DB insert failed:', dbError);
+
+                        uploaded.push(attachmentData);
+                    } catch (err) {
+                        console.error(`Failed to upload ${file.name}:`, err);
+                    }
+                }
+                return uploaded;
+            };
+
+            // ===== 게시글 저장 =====
+            const handleBoardSubmit = async () => {
+                const editorContent = getEditorContent(boardEditorRef);
+                const editorText = getEditorText(boardEditorRef);
+                if (!boardWriteData.title.trim() || !editorText.trim()) return;
+                try {
+                    const postData = {
+                        board_type: boardWriteData.board_type,
+                        title: boardWriteData.title.trim(),
+                        content: editorContent,
+                        is_pinned: boardWriteData.is_pinned,
+                        tags: linkPreviews.length > 0 ? { links: linkPreviews } : null,
+                        updated_at: new Date().toISOString()
+                    };
+
+                    if (editingPost) {
+                        // 수정 모드
+                        const { error: updateError } = await supabase
+                            .from('boards').update(postData).eq('id', editingPost.id);
+                        if (updateError) throw updateError;
+
+                        // 새 첨부파일 업로드
+                        if (boardAttachments.length > 0) {
+                            await uploadAttachments(boardAttachments, 'board', editingPost.id);
+                        }
+                    } else {
+                        // 새글 작성
+                        postData.author_id = currentUser.id;
+                        postData.status = 'published';
+                        postData.published_at = new Date().toISOString();
+                        if (boardWriteData.password.trim()) {
+                            postData.post_password = await hashPassword(boardWriteData.password.trim());
+                        }
+
+                        const { data: inserted, error: insertError } = await supabase
+                            .from('boards').insert([postData]).select().single();
+                        if (insertError) throw insertError;
+
+                        if (boardAttachments.length > 0 && inserted?.id) {
+                            await uploadAttachments(boardAttachments, 'board', inserted.id);
+                        }
+                    }
+
+                    // Reload boards
+                    const { data: boards } = await supabase
+                        .from('boards')
+                        .select('*, author:users(name)')
+                        .eq('status', 'published')
+                        .order('created_at', { ascending: false });
+
+                    setData(prev => ({ ...prev, boards: boards || [] }));
+                    setBoardView('list');
+                    setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: '' });
+                    setEditingPost(null);
+                    setLinkPreviews([]);
+                    setBoardAttachments([]);
+                    if (boardEditorRef.current) boardEditorRef.current.innerHTML = '';
+                } catch (err) {
+                    console.error('게시글 저장 실패:', err);
+                    alert('게시글 저장에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 게시글 수정 시작 =====
+            const startBoardEdit = async (post) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(post, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                setEditingPost(post);
+                setBoardWriteData({
+                    title: post.title,
+                    content: post.content,
+                    board_type: post.board_type,
+                    category: post.category || '',
+                    is_pinned: post.is_pinned || false,
+                    password: ''
+                });
+                setBoardView('write');
+                // 에디터 내용 설정 (다음 렌더 후) - XSS 방어: DOMPurify로 sanitize
+                setTimeout(() => {
+                    if (boardEditorRef.current) {
+                        boardEditorRef.current.innerHTML = DOMPurify.sanitize(post.content || '');
+                    }
+                }, 100);
+                // 기존 링크 미리보기 복원
+                if (post.tags?.links) {
+                    setLinkPreviews(post.tags.links);
+                }
+            };
+
+            // ===== 게시글 삭제 =====
+            const handleBoardDelete = async (post) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(post, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                if (!confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+                try {
+                    // 첨부파일 삭제
+                    const { data: attachments } = await supabase
+                        .from('attachments').select('file_path').eq('board_id', post.id);
+                    if (attachments?.length > 0) {
+                        await supabase.storage.from('attachments')
+                            .remove(attachments.map(a => a.file_path));
+                        await supabase.from('attachments').delete().eq('board_id', post.id);
+                    }
+                    // 게시글 삭제
+                    const { error } = await supabase.from('boards').delete().eq('id', post.id);
+                    if (error) throw error;
+
+                    // Reload
+                    const { data: boards } = await supabase
+                        .from('boards')
+                        .select('*, author:users(name)')
+                        .eq('status', 'published')
+                        .order('created_at', { ascending: false });
+                    setData(prev => ({ ...prev, boards: boards || [] }));
+                    setBoardView('list');
+                    setSelectedPost(null);
+                    setDetailAttachments([]);
+                    alert('게시글이 삭제되었습니다.');
+                } catch (err) {
+                    console.error('게시글 삭제 실패:', err);
+                    alert('삭제에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 갤러리 저장 =====
+            const handleGallerySubmit = async () => {
+                if (!galleryWriteData.title.trim()) return;
+                try {
+                    const descContent = galleryEditorRef.current ? galleryEditorRef.current.innerHTML : '';
+                    const postData = {
+                        title: galleryWriteData.title.trim(),
+                        description: descContent.trim() || null,
+                        category: galleryWriteData.category,
+                        location: galleryWriteData.location.trim() || null,
+                        photographer: galleryWriteData.photographer.trim() || null,
+                        taken_date: galleryWriteData.taken_date || null,
+                        updated_at: new Date().toISOString()
+                    };
+
+                    if (editingGalleryItem) {
+                        // 수정 모드
+                        const { data: updatedRows, error: updateError } = await supabase
+                            .from('galleries').update(postData).eq('id', editingGalleryItem.id).select();
+                        if (updateError) throw updateError;
+                        if (!updatedRows || updatedRows.length === 0) {
+                            console.error('Gallery update returned 0 rows — check RLS UPDATE policy on galleries table');
+                            throw new Error('항목을 수정할 수 없습니다. 권한을 확인하거나 관리자에게 문의해주세요.');
+                        }
+                        const updatedRow = updatedRows[0];
+
+                        if (galleryAttachments.length > 0) {
+                            await uploadAttachments(galleryAttachments, 'gallery', editingGalleryItem.id);
+                        }
+
+                        // 수정 후 data.galleries 및 selectedGalleryItem을 in-place 갱신 (전체 리로드 생략)
+                        setData(prev => ({
+                            ...prev,
+                            galleries: prev.galleries.map(g => g.id === updatedRow.id ? { ...g, ...updatedRow } : g)
+                        }));
+                        setSelectedGalleryItem(prev => prev?.id === editingGalleryItem.id ? { ...prev, ...updatedRow } : prev);
+                    } else {
+                        // 새글 작성
+                        postData.image_path = 'placeholder';
+                        postData.uploaded_by = currentUser.id;
+                        postData.is_public = true;
+                        if (galleryWriteData.password.trim()) {
+                            postData.post_password = await hashPassword(galleryWriteData.password.trim());
+                        }
+
+                        const { data: insertedRows, error: insertError } = await supabase
+                            .from('galleries').insert([postData]).select();
+                        if (insertError) throw insertError;
+                        if (!insertedRows || insertedRows.length === 0) {
+                            throw new Error('항목을 등록할 수 없습니다. 권한을 확인하거나 관리자에게 문의해주세요.');
+                        }
+                        const inserted = insertedRows[0];
+
+                        if (galleryAttachments.length > 0 && inserted?.id) {
+                            await uploadAttachments(galleryAttachments, 'gallery', inserted.id);
+
+                            // 첫 번째 이미지 첨부파일을 대표 이미지로 설정
+                            const firstImage = galleryAttachments.find(f => f.type?.startsWith('image/'));
+                            if (firstImage) {
+                                const timestamp = Date.now();
+                                const safeName = firstImage.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                                const thumbPath = `gallery/${inserted.id}/${timestamp}_${safeName}`;
+                                const { data: thumbUrl } = supabase.storage.from('attachments').getPublicUrl(thumbPath);
+                                // DB에 저장된 실제 파일 경로로 image_path 업데이트
+                                const { data: atts } = await supabase.from('attachments')
+                                    .select('file_path, file_type')
+                                    .eq('gallery_id', inserted.id)
+                                    .order('created_at', { ascending: true });
+                                const firstImgAtt = atts?.find(a => a.file_type?.startsWith('image/'));
+                                if (firstImgAtt) {
+                                    const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(firstImgAtt.file_path);
+                                    if (urlData?.publicUrl) {
+                                        await supabase.from('galleries').update({ image_path: urlData.publicUrl }).eq('id', inserted.id);
+                                    }
+                                }
+                            }
+                        }
+
+                        // 새 항목 등록 후 전체 목록 리로드 (image_path가 별도 쿼리로 갱신되므로 필요)
+                        const { data: galleries } = await supabase
+                            .from('galleries')
+                            .select('*')
+                            .order('created_at', { ascending: false });
+                        setData(prev => ({ ...prev, galleries: galleries || [] }));
+                    }
+                    setGalleryView('list');
+                    setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' });
+                    setEditingGalleryItem(null);
+                    setGalleryAttachments([]);
+                    setExistingGalleryAttachments([]);
+                    if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = '';
+                } catch (err) {
+                    console.error('갤러리 저장 실패:', err);
+                    alert('사진 등록에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 갤러리 수정 시작 =====
+            const [existingGalleryAttachments, setExistingGalleryAttachments] = useState([]);
+
+            const startGalleryEdit = async (item) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(item, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                setEditingGalleryItem(item);
+                setGalleryWriteData({
+                    title: item.title,
+                    description: item.description || '',
+                    category: item.category,
+                    location: item.location || '',
+                    photographer: item.photographer || '',
+                    taken_date: item.taken_date || '',
+                    password: ''
+                });
+
+                // 기존 첨부파일 로드
+                const atts = await loadAttachments('gallery', item.id);
+                setExistingGalleryAttachments(atts);
+
+                setGalleryView('write');
+                setTimeout(() => {
+                    if (galleryEditorRef.current) {
+                        // XSS 방어: DOMPurify로 sanitize
+                        galleryEditorRef.current.innerHTML = DOMPurify.sanitize(item.description || '');
+                    }
+                }, 100);
+            };
+
+            // 기존 첨부파일 삭제
+            const deleteExistingAttachment = async (att) => {
+                if (!confirm(`"${att.original_filename}" 파일을 삭제하시겠습니까?`)) return;
+                try {
+                    await supabase.storage.from('attachments').remove([att.file_path]);
+                    await supabase.from('attachments').delete().eq('id', att.id);
+                    setExistingGalleryAttachments(prev => prev.filter(a => a.id !== att.id));
+                } catch (err) {
+                    console.error('첨부파일 삭제 실패:', err);
+                    alert('파일 삭제에 실패했습니다.');
+                }
+            };
+
+            // ===== 갤러리 삭제 =====
+            const handleGalleryDelete = async (item) => {
+                const isAdmin = currentUser?.role === 'admin';
+                if (!isAdmin) {
+                    const pw = prompt('비밀번호를 입력하세요');
+                    if (!pw) return;
+                    const valid = await verifyPostPassword(item, pw);
+                    if (!valid) { alert('비밀번호가 일치하지 않습니다.'); return; }
+                }
+                if (!confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+                try {
+                    const { data: attachments } = await supabase
+                        .from('attachments').select('file_path').eq('gallery_id', item.id);
+                    if (attachments?.length > 0) {
+                        await supabase.storage.from('attachments')
+                            .remove(attachments.map(a => a.file_path));
+                        await supabase.from('attachments').delete().eq('gallery_id', item.id);
+                    }
+                    const { error } = await supabase.from('galleries').delete().eq('id', item.id);
+                    if (error) throw error;
+
+                    const { data: galleries } = await supabase
+                        .from('galleries')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    setData(prev => ({ ...prev, galleries: galleries || [] }));
+                    setGalleryView('list');
+                    setSelectedGalleryItem(null);
+                    setDetailAttachments([]);
+                    alert('갤러리 항목이 삭제되었습니다.');
+                } catch (err) {
+                    console.error('갤러리 삭제 실패:', err);
+                    alert('삭제에 실패했습니다: ' + (err.message || err));
+                }
+            };
+
+            // ===== 일반게시판 렌더링 (템플릿 활용) =====
+            const renderBoard = () => {
+                try {
+                const boardCategories = Object.entries(BOARD_TYPE_MAP).map(([key, val]) => ({
+                    key, label: val.label, icon: val.icon
+                }));
+
+                // Filter and search
+                let filteredBoards = data.boards;
+                if (boardCategory !== 'all') {
+                    filteredBoards = filteredBoards.filter(b => b.board_type === boardCategory);
+                }
+                if (boardSearchQuery.trim()) {
+                    const query = boardSearchQuery.toLowerCase();
+                    filteredBoards = filteredBoards.filter(b =>
+                        b.title?.toLowerCase().includes(query) ||
+                        b.content?.toLowerCase().includes(query) ||
+                        b.author?.name?.toLowerCase().includes(query)
+                    );
+                }
+
+                // Sort: pinned first, then by date
+                filteredBoards = [...filteredBoards].sort((a, b) => {
+                    if (a.is_pinned && !b.is_pinned) return -1;
+                    if (!a.is_pinned && b.is_pinned) return 1;
+                    return new Date(b.created_at) - new Date(a.created_at);
+                });
+
+                // Pagination
+                const totalItems = filteredBoards.length;
+                const startIdx = (boardCurrentPage - 1) * ITEMS_PER_PAGE;
+                const pageItems = filteredBoards.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+
+                // View routing
+                if (boardView === 'detail') {
+                    return (
+                        <div>
+                            {BoardDetailView({
+                                post: selectedPost,
+                                onBack: () => { setBoardView('list'); setSelectedPost(null); setDetailAttachments([]); },
+                                attachments: detailAttachments,
+                                onEdit: startBoardEdit,
+                                onDelete: handleBoardDelete
+                            })}
+                        </div>
+                    );
+                }
+
+                if (boardView === 'write') {
+                    return (
+                        <div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <button className="btn btn-secondary" onClick={() => { setBoardView('list'); setEditingPost(null); setLinkPreviews([]); setBoardAttachments([]); setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: '' }); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; }}>
+                                    ← 목록으로
+                                </button>
+                            </div>
+                            {BoardWriteForm({
+                                writeData: boardWriteData,
+                                setWriteData: setBoardWriteData,
+                                onSubmit: handleBoardSubmit,
+                                onCancel: () => { setBoardView('list'); setEditingPost(null); setLinkPreviews([]); setBoardAttachments([]); setBoardWriteData({ title: '', content: '', board_type: 'notice', category: '', is_pinned: false, password: '' }); if (boardEditorRef.current) boardEditorRef.current.innerHTML = ''; },
+                                isEdit: !!editingPost
+                            })}
+                        </div>
+                    );
+                }
+
+                return (
+                    <div>
+                        {BoardTemplateHeader({
+                            title: "게시판",
+                            subtitle: "공지사항, 자료실, FAQ를 관리합니다.",
+                            icon: "📋",
+                            view: boardView,
+                            onWrite: () => setBoardView('write'),
+                            onBack: () => setBoardView('list'),
+                            categories: boardCategories,
+                            activeCategory: boardCategory,
+                            onCategoryChange: (cat) => { setBoardCategory(cat); setBoardCurrentPage(1); },
+                            searchQuery: boardSearchQuery,
+                            onSearchChange: (q) => { setBoardSearchQuery(q); setBoardCurrentPage(1); }
+                        })}
+
+                        {/* 게시글 목록 (리스트형) */}
+                        <div style={{ border: '1px solid #EBE8E1', borderRadius: '12px', overflow: 'hidden' }}>
+                            {/* 헤더 행 */}
+                            <div style={{
+                                display: 'flex', alignItems: 'center', padding: '12px 20px',
+                                background: '#F8F9FA', borderBottom: '2px solid #134E42',
+                                fontSize: '13px', fontWeight: '600', color: '#6B6560'
+                            }}>
+                                <div style={{ width: '40px', textAlign: 'center' }}>번호</div>
+                                <div style={{ flex: 1, paddingLeft: '12px' }}>제목</div>
+                                <div style={{ width: '80px', textAlign: 'center' }}>작성자</div>
+                                <div style={{ width: '90px', textAlign: 'center' }}>작성일</div>
+                                <div style={{ width: '50px', textAlign: 'center' }}>조회</div>
+                            </div>
+
+                            {pageItems.length > 0 ? pageItems.map((board, idx) => {
+                                const typeInfo = BOARD_TYPE_MAP[board.board_type] || { label: board.board_type, badge: 'badge-info', icon: '📄' };
+                                return (
+                                    <div
+                                        key={board.id}
+                                        className={`board-list-item ${board.is_pinned ? 'pinned' : ''}`}
+                                        onClick={() => {
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
+                                            setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
+                                            setBoardView('detail');
+                                            loadAttachments('board', board.id).then(setDetailAttachments);
+                                        }}
+                                    >
+                                        <div className="board-list-number">
+                                            {board.is_pinned ? '📌' : totalItems - startIdx - idx}
+                                        </div>
+                                        <div className="board-list-content">
+                                            <div className="board-list-title">
+                                                <span className={`badge ${typeInfo.badge}`} style={{ fontSize: '11px', padding: '2px 8px' }}>
+                                                    {typeInfo.label}
+                                                </span>
+                                                <span className="title-text">{board.title}</span>
+                                                {board.tags?.links?.length > 0 && (
+                                                    <span style={{ fontSize: '12px', color: '#9C9690' }}>🔗</span>
+                                                )}
+                                            </div>
+                                            <div className="board-list-info">
+                                                <span>{board.content?.substring(0, 60)}{board.content?.length > 60 ? '...' : ''}</span>
+                                            </div>
+                                        </div>
+                                        <div className="board-list-meta">
+                                            <span>{board.author?.name || '관리자'}</span>
+                                            <span>{new Date(board.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}</span>
+                                            <span>{board.view_count || 0}</span>
+                                        </div>
+                                    </div>
+                                );
+                            }) : (
+                                <div className="board-empty">
+                                    <div className="board-empty-icon">📋</div>
+                                    <div className="board-empty-text">
+                                        {boardSearchQuery ? '검색 결과가 없습니다.' : '등록된 게시글이 없습니다.'}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {BoardPagination({
+                            totalItems,
+                            currentPage: boardCurrentPage,
+                            onPageChange: setBoardCurrentPage
+                        })}
+                    </div>
+                );
+                } catch (err) {
+                    console.error('renderBoard 에러:', err);
+                    return (
+                        <div style={{ padding: '40px', textAlign: 'center', color: '#DC2626' }}>
+                            <h2>게시판 로딩 오류</h2>
+                            <p>{err.message}</p>
+                            <pre style={{ textAlign: 'left', background: '#f5f5f5', padding: '12px', borderRadius: '8px', fontSize: '12px', overflow: 'auto' }}>{err.stack}</pre>
+                        </div>
+                    );
+                }
+            };
+
+            // ===== 갤러리 카드 (첨부파일에서 썸네일 자동 로드) =====
+            const GalleryCardWithThumb = ({ item, catInfo, onClick }) => {
+                const [thumbUrl, setThumbUrl] = React.useState(
+                    item.image_path && item.image_path !== 'placeholder' ? item.image_path : null
+                );
+
+                React.useEffect(() => {
+                    // image_path가 유효하지 않으면 첨부파일에서 이미지 찾기
+                    // thumbUrl을 deps에서 제거: if(!thumbUrl)로 이미 방어되어 있으므로
+                    // 포함하면 setThumbUrl 후 effect가 불필요하게 재실행됨
+                    if (!thumbUrl) {
+                        (async () => {
+                            try {
+                                const { data: atts } = await supabase.from('attachments')
+                                    .select('file_path, file_type')
+                                    .eq('gallery_id', item.id)
+                                    .order('created_at', { ascending: true });
+                                const imgAtt = atts?.find(a => a.file_type?.startsWith('image/'));
+                                if (imgAtt) {
+                                    const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(imgAtt.file_path);
+                                    if (urlData?.publicUrl) {
+                                        setThumbUrl(urlData.publicUrl);
+                                        // image_path도 업데이트 (다음 로드 시 빠르게 표시)
+                                        await supabase.from('galleries').update({ image_path: urlData.publicUrl }).eq('id', item.id);
+                                    }
+                                }
+                            } catch (err) {
+                                console.error('썸네일 로드 실패:', err);
+                            }
+                        })();
+                    }
+                }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+                return (
+                    <div className="gallery-card" onClick={onClick}>
+                        <div className="gallery-card-image">
+                            {thumbUrl ? (
+                                <img src={thumbUrl} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                                <span>📷 이미지 미리보기</span>
+                            )}
+                        </div>
+                        <div className="gallery-card-body">
+                            <span className="gallery-card-category" style={{ background: `${catInfo.color}15`, color: catInfo.color }}>
+                                {catInfo.icon} {item.category}
+                            </span>
+                            <div className="gallery-card-title">{item.title}</div>
+                            <div className="gallery-card-meta">
+                                <span>📅 {item.taken_date || new Date(item.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}</span>
+                                <span>📍 {item.location || '미지정'}</span>
+                                <span>👁️ {item.view_count || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ===== 갤러리게시판 렌더링 (템플릿 활용) =====
+            const renderGallery = () => {
+                const galleryCategories = Object.entries(GALLERY_CATEGORY_MAP).map(([key, val]) => ({
+                    key, label: key, icon: val.icon
+                }));
+
+                // Filter and search
+                let filteredGalleries = data.galleries;
+                if (galleryCategory !== 'all') {
+                    filteredGalleries = filteredGalleries.filter(g => g.category === galleryCategory);
+                }
+                if (gallerySearchQuery.trim()) {
+                    const query = gallerySearchQuery.toLowerCase();
+                    filteredGalleries = filteredGalleries.filter(g =>
+                        g.title?.toLowerCase().includes(query) ||
+                        g.description?.toLowerCase().includes(query) ||
+                        g.location?.toLowerCase().includes(query) ||
+                        g.photographer?.toLowerCase().includes(query)
+                    );
+                }
+
+                // Pagination
+                const totalItems = filteredGalleries.length;
+                const startIdx = (galleryCurrentPage - 1) * ITEMS_PER_PAGE;
+                const pageItems = filteredGalleries.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+
+                // View routing
+                if (galleryView === 'detail') {
+                    return (
+                        <div>
+                            <GalleryDetailView
+                                item={selectedGalleryItem}
+                                onBack={() => { setGalleryView('list'); setSelectedGalleryItem(null); setDetailAttachments([]); }}
+                                attachments={detailAttachments}
+                                onEdit={startGalleryEdit}
+                                onDelete={handleGalleryDelete}
+                            />
+                        </div>
+                    );
+                }
+
+                if (galleryView === 'write') {
+                    return (
+                        <div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <button className="btn btn-secondary" onClick={() => { setGalleryView('list'); setGalleryAttachments([]); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; }}>
+                                    ← 목록으로
+                                </button>
+                            </div>
+                            {GalleryWriteForm({
+                                writeData: galleryWriteData,
+                                setWriteData: setGalleryWriteData,
+                                onSubmit: handleGallerySubmit,
+                                onCancel: () => { setGalleryView('list'); setEditingGalleryItem(null); setGalleryAttachments([]); setExistingGalleryAttachments([]); setGalleryWriteData({ title: '', description: '', category: '현장사진', location: '', photographer: '', taken_date: '', password: '' }); if (galleryEditorRef.current) galleryEditorRef.current.innerHTML = ''; },
+                                isEdit: !!editingGalleryItem
+                            })}
+                        </div>
+                    );
+                }
+
+                return (
+                    <div>
+                        {BoardTemplateHeader({
+                            title: "갤러리",
+                            subtitle: "사업 현장 사진과 결과물을 관리합니다.",
+                            icon: "📸",
+                            view: galleryView,
+                            onWrite: () => setGalleryView('write'),
+                            onBack: () => setGalleryView('list'),
+                            categories: galleryCategories,
+                            activeCategory: galleryCategory,
+                            onCategoryChange: (cat) => { setGalleryCategory(cat); setGalleryCurrentPage(1); },
+                            searchQuery: gallerySearchQuery,
+                            onSearchChange: (q) => { setGallerySearchQuery(q); setGalleryCurrentPage(1); }
+                        })}
+
+                        {/* ZIP 다운로드 버튼 */}
+                        {filteredGalleries.length > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: '13px', padding: '6px 14px' }}
+                                    onClick={() => handleGalleryZipDownload(filteredGalleries)}
+                                    disabled={galleryZipping}
+                                >
+                                    {galleryZipping ? '⏳ 압축 중...' : '📦 전체 다운로드'}
+                                </button>
+                            </div>
+                        )}
+
+                        {/* 갤러리 그리드 */}
+                        {pageItems.length > 0 ? (
+                            <div className="gallery-grid">
+                                {pageItems.map(item => {
+                                    const catInfo = GALLERY_CATEGORY_MAP[item.category] || { icon: '📌', color: '#6B7280' };
+                                    return (
+                                        <GalleryCardWithThumb key={item.id} item={item} catInfo={catInfo}
+                                            onClick={async () => {
+                                                await supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id);
+                                                setSelectedGalleryItem({ ...item, view_count: (item.view_count || 0) + 1 });
+                                                setGalleryView('detail');
+                                                loadAttachments('gallery', item.id).then(setDetailAttachments);
+                                            }} />
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="board-empty">
+                                <div className="board-empty-icon">📸</div>
+                                <div className="board-empty-text">
+                                    {gallerySearchQuery ? '검색 결과가 없습니다.' : '등록된 사진이 없습니다.'}
+                                </div>
+                            </div>
+                        )}
+
+                        {BoardPagination({
+                            totalItems,
+                            currentPage: galleryCurrentPage,
+                            onPageChange: setGalleryCurrentPage
+                        })}
+                    </div>
+                );
+            };
+
+            // Report HTML helpers (shared by print and PDF)
+            const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const formatLocalDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+            const getSettlementReportHTML = () => {
+                const totalBudget = CONFIG.TOTAL_BUDGET;
+                const totalSpent = (data?.budgetExecutions || []).reduce((s, e) => s + (e.amount || 0), 0);
+                const rows = (data?.budgetExecutions || []).map(e =>
+                    `<tr><td>${esc(e.execution_date)}</td><td>${esc(e.category_name)}</td><td>${esc(e.subcategory_name)}</td><td>${esc(e.budget_item_name)}</td><td style="text-align:right">${fmt(e.amount || 0)}</td><td>${esc(e.payment_method)}</td><td>${esc(e.recipient || '')}</td><td>${esc(EXECUTION_STATUS[e.status]?.label || e.status)}</td></tr>`
+                ).join('');
+                return `<!DOCTYPE html><html><head><title>정산보고서</title><style>body{font-family:sans-serif;padding:20px}h1{color:#134E42;text-align:center}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{border:1px solid #ddd;padding:8px;font-size:13px}th{background:#134E42;color:white}.summary{display:flex;gap:20px;margin:20px 0}.summary div{flex:1;padding:16px;background:#f8f6f1;border-radius:8px;text-align:center}.summary .label{font-size:12px;color:#666}.summary .value{font-size:20px;font-weight:bold;color:#134E42}@media print{body{padding:0}}</style></head><body><h1>아름다운재단 2026 공익단체 인큐베이팅 지원사업 정산보고서</h1><p style="text-align:center;color:#666">청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}</p><div class="summary"><div><div class="label">총 예산</div><div class="value">${totalBudget.toLocaleString()}원</div></div><div><div class="label">총 집행</div><div class="value">${totalSpent.toLocaleString()}원</div></div><div><div class="label">집행률</div><div class="value">${totalBudget > 0 ? ((totalSpent/totalBudget)*100).toFixed(1) : 0}%</div></div><div><div class="label">잔여</div><div class="value">${(totalBudget - totalSpent).toLocaleString()}원</div></div></div><table><thead><tr><th>집행일</th><th>카테고리</th><th>소분류</th><th>항목</th><th>금액</th><th>결제방법</th><th>수취인</th><th>상태</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th colspan="4">합계</th><th style="text-align:right">${totalSpent.toLocaleString()}원</th><th colspan="3"></th></tr></tfoot></table></body></html>`;
+            };
+            const getMonthlyReportHTML = () => {
+                const execs = data?.budgetExecutions || [];
+                const monthly = {};
+                execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7); if (!m) return; if (!monthly[m]) monthly[m] = []; monthly[m].push(e); });
+                const months = Object.keys(monthly).sort();
+                let html = `<!DOCTYPE html><html><head><title>월별 집행 명세서</title><style>body{font-family:sans-serif;padding:20px}h1{color:#134E42;text-align:center;font-size:18px}h2{color:#1B6B5A;border-bottom:2px solid #1B6B5A;padding-bottom:4px;margin-top:30px;font-size:15px}table{width:100%;border-collapse:collapse;margin:8px 0 16px}th,td{border:1px solid #ddd;padding:6px 8px;font-size:12px}th{background:#134E42;color:white}td.amt{text-align:right}.total{font-weight:bold;background:#f0f0f0}@media print{h2{page-break-before:auto}}</style></head><body><h1>월별 집행 명세서</h1><p style="text-align:center;color:#666;font-size:13px">청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}</p>`;
+                months.forEach(m => {
+                    const items = monthly[m]; const sum = items.reduce((s, e) => s + (e.amount || 0), 0);
+                    html += `<h2>${m.replace('-', '년 ')}월 (${items.length}건, ${sum.toLocaleString()}원)</h2><table><thead><tr><th>집행일</th><th>카테고리</th><th>항목</th><th>금액</th><th>결제방법</th><th>수취인</th></tr></thead><tbody>`;
+                    items.forEach(e => { html += `<tr><td>${esc(e.execution_date)}</td><td>${esc(e.category_name || '')}</td><td>${esc(e.budget_item_name || '')}</td><td class="amt">${fmt(e.amount||0)}원</td><td>${esc(e.payment_method||'')}</td><td>${esc(e.recipient||'')}</td></tr>`; });
+                    html += `<tr class="total"><td colspan="3">소계</td><td class="amt">${sum.toLocaleString()}원</td><td colspan="2"></td></tr></tbody></table>`;
+                });
+                html += '</body></html>';
+                return html;
+            };
+
+            const renderBudget = () => {
+                const subcategories = getAllSubcategories();
+                const selectedBudgetItems = getAllBudgetItems(formData.subcategory_id);
+
+                return (
+                    <div>
+                        <h1 className="section-title">💰 예산 관리</h1>
+                        <p className="section-subtitle">총 7천만원 예산의 고급 집행 관리 시스템</p>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                            <button className="btn btn-secondary" onClick={() => {
+                                const initialBudgetChanges = {};
+                                BUDGET_DATA.categories.forEach(cat => {
+                                    cat.subcategories.forEach(sub => {
+                                        initialBudgetChanges[sub.id] = { before: sub.budget, after: sub.budget };
+                                    });
+                                });
+                                setChangeApplicationForm({
+                                    reason: '',
+                                    changeDetails: [{ beforeUnit: '', beforeSchedule: '', beforeContent: '',
+                                                      afterUnit: '', afterSchedule: '', afterContent: '' }],
+                                    budgetChanges: initialBudgetChanges,
+                                    specificDetails: [{ unitName: '', beforeAmount: 0, afterAmount: 0, basis: '', reason: '' }],
+                                    applicationDate: new Date().toISOString().slice(0, 10)
+                                });
+                                setChangeApplicationModal(true);
+                            }}>
+                                📝 사업변경신청서
+                            </button>
+                        </div>
+
+                        {/* 탭 네비게이션 */}
+                        <div className="tab-navigation">
+                            <button
+                                className={`tab-btn ${budgetTab === 'dashboard' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('dashboard')}
+                            >
+                                📊 대시보드
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'breakdown' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('breakdown')}
+                            >
+                                📋 예산편성표
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'register' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('register')}
+                            >
+                                📝 집행등록
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'calculator' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('calculator')}
+                            >
+                                🧮 원천징수계산
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'history' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('history')}
+                            >
+                                📋 집행내역
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'ratio' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('ratio')}
+                            >
+                                📊 비용비율
+                            </button>
+                            <button
+                                className={`tab-btn ${budgetTab === 'calendar' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('calendar')}
+                            >
+                                📅 캘린더
+                            </button>
+                        </div>
+
+                        {/* 탭 내용 */}
+                        <div className="card">
+                            {budgetTab === 'dashboard' && (
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>
+                                            📊 예산 현황 대시보드
+                                        </h2>
+                                        {/* 시기 필터 */}
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            {Object.entries(BUDGET_DATA.periods).map(([key, p]) => (
+                                                <button
+                                                    key={key}
+                                                    className={`btn ${budgetPeriod === key ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => setBudgetPeriod(key)}
+                                                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Period budget summary cards (3 items) - includes actual execution amounts */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+                                        {Object.entries(BUDGET_DATA.periods).map(([key, p]) => {
+                                            const periodUsed = getPeriodUsed(data.budgetExecutions, key);
+                                            const periodExecRate = pct(periodUsed, p.budget);
+                                            const isActive = budgetPeriod === key;
+                                            return (
+                                                <button type="button" key={key} style={{
+                                                    padding: '16px',
+                                                    borderRadius: '12px',
+                                                    background: isActive ? 'linear-gradient(135deg, #1B6B5A, #134E42)' : '#F8F9FA',
+                                                    color: isActive ? 'white' : '#2D2B29',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s',
+                                                    border: isActive ? 'none' : '1px solid #E2E0DD',
+                                                    textAlign: 'left',
+                                                    width: '100%'
+                                                }} onClick={() => setBudgetPeriod(key)}>
+                                                    <div style={{ fontSize: '13px', opacity: 0.8, marginBottom: '4px' }}>{p.label}</div>
+                                                    <div style={{ fontSize: '20px', fontWeight: '700' }}>{fmt(p.budget / 10000)}만원</div>
+                                                    <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '4px' }}>
+                                                        집행률 {periodExecRate}%
+                                                    </div>
+                                                    <div style={{ height: '4px', background: isActive ? 'rgba(255,255,255,0.3)' : '#E2E0DD', borderRadius: '2px', marginTop: '8px', overflow: 'hidden' }}>
+                                                        <div style={{ height: '100%', background: isActive ? 'white' : '#1B6B5A', width: `${periodExecRate}%`, borderRadius: '2px' }} />
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Total execution rate for selected period */}
+                                    {(() => {
+                                        const selectedPeriod = BUDGET_DATA.periods[budgetPeriod];
+                                        const selectedUsed = getPeriodUsed(data.budgetExecutions, budgetPeriod);
+                                        const selectedRate = pct(selectedUsed, selectedPeriod.budget);
+                                        return (
+                                        <div style={{
+                                            background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
+                                            color: 'white',
+                                            padding: '24px',
+                                            borderRadius: '12px',
+                                            marginBottom: '24px'
+                                        }}>
+                                            <h3 style={{ margin: '0 0 16px 0' }}>
+                                                {selectedPeriod.label} 예산 집행률
+                                            </h3>
+                                            <div style={{
+                                                height: '32px',
+                                                background: 'rgba(255,255,255,0.2)',
+                                                borderRadius: '16px',
+                                                overflow: 'hidden',
+                                                marginBottom: '16px'
+                                            }}>
+                                                <div style={{
+                                                    height: '100%',
+                                                    background: 'white',
+                                                    width: `${selectedRate}%`,
+                                                    transition: 'width 0.3s'
+                                                }} />
+                                            </div>
+                                            <div style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                fontSize: '16px'
+                                            }}>
+                                                <span>집행: {fmt(selectedUsed / 10000)}만원</span>
+                                                <span>예산: {fmt(selectedPeriod.budget / 10000)}만원</span>
+                                            </div>
+                                            <div style={{
+                                                textAlign: 'center',
+                                                fontSize: '32px',
+                                                fontWeight: '700',
+                                                marginTop: '16px'
+                                            }}>
+                                                {selectedRate}%
+                                            </div>
+                                        </div>
+                                        );
+                                    })()}
+
+                                    {/* Execution rate by project - based on actual execution records */}
+                                    <h3 style={{ marginBottom: '16px' }}>사업별 집행률</h3>
+                                    {(() => {
+                                        // Filter executions by selected period, then sum by subcategory_id
+                                        const periodRange = PERIOD_DATE_RANGES[budgetPeriod];
+                                        const periodExecutions = periodRange
+                                            ? data.budgetExecutions.filter(ex =>
+                                                ex.execution_date >= periodRange.start && ex.execution_date <= periodRange.end)
+                                            : data.budgetExecutions;
+                                        const execBySubcat = {};
+                                        periodExecutions.forEach(ex => {
+                                            const id = ex.subcategory_id;
+                                            if (!id) return;
+                                            execBySubcat[id] = (execBySubcat[id] || 0) + (ex.amount || 0);
+                                        });
+
+                                        return BUDGET_DATA.categories.map(category => {
+                                            const catBudget = getBudgetByPeriod(category, budgetPeriod);
+
+                                            // Actual category execution (sum of subcategories)
+                                            const catExecuted = category.subcategories.reduce((sum, sub) =>
+                                                sum + (execBySubcat[sub.id] || 0), 0);
+                                            const catExecRate = pct(catExecuted, catBudget);
+                                            const remaining = Math.max(0, catBudget - catExecuted);
+
+                                            return (
+                                                <div key={category.id} style={{ marginBottom: '24px', background: '#FAFAF9', border: '1px solid #EBE8E1', borderRadius: '12px', padding: '16px' }}>
+                                                    {/* Category header */}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                                        <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#134E42' }}>{category.name}</h4>
+                                                        <div style={{ textAlign: 'right', fontSize: '13px' }}>
+                                                            <span style={{ fontWeight: '700', color: catExecRate >= 90 ? '#DC2626' : catExecRate >= 50 ? '#D97706' : '#3B82F6', fontSize: '18px' }}>
+                                                                {catExecRate}%
+                                                            </span>
+                                                            <div style={{ color: '#9C9690', fontSize: '12px' }}>
+                                                                {fmt(catExecuted / 10000)}만 / {fmt(catBudget / 10000)}만원
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {/* Category overall progress bar */}
+                                                    <div style={{ height: '10px', background: '#E2E0DD', borderRadius: '5px', overflow: 'hidden', marginBottom: '14px' }}>
+                                                        <div style={{
+                                                            height: '100%',
+                                                            background: catExecRate >= 90 ? '#DC2626' : catExecRate >= 50 ? '#D97706' : '#3B82F6',
+                                                            width: `${catExecRate}%`,
+                                                            borderRadius: '5px',
+                                                            transition: 'width 0.4s'
+                                                        }} />
+                                                    </div>
+                                                    {/* Execution rate by subcategory */}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                        {category.subcategories.map(sub => {
+                                                            const subBudget = getBudgetByPeriod(sub, budgetPeriod);
+                                                            if (subBudget === 0) return null;
+                                                            const subExecuted = execBySubcat[sub.id] || 0;
+                                                            const subRate = pct(subExecuted, subBudget);
+                                                            const subRemaining = Math.max(0, subBudget - subExecuted);
+                                                            const barColor = subRate >= 90 ? '#DC2626' : subRate >= 50 ? '#D97706' : '#3B82F6';
+
+                                                            return (
+                                                                <div key={sub.id} style={{ padding: '10px 12px', background: 'white', borderRadius: '8px', border: '1px solid #F0EDE8' }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
+                                                                        <span style={{ fontWeight: '500', color: '#2D2D2D' }}>{sub.name}</span>
+                                                                        <div style={{ textAlign: 'right' }}>
+                                                                            <span style={{ fontWeight: '700', color: barColor }}>{subRate}%</span>
+                                                                            <span style={{ color: '#9C9690', marginLeft: '8px' }}>
+                                                                                {fmt(subExecuted / 10000)}만 / {fmt(subBudget / 10000)}만원
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div style={{ height: '6px', background: '#E9ECEF', borderRadius: '3px', overflow: 'hidden' }}>
+                                                                        <div style={{ height: '100%', background: barColor, width: `${subRate}%`, borderRadius: '3px', transition: 'width 0.4s' }} />
+                                                                    </div>
+                                                                    {subExecuted > 0 && (
+                                                                        <div style={{ fontSize: '11px', color: '#9C9690', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                                                                            <span>집행: {fmt(subExecuted)}원</span>
+                                                                            <span>잔액: {fmt(subRemaining)}원</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    {/* Category remaining budget summary */}
+                                                    <div style={{ marginTop: '10px', fontSize: '12px', color: '#9C9690', display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
+                                                        <span>집행액: <strong style={{ color: '#134E42' }}>{fmt(catExecuted)}원</strong></span>
+                                                        <span>잔액: <strong style={{ color: remaining === 0 ? '#DC2626' : '#6B6560' }}>{fmt(remaining)}원</strong></span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        });
+                                    })()}
+
+                                    {/* 최근 집행 내역 */}
+                                    <div style={{ marginTop: '32px' }}>
+                                        <h3 style={{ marginBottom: '16px' }}>최근 집행 내역</h3>
+                                        {data.budgetExecutions.slice(0, 5).map(execution => (
+                                            <div key={execution.id} className="execution-item">
+                                                <div className="execution-header">
+                                                    <div>
+                                                        <div className="execution-title">{execution.budget_item_name}</div>
+                                                        <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                            {execution.description}
+                                                        </div>
+                                                    </div>
+                                                    <div className="execution-amount">
+                                                        {execution.amount?.toLocaleString()}원
+                                                    </div>
+                                                </div>
+                                                <div className="execution-meta">
+                                                    <span>📅 {execution.execution_date}</span>
+                                                    <span>💳 {execution.payment_method}</span>
+                                                    <span>🏷️ {execution.category_name}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {data.budgetExecutions.length === 0 && (
+                                            <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                                등록된 집행 내역이 없습니다.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* === 예산편성표 탭 === */}
+                            {budgetTab === 'breakdown' && (
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>
+                                            📋 예산편성표
+                                        </h2>
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            {Object.entries(BUDGET_DATA.periods).map(([key, p]) => (
+                                                <button
+                                                    key={key}
+                                                    className={`btn ${budgetPeriod === key ? 'btn-primary' : 'btn-secondary'}`}
+                                                    onClick={() => setBudgetPeriod(key)}
+                                                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 시기 비교 요약 */}
+                                    <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                            <thead>
+                                                <tr style={{ background: '#134E42', color: 'white' }}>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>구분</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>전체 예산</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>상반기</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>하반기</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>상반기 비중</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>하반기 비중</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {BUDGET_DATA.categories.map(cat => (
+                                                    <React.Fragment key={cat.id}>
+                                                        <tr style={{ background: '#E8F5E9', fontWeight: '700' }}>
+                                                            <td style={{ padding: '10px 12px' }}>{cat.name}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{cat.budget.toLocaleString()}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{cat.h1.toLocaleString()}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{cat.h2.toLocaleString()}</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(cat.h1 / cat.budget * 100)}%</td>
+                                                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(cat.h2 / cat.budget * 100)}%</td>
+                                                        </tr>
+                                                        {cat.subcategories.map(sub => (
+                                                            <tr key={sub.id} style={{ borderBottom: '1px solid #E2E0DD' }}>
+                                                                <td style={{ padding: '8px 12px', paddingLeft: '28px', color: '#4A4540' }}>{sub.name}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.budget.toLocaleString()}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.h1.toLocaleString()}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.h2.toLocaleString()}</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.budget > 0 ? Math.round(sub.h1 / sub.budget * 100) : 0}%</td>
+                                                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>{sub.budget > 0 ? Math.round(sub.h2 / sub.budget * 100) : 0}%</td>
+                                                            </tr>
+                                                        ))}
+                                                    </React.Fragment>
+                                                ))}
+                                                <tr style={{ background: '#134E42', color: 'white', fontWeight: '700' }}>
+                                                    <td style={{ padding: '10px 12px' }}>합계</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.totalBudget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.periods.h1.budget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.periods.h2.budget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(BUDGET_DATA.periods.h1.budget / BUDGET_DATA.totalBudget * 100)}%</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(BUDGET_DATA.periods.h2.budget / BUDGET_DATA.totalBudget * 100)}%</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* 선택 시기 상세 편성표 */}
+                                    <h3 style={{ marginBottom: '16px' }}>
+                                        {BUDGET_DATA.periods[budgetPeriod].label} 상세 편성표
+                                        <span style={{ fontSize: '14px', fontWeight: '400', color: '#6B6560', marginLeft: '12px' }}>
+                                            총 {BUDGET_DATA.periods[budgetPeriod].budget.toLocaleString()}원
+                                        </span>
+                                    </h3>
+
+                                    {BUDGET_DATA.categories.map(category => {
+                                        const catBudget = getBudgetByPeriod(category, budgetPeriod);
+                                        return (
+                                            <div key={category.id} style={{ marginBottom: '28px' }}>
+                                                <div style={{
+                                                    background: category.id === 'project-costs' ? '#1B6B5A' : '#2B6CB0',
+                                                    color: 'white',
+                                                    padding: '12px 16px',
+                                                    borderRadius: '8px 8px 0 0',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    <span>{category.name}</span>
+                                                    <span>{catBudget.toLocaleString()}원</span>
+                                                </div>
+
+                                                <div style={{ overflowX: 'auto' }}>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                                        <thead>
+                                                            <tr style={{ background: '#F8F9FA' }}>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>단위사업</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>항목명</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>계정</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '2px solid #E2E0DD' }}>예산액</th>
+                                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #E2E0DD' }}>산출근거</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {category.subcategories.map(sub => {
+                                                                const subBudget = getBudgetByPeriod(sub, budgetPeriod);
+                                                                if (subBudget === 0) return null;
+                                                                const items = sub.items.filter(item => getBudgetByPeriod(item, budgetPeriod) > 0);
+                                                                return (
+                                                                    <React.Fragment key={sub.id}>
+                                                                        {items.map((item, idx) => (
+                                                                            <tr key={item.id} style={{ borderBottom: '1px solid #F0EFED' }}>
+                                                                                {idx === 0 && (
+                                                                                    <td rowSpan={items.length} style={{
+                                                                                        padding: '8px 12px',
+                                                                                        fontWeight: '600',
+                                                                                        verticalAlign: 'top',
+                                                                                        borderRight: '1px solid #E2E0DD',
+                                                                                        background: '#FAFAF8'
+                                                                                    }}>
+                                                                                        {sub.name}
+                                                                                    </td>
+                                                                                )}
+                                                                                <td style={{ padding: '8px 12px' }}>{item.name}</td>
+                                                                                <td style={{ padding: '8px 12px' }}>
+                                                                                    <span style={{
+                                                                                        display: 'inline-block',
+                                                                                        padding: '2px 8px',
+                                                                                        borderRadius: '4px',
+                                                                                        fontSize: '11px',
+                                                                                        background: {
+                                                                                            '사업인건비': '#FFF5F5', '사업회의비': '#EBF8FF', '지급수수료': '#FAF5FF',
+                                                                                            '여비교통비': '#FFFAF0', '물품구매비': '#F0FFF4', '예비비': '#F7FAFC',
+                                                                                            '운영인건비': '#FFF5F7', '임차료': '#F0FFFF', '일반관리비': '#FFFFF0',
+                                                                                            '교육훈련비': '#FFF8F1', '홍보비': '#F5F0FF'
+                                                                                        }[item.type] || '#F7FAFC',
+                                                                                        color: {
+                                                                                            '사업인건비': '#C53030', '사업회의비': '#2B6CB0', '지급수수료': '#6B46C1',
+                                                                                            '여비교통비': '#C05621', '물품구매비': '#276749', '예비비': '#4A5568',
+                                                                                            '운영인건비': '#B83280', '임차료': '#0E7490', '일반관리비': '#92400E',
+                                                                                            '교육훈련비': '#C2410C', '홍보비': '#553C9A'
+                                                                                        }[item.type] || '#4A5568'
+                                                                                    }}>
+                                                                                        {item.type}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: '600', fontVariantNumeric: 'tabular-nums' }}>
+                                                                                    {getBudgetByPeriod(item, budgetPeriod).toLocaleString()}
+                                                                                </td>
+                                                                                <td style={{ padding: '8px 12px', fontSize: '12px', color: '#6B6560' }}>
+                                                                                    {budgetPeriod === 'h1' ? (item.h1detail || item.detail) : budgetPeriod === 'h2' ? (item.h2detail || item.detail) : item.detail}
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                        <tr style={{ background: '#F8F9FA', fontWeight: '600', borderBottom: '2px solid #E2E0DD' }}>
+                                                                            <td colSpan={3} style={{ padding: '6px 12px', textAlign: 'right', fontSize: '12px' }}>{sub.name} 소계</td>
+                                                                            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{subBudget.toLocaleString()}</td>
+                                                                            <td></td>
+                                                                        </tr>
+                                                                    </React.Fragment>
+                                                                );
+                                                            })}
+                                                            <tr style={{ background: category.id === 'project-costs' ? '#E8F5E9' : '#EBF8FF', fontWeight: '700' }}>
+                                                                <td colSpan={3} style={{ padding: '10px 12px', textAlign: 'right' }}>{category.name} 합계</td>
+                                                                <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '15px' }}>{catBudget.toLocaleString()}</td>
+                                                                <td></td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* 총 합계 */}
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, #1B6B5A 0%, #134E42 100%)',
+                                        color: 'white',
+                                        padding: '20px 24px',
+                                        borderRadius: '12px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        fontSize: '18px',
+                                        fontWeight: '700'
+                                    }}>
+                                        <span>{BUDGET_DATA.periods[budgetPeriod].label} 총계</span>
+                                        <span style={{ fontSize: '24px' }}>{BUDGET_DATA.periods[budgetPeriod].budget.toLocaleString()}원</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'register' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
+                                        📝 예산 집행 등록
+                                    </h2>
+
+                                    <div className="form-grid">
+                                        <div className="form-group">
+                                            <label>예산 분류</label>
+                                            <select
+                                                value={formData.subcategory_id}
+                                                onChange={(e) => {
+                                                    const subcategory = subcategories.find(s => s.id === e.target.value);
+                                                    setFormData({
+                                                        ...formData,
+                                                        subcategory_id: e.target.value,
+                                                        subcategory_name: subcategory?.name || '',
+                                                        category_name: subcategory?.categoryName || '',
+                                                        budget_item_id: '',
+                                                        budget_item_name: '',
+                                                        type: ''
+                                                    });
+                                                }}
+                                            >
+                                                <option value="">분류 선택</option>
+                                                {subcategories.map(subcategory => (
+                                                    <option key={subcategory.id} value={subcategory.id}>
+                                                        {subcategory.categoryName} {'>'} {subcategory.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>예산 항목</label>
+                                            <select
+                                                value={formData.budget_item_id}
+                                                onChange={(e) => {
+                                                    const item = selectedBudgetItems.find(i => i.id === e.target.value);
+                                                    setFormData({
+                                                        ...formData,
+                                                        budget_item_id: e.target.value,
+                                                        budget_item_name: item?.name || '',
+                                                        type: item?.type || ''
+                                                    });
+                                                }}
+                                                disabled={!formData.subcategory_id}
+                                            >
+                                                <option value="">항목 선택</option>
+                                                {selectedBudgetItems.map(item => (
+                                                    <option key={item.id} value={item.id}>
+                                                        {item.name} ({item.type})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>집행 금액</label>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                placeholder="금액 입력"
+                                                value={fmtInput(formData.amount)}
+                                                onChange={(e) => setFormData({...formData, amount: parseInput(e.target.value)})}
+                                            />
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>결제 방법</label>
+                                            <select
+                                                value={formData.payment_method}
+                                                onChange={(e) => setFormData({...formData, payment_method: e.target.value})}
+                                            >
+                                                <option value="">결제 방법 선택</option>
+                                                <option value="카드">카드</option>
+                                                <option value="계좌이체">계좌이체</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>집행일</label>
+                                            <input
+                                                type="date"
+                                                value={formData.execution_date}
+                                                onChange={(e) => setFormData({...formData, execution_date: e.target.value})}
+                                            />
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>수취인</label>
+                                            <input
+                                                type="text"
+                                                placeholder="수취인 입력 또는 목록에서 선택"
+                                                value={formData.recipient}
+                                                onChange={(e) => setFormData({...formData, recipient: e.target.value})}
+                                                list="recipient-datalist"
+                                            />
+                                            <datalist id="recipient-datalist">
+                                                {recipients.map(r => <option key={r.id} value={r.name} />)}
+                                            </datalist>
+                                            {recipients.length > 0 && (
+                                                <span style={{ fontSize: '12px', color: '#9C9690' }}>
+                                                    등록된 수급자 선택 시 급여지급명세서에 정보가 자동 채워집니다.
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group" style={{ marginTop: '24px' }}>
+                                        <label>집행 내용</label>
+                                        <textarea
+                                            rows="3"
+                                            placeholder="집행 내용 상세 설명"
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                        />
+                                    </div>
+
+                                    {/* 필요 서류 첨부 */}
+                                    {formData.type && formData.payment_method && (
+                                        <div style={{
+                                            background: '#F8F9FA',
+                                            border: '1px solid #E2E8F0',
+                                            borderRadius: '8px',
+                                            padding: '16px',
+                                            marginTop: '24px'
+                                        }}>
+                                            <h4 style={{ margin: '0 0 12px 0', fontSize: '16px' }}>
+                                                📄 필요 증빙서류
+                                            </h4>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {getRequiredDocuments(formData.type, formData.payment_method).map((doc, index) => {
+                                                    const attachedFile = formDocFiles[doc];
+                                                    return (
+                                                        <div key={index} style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            padding: '6px 10px',
+                                                            background: '#fff',
+                                                            border: '1px solid #E2E8F0',
+                                                            borderRadius: '6px',
+                                                            fontSize: '14px'
+                                                        }}>
+                                                            <span>📄 {doc}</span>
+                                                            {attachedFile ? (
+                                                                <span style={{ color: '#1B6B5A', fontSize: '12px', fontWeight: '500' }}>
+                                                                    ✅ {attachedFile.name}
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-secondary"
+                                                                    style={{ fontSize: '12px', padding: '3px 10px' }}
+                                                                    onClick={() => {
+                                                                        activeFormDocNameRef.current = doc;
+                                                                        formDocFileInputRef.current?.click();
+                                                                    }}
+                                                                >
+                                                                    📎 첨부하기
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            {DOCUMENT_RULES[formData.type]?.notes && (
+                                                <div style={{
+                                                    marginTop: '12px',
+                                                    padding: '8px',
+                                                    background: 'rgba(27, 107, 90, 0.1)',
+                                                    borderRadius: '4px',
+                                                    fontSize: '13px',
+                                                    whiteSpace: 'pre-line'
+                                                }}>
+                                                    💡 {DOCUMENT_RULES[formData.type].notes}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 등록 폼 서류 첨부용 hidden file input */}
+                                    <input
+                                        ref={formDocFileInputRef}
+                                        type="file"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            e.target.value = '';
+                                            const docName = activeFormDocNameRef.current;
+                                            activeFormDocNameRef.current = null;
+                                            if (!file || !docName) return;
+                                            setFormDocFiles(prev => ({ ...prev, [docName]: file }));
+                                        }}
+                                    />
+
+                                    <div style={{
+                                        display: 'flex',
+                                        gap: '12px',
+                                        marginTop: '24px'
+                                    }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={async () => {
+                                                try {
+                                                    console.log('📝 예산 집행 등록 시작...');
+
+                                                    // 필수 필드 검증
+                                                    if (!formData.subcategory_id || !formData.budget_item_id || !formData.description || !formData.amount || !formData.payment_method) {
+                                                        alert('필수 필드를 모두 입력해주세요. (결제 방법 포함)');
+                                                        return;
+                                                    }
+
+                                                    // 삽입할 데이터 준비
+                                                    const insertData = {
+                                                        subcategory_id: formData.subcategory_id,
+                                                        subcategory_name: formData.subcategory_name,
+                                                        category_name: formData.category_name,
+                                                        budget_item_id: formData.budget_item_id,
+                                                        budget_item_name: formData.budget_item_name,
+                                                        type: formData.type,
+                                                        description: formData.description,
+                                                        amount: parseInt(formData.amount),
+                                                        payment_method: formData.payment_method,
+                                                        execution_date: formData.execution_date,
+                                                        recipient: formData.recipient,
+                                                        status: 'pending',
+                                                        created_by: '00000000-0000-0000-0000-000000000001'
+                                                    };
+
+                                                    console.log('📊 삽입할 데이터:', insertData);
+
+                                                    // 데이터베이스에 저장
+                                                    const { data: inserted, error } = await supabase
+                                                        .from('budget_executions')
+                                                        .insert([insertData])
+                                                        .select()
+                                                        .single();
+
+                                                    console.log('📊 Supabase INSERT 응답:', { data: inserted, error });
+
+                                                    if (error) {
+                                                        console.error('❌ 예산 집행 등록 오류:', error);
+                                                        console.error('❌ 오류 상세:', error.message, error.details, error.hint);
+                                                        console.error('❌ 전체 오류 객체:', JSON.stringify(error, null, 2));
+
+                                                        if (error.message && error.message.includes('row-level security')) {
+                                                            alert('예산 집행 등록 중 오류가 발생했습니다: RLS 정책 오류 - Supabase 대시보드에서 SQL 스키마를 다시 실행해주세요.');
+                                                        } else {
+                                                            alert('예산 집행 등록 중 오류가 발생했습니다: ' + error.message);
+                                                        }
+                                                        return;
+                                                    }
+
+                                                    // 서류 첨부파일 병렬 업로드
+                                                    const docEntries = Object.entries(formDocFiles);
+                                                    if (inserted?.id && docEntries.length > 0) {
+                                                        const baseTs = Date.now();
+                                                        const uploadResults = await Promise.allSettled(
+                                                            docEntries.map(async ([docName, file], i) => {
+                                                                const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                                                                const filePath = `execution/${inserted.id}/${baseTs}_${i}_${safeName}`;
+                                                                const { data: storageData, error: storageError } = await supabase.storage
+                                                                    .from('attachments').upload(filePath, file);
+                                                                if (storageError) throw storageError;
+                                                                return {
+                                                                    execution_id: inserted.id,
+                                                                    document_name: docName,
+                                                                    document_type: 'required',
+                                                                    file_path: storageData?.path || filePath,
+                                                                    file_name: file.name,
+                                                                    file_size: file.size,
+                                                                    uploaded_by: currentUser.id
+                                                                };
+                                                            })
+                                                        );
+                                                        const docsToInsert = uploadResults
+                                                            .filter(r => r.status === 'fulfilled')
+                                                            .map(r => r.value);
+                                                        if (docsToInsert.length > 0) {
+                                                            await supabase.from('documents').insert(docsToInsert);
+                                                        }
+                                                        const failed = uploadResults
+                                                            .map((r, i) => r.status === 'rejected' ? docEntries[i][0] : null)
+                                                            .filter(Boolean);
+                                                        if (failed.length > 0) {
+                                                            console.error('서류 첨부 실패:', failed);
+                                                            alert(`⚠️ 일부 서류 첨부 실패:\n${failed.join('\n')}\n\n집행내역은 등록되었으니 나중에 다시 첨부해주세요.`);
+                                                        }
+                                                    }
+
+                                                    alert('예산 집행이 성공적으로 등록되었습니다.');
+
+                                                    // 폼 초기화
+                                                    setFormData({
+                                                        subcategory_id: '',
+                                                        subcategory_name: '',
+                                                        category_name: '',
+                                                        budget_item_id: '',
+                                                        budget_item_name: '',
+                                                        type: '',
+                                                        description: '',
+                                                        amount: '',
+                                                        payment_method: '',
+                                                        execution_date: new Date().toISOString().split('T')[0],
+                                                        recipient: ''
+                                                    });
+                                                    setFormDocFiles({});
+                                                    activeFormDocNameRef.current = null;
+                                                    // 데이터 새로고침
+                                                    await refreshExecutions();
+
+                                                } catch (error) {
+                                                    console.error('예산 집행 등록 오류:', error);
+                                                    alert('예산 집행 등록 중 오류가 발생했습니다.');
+                                                }
+                                            }}
+                                        >
+                                            💾 등록하기
+                                        </button>
+                                        <button
+                                            className="btn btn-secondary"
+                                            onClick={() => {
+                                                setFormData({
+                                                    subcategory_id: '',
+                                                    subcategory_name: '',
+                                                    category_name: '',
+                                                    budget_item_id: '',
+                                                    budget_item_name: '',
+                                                    type: '',
+                                                    description: '',
+                                                    amount: '',
+                                                    payment_method: '',
+                                                    execution_date: new Date().toISOString().split('T')[0],
+                                                    recipient: ''
+                                                });
+                                                setFormDocFiles({});
+                                                activeFormDocNameRef.current = null;
+                                            }}
+                                        >
+                                            🔄 초기화
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'calculator' && (
+                                <div>
+                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>
+                                        🧮 원천징수세 계산기
+                                    </h2>
+                                    <p style={{ fontSize: '14px', color: '#6B6560', marginBottom: '20px' }}>
+                                        기타소득(강사료, 단순인건비, 회의수당 등) 지급 시 원천징수 자동 계산
+                                    </p>
+
+                                    {/* 모드 전환 */}
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                                        <button
+                                            className={`btn ${calcMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setCalcMode('single')}
+                                            style={{ fontSize: '13px', padding: '8px 16px' }}
+                                        >
+                                            1인 계산
+                                        </button>
+                                        <button
+                                            className={`btn ${calcMode === 'multi' ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setCalcMode('multi')}
+                                            style={{ fontSize: '13px', padding: '8px 16px' }}
+                                        >
+                                            다인 일괄계산
+                                        </button>
+                                    </div>
+
+                                    {/* 소득유형 선택 */}
+                                    <div className="form-group" style={{ marginBottom: '16px', maxWidth: '500px' }}>
+                                        <label>소득 유형</label>
+                                        <select
+                                            value={calcIncomeType}
+                                            onChange={(e) => setCalcIncomeType(e.target.value)}
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
+                                        >
+                                            {Object.entries(INCOME_TYPE_INFO).map(([key, info]) => (
+                                                <option key={key} value={key}>{info.label}</option>
+                                            ))}
+                                        </select>
+                                        <p style={{ fontSize: '13px', color: '#9C9690', marginTop: '4px' }}>
+                                            {INCOME_TYPE_INFO[calcIncomeType].desc}
+                                        </p>
+                                    </div>
+
+                                    {/* === 1인 계산 모드 === */}
+                                    {calcMode === 'single' && (
+                                        <div>
+                                            <div className="form-grid" style={{ maxWidth: '500px' }}>
+                                                <div className="form-group">
+                                                    <label>지급 금액 (원)</label>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        placeholder="금액 입력 (예: 210,000)"
+                                                        value={fmtInput(calculatorAmount)}
+                                                        onChange={(e) => setCalculatorAmount(parseInput(e.target.value))}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                                                <button
+                                                    className="btn btn-primary"
+                                                    onClick={() => {
+                                                        if (calculatorAmount) {
+                                                            const result = calculateWithholdingTax(parseInt(calculatorAmount));
+                                                            setCalculationResult(result);
+                                                        }
+                                                    }}
+                                                >
+                                                    📊 계산하기
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    onClick={() => {
+                                                        setCalculatorAmount('');
+                                                        setCalculationResult(null);
+                                                    }}
+                                                >
+                                                    🔄 초기화
+                                                </button>
+                                            </div>
+
+                                            {calculationResult && (
+                                                <div className="calculation-result">
+                                                    <h3 style={{ margin: '0 0 16px 0' }}>계산 결과</h3>
+                                                    <div className="result-item">
+                                                        <span>지급 금액:</span>
+                                                        <span>{parseInt(calculatorAmount).toLocaleString()}원</span>
+                                                    </div>
+                                                    {!calculationResult.taxable ? (
+                                                        <div style={{ padding: '12px', background: 'rgba(255,255,255,0.15)', borderRadius: '8px', marginTop: '8px', textAlign: 'center' }}>
+                                                            ✅ 125,000원 이하 → <strong>원천징수 없음</strong> (전액 지급)
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <div className="result-item">
+                                                                <span>소득세 (국세 8%):</span>
+                                                                <span>{calculationResult.income.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div className="result-item" style={{ fontSize: '13px', opacity: 0.8, marginTop: '-4px', marginBottom: '12px' }}>
+                                                                <span style={{ paddingLeft: '12px' }}>= {parseInt(calculatorAmount).toLocaleString()} × 0.08 → 원단위 절사</span>
+                                                            </div>
+                                                            <div className="result-item">
+                                                                <span>지방소득세 (국세의 10%):</span>
+                                                                <span>{calculationResult.local.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div className="result-item" style={{ fontSize: '13px', opacity: 0.8, marginTop: '-4px', marginBottom: '12px' }}>
+                                                                <span style={{ paddingLeft: '12px' }}>= {calculationResult.income.toLocaleString()} × 0.1 → 원단위 절사</span>
+                                                            </div>
+                                                            <div className="result-item">
+                                                                <span>총 원천징수세:</span>
+                                                                <span>{calculationResult.total.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div className="result-item">
+                                                                <span>실수령액:</span>
+                                                                <span>{calculationResult.net.toLocaleString()}원</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* === 다인 일괄계산 모드 === */}
+                                    {calcMode === 'multi' && (
+                                        <div>
+                                            <p style={{ fontSize: '13px', color: '#9C9690', marginBottom: '12px' }}>
+                                                여러 명에게 지급할 때 개인별로 국세/지방세를 따로 계산해야 원단위 절사 차이가 발생하지 않습니다.
+                                            </p>
+                                            <div style={{ maxWidth: '600px' }}>
+                                                {calcPersons.map((person, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                                                        <span style={{ fontSize: '13px', color: '#9C9690', minWidth: '24px' }}>{idx + 1}</span>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="이름"
+                                                            value={person.name}
+                                                            onChange={(e) => {
+                                                                const updated = [...calcPersons];
+                                                                updated[idx].name = e.target.value;
+                                                                setCalcPersons(updated);
+                                                            }}
+                                                            style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            inputMode="numeric"
+                                                            placeholder="지급금액 (원)"
+                                                            value={fmtInput(person.amount)}
+                                                            onChange={(e) => {
+                                                                const updated = [...calcPersons];
+                                                                updated[idx].amount = parseInput(e.target.value);
+                                                                setCalcPersons(updated);
+                                                            }}
+                                                            style={{ flex: 1.5, padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E0DD', fontSize: '14px' }}
+                                                        />
+                                                        {calcPersons.length > 1 && (
+                                                            <button
+                                                                onClick={() => setCalcPersons(calcPersons.filter((_, i) => i !== idx))}
+                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#E53E3E', padding: '4px' }}
+                                                            >×</button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    onClick={() => setCalcPersons([...calcPersons, { name: '', amount: '' }])}
+                                                    style={{ fontSize: '13px', padding: '6px 14px', marginTop: '4px' }}
+                                                >
+                                                    + 추가
+                                                </button>
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                                                <button className="btn btn-primary" onClick={calculateMultiPersonTax}>
+                                                    📊 일괄 계산
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    onClick={() => {
+                                                        setCalcPersons([{ name: '', amount: '' }]);
+                                                        setCalcMultiResults(null);
+                                                    }}
+                                                >
+                                                    🔄 초기화
+                                                </button>
+                                            </div>
+
+                                            {calcMultiResults && (
+                                                <div style={{ marginTop: '16px' }}>
+                                                    <div style={{ overflowX: 'auto' }}>
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                                                            <thead>
+                                                                <tr style={{ background: '#1B6B5A', color: 'white' }}>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>이름</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>지급액</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>소득세(국세)</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>지방세</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>공제합계</th>
+                                                                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>실지급액</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {calcMultiResults.persons.map((p, i) => (
+                                                                    <tr key={i} style={{ borderBottom: '1px solid #E2E0DD', background: p.taxable ? 'white' : '#F0FFF4' }}>
+                                                                        <td style={{ padding: '10px 12px' }}>{p.name}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.amount.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.income.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>{p.local.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>{p.total.toLocaleString()}</td>
+                                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>{p.net.toLocaleString()}</td>
+                                                                    </tr>
+                                                                ))}
+                                                                <tr style={{ background: '#134E42', color: 'white', fontWeight: '700' }}>
+                                                                    <td style={{ padding: '10px 12px' }}>합계</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalAmount.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalIncome.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalLocal.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalTax.toLocaleString()}</td>
+                                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{calcMultiResults.summary.totalNet.toLocaleString()}</td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <p style={{ fontSize: '12px', color: '#9C9690', marginTop: '8px' }}>
+                                                        * 국세와 지방세를 인원별로 따로 계산 후 원단위 절사 적용. 총액 일괄 계산(8.8%) 시 금액 차이가 발생할 수 있습니다.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 선택한 소득유형별 필요서류 */}
+                                    <div style={{ marginTop: '28px', padding: '20px', background: '#FFFBF0', borderRadius: '12px', border: '1px solid #F0E6D0' }}>
+                                        <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#8B6914' }}>
+                                            📋 {INCOME_TYPE_INFO[calcIncomeType].label} - 필요 증빙서류
+                                        </h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            {INCOME_TYPE_INFO[calcIncomeType].docs.map((doc, i) => (
+                                                <div key={i} style={{ fontSize: '13px', color: '#5C4A1E', paddingLeft: '8px' }}>
+                                                    {i + 1}. {doc}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {INCOME_TYPE_INFO[calcIncomeType].rules && (
+                                            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #F0E6D0' }}>
+                                                <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#8B6914' }}>⚠️ 지급 시 주의사항</h4>
+                                                {INCOME_TYPE_INFO[calcIncomeType].rules.map((rule, i) => (
+                                                    <div key={i} style={{ fontSize: '13px', color: '#5C4A1E', paddingLeft: '8px', marginBottom: '4px' }}>
+                                                        • {rule}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 원천징수 해설 */}
+                                    <div style={{ marginTop: '20px', padding: '20px', background: '#F8F9FA', borderRadius: '12px' }}>
+                                        <h4 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>📖 원천징수란?</h4>
+
+                                        <div style={{ fontSize: '14px', color: '#4A4540', lineHeight: '1.7' }}>
+                                            <p style={{ marginBottom: '12px' }}>
+                                                <strong>원천징수(源泉徵收)</strong>란 소득을 지급하는 자(원천징수의무자)가,
+                                                소득을 받는 사람이 내야 할 세금을 <strong>미리 떼어서 대신 납부</strong>하는 제도입니다.
+                                            </p>
+                                            <p style={{ marginBottom: '12px' }}>
+                                                <strong>원천세</strong> = 소득세(국세) + 지방소득세 특별징수분(지방세)
+                                            </p>
+
+                                            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #E2E0DD' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>🔢 계산 방법</h5>
+                                                <div style={{ fontSize: '13px' }}>
+                                                    <p>① 과세 여부 판단: 건당 지급액이 <strong>125,000원 초과</strong>인지 확인</p>
+                                                    <p>② 국세(소득세): 지급액 × <strong>8%</strong> → 원단위 절사(버림)</p>
+                                                    <p>③ 지방세: 국세 × <strong>10%</strong> → 원단위 절사(버림)</p>
+                                                    <p>④ 실지급액 = 지급액 - 국세 - 지방세</p>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ background: '#FFF5F5', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #FED7D7' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#C53030' }}>⚠️ 실무 주의사항 (원단위 절사)</h5>
+                                                <p style={{ fontSize: '13px', color: '#742A2A' }}>
+                                                    세액 계산 시 1원 단위까지 나올 경우 <strong>원단위는 절사(버림)</strong>합니다.
+                                                    인원이 많을 경우 총액 일괄계산(8.8%)은 피하고, <strong>반드시 개인별로 국세/지방세를 따로 계산</strong>한 뒤 합산하세요.
+                                                    개별 계산 결과와 일괄 계산 결과가 달라질 수 있습니다.
+                                                </p>
+                                            </div>
+
+                                            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #E2E0DD' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>💡 계산 예시: 강사료 210,000원</h5>
+                                                <div style={{ fontSize: '13px', fontFamily: 'monospace', lineHeight: '2' }}>
+                                                    <p>국세 = 210,000 × 0.08 = <strong>16,800원</strong></p>
+                                                    <p>지방세 = 16,800 × 0.1 = <strong>1,680원</strong></p>
+                                                    <p>원천징수액 = 16,800 + 1,680 = <strong>18,480원</strong></p>
+                                                    <p>실지급액 = 210,000 - 18,480 = <strong>191,520원</strong></p>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #E2E0DD' }}>
+                                                <h5 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>📌 기타소득이란?</h5>
+                                                <p style={{ fontSize: '13px' }}>
+                                                    이자·배당·사업·근로소득 등에 해당하지 않는, <strong>일시적·불규칙적으로 발생하는 소득</strong>을 말합니다.
+                                                    보조사업에서는 <strong>강사료, 원고료, 단순인건비</strong> 등이 해당합니다.
+                                                </p>
+                                                <p style={{ fontSize: '13px', marginTop: '4px' }}>
+                                                    사업자등록증이나 고유번호증이 없는 개인명의(주민번호)로도 신고할 수 있습니다.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 신고/납부 안내 */}
+                                    <div style={{ marginTop: '20px', padding: '20px', background: '#EBF8FF', borderRadius: '12px', border: '1px solid #BEE3F8' }}>
+                                        <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', color: '#2B6CB0' }}>🏛️ 신고 · 납부 안내</h4>
+                                        <div style={{ fontSize: '13px', color: '#2A4365', lineHeight: '1.8' }}>
+
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <strong>📅 신고/납부 기한</strong>
+                                                <p>지급한 달의 <strong>다음 달 10일</strong>까지 관할 세무서에 신고·납부</p>
+                                                <p style={{ paddingLeft: '12px', color: '#4A5568' }}>예) 7월 31일 지급 → 8월 10일까지 / 8월 1일 지급 → 9월 10일까지</p>
+                                            </div>
+
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <strong>🖥️ 신고 방법 (택1)</strong>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', marginTop: '8px', background: 'white' }}>
+                                                    <thead>
+                                                        <tr>
+                                                            <th style={{ padding: '8px', border: '1px solid #BEE3F8', textAlign: 'left' }}></th>
+                                                            <th style={{ padding: '8px', border: '1px solid #BEE3F8', textAlign: 'left' }}>세무서 방문</th>
+                                                            <th style={{ padding: '8px', border: '1px solid #BEE3F8', textAlign: 'left' }}>인터넷 (홈택스+위택스)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8', fontWeight: '600' }}>장점</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>1:1 상담 가능, 공인인증서 불필요, 국세 신고 시 지방세도 함께 처리</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>익숙해지면 간편, 신고~납부까지 한 번에 처리 가능</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8', fontWeight: '600' }}>단점</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>매월 방문 번거로움, 납부는 은행 창구에서 별도 처리</td>
+                                                            <td style={{ padding: '8px', border: '1px solid #BEE3F8' }}>공인인증서 필수, 국세(홈택스)·지방세(위택스) 따로 신고</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <strong>💡 실무 팁</strong>
+                                                <p>• 월말이나 다음 달 초에 <strong>한꺼번에 신고/납부</strong>하는 것이 효율적 (위택스는 최종 신고/납부만 인정)</p>
+                                                <p>• 인터넷 납부 시 <strong>신고자와 결제 계좌 예금주가 동일</strong>해야 함</p>
+                                                <p>• 카드 납부 시 수수료 추가 발생 (신용 0.8%, 체크 0.7%) → <strong>계좌이체 추천</strong></p>
+                                                <p>• 신고확인서와 납부영수증은 <strong>증빙자료에 반드시 첨부</strong></p>
+                                            </div>
+
+                                            <div style={{ background: '#FFF5F5', padding: '12px', borderRadius: '8px', border: '1px solid #FED7D7' }}>
+                                                <strong style={{ color: '#C53030' }}>📌 기타소득지급명세서 (연 1회)</strong>
+                                                <p style={{ color: '#742A2A' }}>
+                                                    기타소득을 지급한 자는 <strong>다음 연도 2월 말까지</strong> 1년간의 기타소득 지급명세서를 국세청에 제출해야 합니다.
+                                                    미제출 시 <strong>미제출금액의 2% 가산세</strong> 부과 (3개월 내 지연제출 시 1%).
+                                                </p>
+                                                <p style={{ color: '#742A2A', marginTop: '4px' }}>
+                                                    → 수령자의 <strong>주민등록번호가 필요</strong>하므로, 지급 시 확인서에 주민번호를 함께 기재하도록 합니다.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 원천징수 기본 기준 요약 */}
+                                    <div style={{ marginTop: '20px', padding: '20px', background: '#F0FFF4', borderRadius: '12px', border: '1px solid #C6F6D5' }}>
+                                        <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#276749' }}>✅ 원천징수 기준 요약</h4>
+                                        <div style={{ fontSize: '13px', color: '#22543D', lineHeight: '1.8' }}>
+                                            <p>• <strong>과세 기준</strong>: 건당 기타소득 125,000원 초과 시 원천징수 (소득세법 제21조, 제84조, 제127조, 제129조)</p>
+                                            <p>• <strong>세율</strong>: 소득세(국세) 8% + 지방소득세 국세의 10% = 실효세율 약 8.8%</p>
+                                            <p>• <strong>적용 대상</strong>: 강사료, 원고료, 단순인건비, 회의참석수당, 심사비, 토론비, 발제비, 자문비 등</p>
+                                            <p>• <strong>원천징수의무자</strong>: 기타소득을 지급하는 단체(대표자) 또는 사업진행자</p>
+                                            <p>• <strong>지급 원칙</strong>: 금액 불문 계좌이체 원칙 (현금지급 불가)</p>
+                                            <p>• <strong>내부자 지급 불가</strong>: 단체 대표, 상근직원, 사업담당자, 임직원에게는 인건비성 경비 지급 불가</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'history' && (
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '600' }}>
+                                            📋 예산 집행 내역
+                                        </h2>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            {executionMsg && <span style={{ fontSize: '12px', color: executionMsg.includes('오류') ? '#dc3545' : '#28a745' }}>{executionMsg}</span>}
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={handleExportExcel}
+                                            >📊 Excel 내보내기</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => { const pw = window.open('', '_blank'); pw.document.write(getSettlementReportHTML()); pw.document.close(); pw.print(); }}
+                                            >📄 정산보고서</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => generatePDF(getSettlementReportHTML(), `정산보고서_${formatLocalDate()}.pdf`)}
+                                            >📥 PDF</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => {
+                                                    const execs = data?.budgetExecutions || [];
+                                                    const totalSpent = execs.reduce((s, e) => s + (e.amount || 0), 0);
+                                                    downloadHWPX('정산보고서', [
+                                                        { type: 'paragraph', text: '아름다운재단 2026 공익단체 인큐베이팅 지원사업 정산보고서' },
+                                                        { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}` },
+                                                        { type: 'paragraph', text: `총 예산: ${fmt(CONFIG.TOTAL_BUDGET)}원 | 총 집행: ${fmt(totalSpent)}원 | 집행률: ${pct(totalSpent, CONFIG.TOTAL_BUDGET)}% | 잔여: ${fmt(CONFIG.TOTAL_BUDGET - totalSpent)}원` },
+                                                        { type: 'table', headers: ['집행일', '카테고리', '소분류', '항목', '금액', '결제방법', '수취인', '상태'],
+                                                          rows: execs.map(e => [e.execution_date||'', e.category_name||'', e.subcategory_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'', EXECUTION_STATUS[e.status]?.label||e.status||'']) },
+                                                        { type: 'paragraph', text: `합계: ${fmt(totalSpent)}원` }
+                                                    ], `정산보고서_${formatLocalDate()}.hwpx`, 'report');
+                                                }}
+                                            >📄 한글</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => { const pw = window.open('', '_blank', 'width=900,height=700'); pw.document.write(getMonthlyReportHTML()); pw.document.close(); pw.print(); }}
+                                            >📋 월별 명세서</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => generatePDF(getMonthlyReportHTML(), `월별명세서_${formatLocalDate()}.pdf`)}
+                                            >📥 PDF</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
+                                                onClick={() => {
+                                                    const execs = data?.budgetExecutions || [];
+                                                    const monthly = {};
+                                                    execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7) || '미기재'; if (!monthly[m]) monthly[m] = []; monthly[m].push(e); });
+                                                    const secs = [{ type: 'paragraph', text: '월별 집행 명세서' }, { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}` }];
+                                                    Object.keys(monthly).sort().forEach(m => {
+                                                        const items = monthly[m]; const sum = items.reduce((s, e) => s + (e.amount || 0), 0);
+                                                        secs.push({ type: 'paragraph', text: `${m.replace('-', '년 ')}월 (${items.length}건, ${fmt(sum)}원)` });
+                                                        secs.push({ type: 'table', headers: ['집행일', '카테고리', '항목', '금액', '결제방법', '수취인'],
+                                                            rows: [...items.map(e => [e.execution_date||'', e.category_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'']),
+                                                                   ['', '', '소계', fmt(sum)+'원', '', '']] });
+                                                    });
+                                                    downloadHWPX('월별명세서', secs, `월별명세서_${formatLocalDate()}.hwpx`, 'report');
+                                                }}
+                                            >📄 한글</button>
+                                        </div>
+                                    </div>
+
+                                    {/* 검색 */}
+                                    <div style={{ marginBottom: '10px' }}>
+                                        <input className="form-input" type="text"
+                                            placeholder="🔍 항목명, 설명, 수취인 검색..."
+                                            value={execSearchQuery}
+                                            onChange={e => setExecSearchQuery(e.target.value)}
+                                            style={{ width: '100%' }} />
+                                    </div>
+
+                                    {/* 필터 */}
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '110px' }}
+                                            value={execFilterCategory}
+                                            onChange={e => { setExecFilterCategory(e.target.value); setExecFilterSubcategory(''); }}>
+                                            <option value="">카테고리 전체</option>
+                                            {BUDGET_DATA.categories.map(c => (
+                                                <option key={c.id} value={c.name}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '110px' }}
+                                            value={execFilterSubcategory}
+                                            onChange={e => setExecFilterSubcategory(e.target.value)}
+                                            disabled={!execFilterCategory}>
+                                            <option value="">소분류 전체</option>
+                                            {execFilterCategory && BUDGET_DATA.categories
+                                                .find(c => c.name === execFilterCategory)
+                                                ?.subcategories.map(s => (
+                                                    <option key={s.id} value={s.name}>{s.name}</option>
+                                                ))
+                                            }
+                                        </select>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '90px' }}
+                                            value={execFilterStatus}
+                                            onChange={e => setExecFilterStatus(e.target.value)}>
+                                            <option value="">상태 전체</option>
+                                            {Object.entries(EXECUTION_STATUS).map(([key, val]) => (
+                                                <option key={key} value={key}>{val.label}</option>
+                                            ))}
+                                        </select>
+                                        <select className="form-input" style={{ flex: '1', minWidth: '90px' }}
+                                            value={execFilterPayment}
+                                            onChange={e => setExecFilterPayment(e.target.value)}>
+                                            <option value="">결제 전체</option>
+                                            <option value="카드">카드</option>
+                                            <option value="계좌이체">계좌이체</option>
+                                        </select>
+                                    </div>
+
+                                    {/* 기간 + 정렬 + 건수 + 초기화 */}
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <input className="form-input" type="date" style={{ width: '140px', fontSize: '13px' }}
+                                                value={execFilterDateFrom}
+                                                onChange={e => setExecFilterDateFrom(e.target.value)} />
+                                            <span style={{ color: '#9C9690' }}>~</span>
+                                            <input className="form-input" type="date" style={{ width: '140px', fontSize: '13px' }}
+                                                value={execFilterDateTo}
+                                                onChange={e => setExecFilterDateTo(e.target.value)} />
+                                        </div>
+                                        <select className="form-input" style={{ width: 'auto', fontSize: '13px' }}
+                                            value={execSortBy}
+                                            onChange={e => setExecSortBy(e.target.value)}>
+                                            <option value="execution_date">집행일</option>
+                                            <option value="amount">금액</option>
+                                            <option value="created_at">등록일</option>
+                                        </select>
+                                        <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 10px' }}
+                                            onClick={() => setExecSortDir(d => d === 'asc' ? 'desc' : 'asc')}>
+                                            {execSortDir === 'desc' ? '↓ 내림차순' : '↑ 오름차순'}
+                                        </button>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', color: '#6B6560' }}>
+                                            <input type="checkbox" checked={selectedExecIds.size > 0 && selectedExecIds.size === filteredExecutions.length} onChange={toggleAllExecs} style={{ width: 14, height: 14 }} />
+                                            전체
+                                        </label>
+                                        <span style={{ fontSize: '13px', color: '#6B6560', marginLeft: 'auto' }}>
+                                            📊 {filteredExecutions.length}건 / {(data?.budgetExecutions || []).length}건
+                                        </span>
+                                        <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 10px' }}
+                                            onClick={resetExecFilters}>
+                                            🔄 초기화
+                                        </button>
+                                    </div>
+
+                                    {/* 대량 작업 바 */}
+                                    {selectedExecIds.size > 0 && (
+                                        <div className="bulk-action-bar">
+                                            <span style={{ fontWeight: '600' }}>✅ {selectedExecIds.size}건 선택</span>
+                                            <div style={{ display: 'flex', gap: '6px' }}>
+                                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => bulkChangeStatus('approved')}>일괄 승인</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => bulkChangeStatus('executed')}>일괄 집행</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => bulkChangeStatus('completed')}>일괄 완료</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => handleExportExcel(true)}>📥 선택 내보내기</button>
+                                                <button className="btn" style={{ fontSize: '12px', padding: '4px 12px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '6px' }} onClick={bulkDelete}>일괄 삭제</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => setSelectedExecIds(new Set())}>선택 해제</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {filteredExecutions.map(execution => {
+                                            const si = EXECUTION_STATUS[execution.status] || EXECUTION_STATUS.pending;
+                                            const isEditing = editingExecution?.id === execution.id;
+                                            const isDeleteConfirm = executionDeleteId === execution.id;
+                                            return (
+                                        <div key={execution.id} className="execution-item" style={{ position: 'relative' }}>
+                                            {/* 체크박스 */}
+                                            {!isEditing && (
+                                                <label style={{ position: 'absolute', top: '12px', left: '12px', cursor: 'pointer', zIndex: 1 }}>
+                                                    <input type="checkbox" checked={selectedExecIds.has(execution.id)} onChange={() => toggleExecSelect(execution.id)} style={{ width: 16, height: 16 }} />
+                                                </label>
+                                            )}
+                                            {isEditing ? (
+                                                <div>
+                                                    <div style={{ fontWeight: '600', marginBottom: '12px', color: '#134E42' }}>✏️ 집행내역 수정</div>
+                                                    <div className="form-grid" style={{ marginBottom: '12px' }}>
+                                                        <div className="form-group">
+                                                            <label className="form-label">예산 분류</label>
+                                                            <select className="form-input" value={executionEditForm.subcategory_id}
+                                                                onChange={e => {
+                                                                    const sc = subcategories.find(s => s.id === e.target.value);
+                                                                    setExecutionEditForm(f => ({ ...f, subcategory_id: e.target.value, subcategory_name: sc?.name || '', category_name: sc?.categoryName || '', budget_item_id: '', budget_item_name: '', type: '' }));
+                                                                }}>
+                                                                <option value="">분류 선택</option>
+                                                                {subcategories.map(sc => (
+                                                                    <option key={sc.id} value={sc.id}>{sc.categoryName} &gt; {sc.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">예산 항목</label>
+                                                            <select className="form-input" value={executionEditForm.budget_item_id}
+                                                                onChange={e => {
+                                                                    const items = getAllBudgetItems(executionEditForm.subcategory_id);
+                                                                    const item = items.find(i => i.id === e.target.value);
+                                                                    setExecutionEditForm(f => ({ ...f, budget_item_id: e.target.value, budget_item_name: item?.name || '', type: item?.type || '' }));
+                                                                }}
+                                                                disabled={!executionEditForm.subcategory_id}>
+                                                                <option value="">항목 선택</option>
+                                                                {getAllBudgetItems(executionEditForm.subcategory_id).map(item => (
+                                                                    <option key={item.id} value={item.id}>{item.name} ({item.type})</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">금액 (원)</label>
+                                                            <input className="form-input" type="text" inputMode="numeric" value={fmtInput(executionEditForm.amount)}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, amount: parseInput(e.target.value) }))} />
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">결제방법</label>
+                                                            <select className="form-input" value={executionEditForm.payment_method}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, payment_method: e.target.value }))}>
+                                                                <option value="카드">카드</option>
+                                                                <option value="계좌이체">계좌이체</option>
+                                                            </select>
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">집행일</label>
+                                                            <input className="form-input" type="date" value={executionEditForm.execution_date}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, execution_date: e.target.value }))} />
+                                                        </div>
+                                                        <div className="form-group">
+                                                            <label className="form-label">수취인</label>
+                                                            <input className="form-input" type="text" value={executionEditForm.recipient}
+                                                                onChange={e => setExecutionEditForm(f => ({ ...f, recipient: e.target.value }))}
+                                                                list="recipient-datalist-edit" />
+                                                            <datalist id="recipient-datalist-edit">
+                                                                {recipients.map(r => <option key={r.id} value={r.name} />)}
+                                                            </datalist>
+                                                        </div>
+                                                    </div>
+                                                    <div className="form-group" style={{ marginBottom: '12px' }}>
+                                                        <label className="form-label">설명</label>
+                                                        <input className="form-input" type="text" value={executionEditForm.description}
+                                                            onChange={e => setExecutionEditForm(f => ({ ...f, description: e.target.value }))} />
+                                                    </div>
+                                                    <div className="form-group" style={{ marginBottom: '12px' }}>
+                                                        <label className="form-label">비고</label>
+                                                        <input className="form-input" type="text" value={executionEditForm.notes || ''}
+                                                            onChange={e => setExecutionEditForm(f => ({ ...f, notes: e.target.value }))} placeholder="비고 (선택사항)" />
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <button className="btn btn-primary" style={{ fontSize: '13px' }}
+                                                            onClick={handleUpdateExecution} disabled={executionSaving}>
+                                                            {executionSaving ? '저장 중...' : '저장'}
+                                                        </button>
+                                                        <button className="btn btn-secondary" style={{ fontSize: '13px' }}
+                                                            onClick={() => setEditingExecution(null)} disabled={executionSaving}>
+                                                            취소
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                <div className="execution-header" style={{ paddingLeft: 28 }}>
+                                                    <div>
+                                                        <div className="execution-title">{execution.budget_item_name}</div>
+                                                        <div style={{ fontSize: '14px', color: '#6B6560' }}>
+                                                            {execution.description}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                        <span style={{ fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '10px', background: si.bg, color: si.color }}>{si.label}</span>
+                                                        <div className="execution-amount">
+                                                            {execution.amount?.toLocaleString()}원
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="execution-meta">
+                                                    <span>📅 {execution.execution_date}</span>
+                                                    <span>💳 {execution.payment_method}</span>
+                                                    <span>🏷️ {execution.category_name} {'>'} {execution.subcategory_name}</span>
+                                                    {execution.recipient && <span>👤 {execution.recipient}</span>}
+                                                </div>
+                                                {/* 수정/삭제/승인 버튼 */}
+                                                <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}
+                                                        onClick={() => { setEditingExecution(execution); setExecutionEditForm({ subcategory_id: execution.subcategory_id || '', subcategory_name: execution.subcategory_name || '', category_name: execution.category_name || '', budget_item_id: execution.budget_item_id || '', budget_item_name: execution.budget_item_name || '', type: execution.type || '', amount: execution.amount, payment_method: execution.payment_method, execution_date: execution.execution_date, recipient: execution.recipient || '', description: execution.description || '', notes: execution.notes || '' }); }}>
+                                                        ✏️ 수정
+                                                    </button>
+                                                    {currentUser?.role === 'admin' && (
+                                                        isDeleteConfirm ? (
+                                                            <>
+                                                                <span style={{ fontSize: '12px', color: '#dc3545' }}>정말 삭제하시겠습니까?</span>
+                                                                <button className="btn" style={{ fontSize: '11px', padding: '3px 10px', background: '#dc3545', color: 'white', border: 'none' }}
+                                                                    onClick={() => handleDeleteExecution(execution.id)}>확인</button>
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px' }}
+                                                                    onClick={() => setExecutionDeleteId(null)}>취소</button>
+                                                            </>
+                                                        ) : (
+                                                            <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#dc3545', borderColor: '#dc3545' }}
+                                                                onClick={() => setExecutionDeleteId(execution.id)}>
+                                                                🗑️ 삭제
+                                                            </button>
+                                                        )
+                                                    )}
+                                                    {currentUser?.role === 'admin' && (
+                                                        <>
+                                                            {execution.status === 'pending' && (
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#0C5460', borderColor: '#0C5460' }}
+                                                                    onClick={() => handleChangeExecutionStatus(execution.id, 'approved')}>✅ 승인</button>
+                                                            )}
+                                                            {execution.status === 'approved' && (
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#155724', borderColor: '#155724' }}
+                                                                    onClick={() => handleChangeExecutionStatus(execution.id, 'executed')}>💼 집행완료</button>
+                                                            )}
+                                                            {execution.status === 'executed' && (
+                                                                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '3px 10px', color: '#383D41', borderColor: '#6C757D' }}
+                                                                    onClick={() => handleChangeExecutionStatus(execution.id, 'completed')}>🏁 완료처리</button>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                                </>
+                                            )}
+
+                                            {!isEditing && execution.type === '운영인건비' && execution.recipient && (
+                                                <div style={{ marginTop: '8px' }}>
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        style={{ fontSize: '12px', padding: '4px 12px', color: '#1B6B5A', borderColor: '#1B6B5A' }}
+                                                        onClick={() => openSalaryStatement(execution, data.budgetExecutions, orgSettings, recipients)}
+                                                    >
+                                                        📄 급여지급명세서 생성
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        style={{ fontSize: '12px', padding: '4px 12px' }}
+                                                        onClick={() => {
+                                                            const html = generateSalaryStatementHTML(execution, data.budgetExecutions, orgSettings, recipients.find(r => r.name === (execution.recipient || '').trim()) || null);
+                                                            generatePDF(html, `급여지급명세서_${execution.recipient || ''}_${execution.execution_date || ''}.pdf`);
+                                                        }}
+                                                    >📥 PDF</button>
+                                                </div>
+                                            )}
+                                            {!isEditing && ['사업인건비', '사업회의비', '교육훈련비'].includes(execution.type) && (
+                                                <div style={{ marginTop: '8px' }}>
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        style={{ fontSize: '12px', padding: '4px 12px', color: '#2B6CB0', borderColor: '#2B6CB0' }}
+                                                        onClick={() => {
+                                                            setMeetingMinutesForm({
+                                                                title: execution.description || execution.subcategory_name || '',
+                                                                date: execution.execution_date || '',
+                                                                location: '',
+                                                                content: '',
+                                                                participants: ''
+                                                            });
+                                                            setMeetingMinutesModal({ execution });
+                                                        }}
+                                                    >
+                                                        📋 회의진행일지 생성
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {!isEditing && DOCUMENT_RULES[execution.type] && (
+                                                <div className="documents-list">
+                                                    <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
+                                                    {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => {
+                                                        const docRecord = executionDocsMap[execution.id]?.[doc];
+                                                        return (
+                                                            <div key={index} className="document-item">
+                                                                <span>📄 {doc}</span>
+                                                                {docRecord?.file_name ? (
+                                                                    <button
+                                                                        className="btn btn-secondary"
+                                                                        style={{
+                                                                            fontSize: '12px',
+                                                                            padding: '3px 10px',
+                                                                            color: '#1B6B5A',
+                                                                            borderColor: '#1B6B5A',
+                                                                            maxWidth: '200px',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis',
+                                                                            whiteSpace: 'nowrap'
+                                                                        }}
+                                                                        onClick={() => downloadFile(docRecord.file_path, docRecord.file_name)}
+                                                                        title={docRecord.file_name}
+                                                                    >
+                                                                        ⬇️ {docRecord.file_name}
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        className="btn btn-secondary"
+                                                                        style={{ fontSize: '12px', padding: '3px 10px', flexShrink: 0 }}
+                                                                        onClick={() => {
+                                                                            activeDocUploadRef.current = { execId: execution.id, docName: doc };
+                                                                            docUploadFileInputRef.current?.click();
+                                                                        }}
+                                                                    >
+                                                                        📎 첨부하기
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                        );
+                                    })}
+
+                                    <input
+                                        ref={docUploadFileInputRef}
+                                        type="file"
+                                        style={{ display: 'none' }}
+                                        onChange={async (e) => {
+                                            const file = e.target.files[0];
+                                            e.target.value = '';
+                                            const { execId, docName } = activeDocUploadRef.current || {};
+                                            activeDocUploadRef.current = null;
+                                            if (!file || !execId || !docName) return;
+                                            try {
+                                                const timestamp = Date.now();
+                                                const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+                                                const filePath = `execution/${execId}/${timestamp}_${safeName}`;
+                                                const { data: storageData, error: storageError } = await supabase.storage
+                                                    .from('attachments')
+                                                    .upload(filePath, file);
+                                                if (storageError) throw storageError;
+                                                const { error: dbError } = await supabase
+                                                    .from('documents')
+                                                    .insert([{
+                                                        execution_id: execId,
+                                                        document_name: docName,
+                                                        document_type: 'required',
+                                                        file_path: storageData?.path || filePath,
+                                                        file_name: file.name,
+                                                        file_size: file.size,
+                                                        uploaded_by: currentUser.id
+                                                    }]);
+                                                if (dbError) throw dbError;
+                                                setExecutionDocsMap(prev => ({
+                                                    ...prev,
+                                                    [execId]: {
+                                                        ...(prev[execId] || {}),
+                                                        [docName]: { file_path: storageData?.path || filePath, file_name: file.name, file_size: file.size }
+                                                    }
+                                                }));
+                                            } catch (err) {
+                                                console.error('문서 첨부 실패:', err);
+                                                alert('파일 첨부 중 오류가 발생했습니다.');
+                                            }
+                                        }}
+                                    />
+
+                                    {filteredExecutions.length === 0 && (
+                                        <div style={{ textAlign: 'center', color: '#9C9690', padding: '40px' }}>
+                                            {(data?.budgetExecutions || []).length === 0
+                                                ? '등록된 집행 내역이 없습니다.'
+                                                : '조건에 맞는 집행 내역이 없습니다.'}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── 캘린더 탭 ──────────────────────────────── */}
+                            {budgetTab === 'calendar' && (() => {
+                                const [year, month] = execCalMonth.split('-').map(Number);
+                                const firstDay = new Date(year, month - 1, 1).getDay();
+                                const daysInMonth = new Date(year, month, 0).getDate();
+                                const execsByDate = {};
+                                (data?.budgetExecutions || []).forEach(ex => {
+                                    if (ex.execution_date) {
+                                        const d = ex.execution_date.slice(0, 10);
+                                        if (d.startsWith(execCalMonth)) {
+                                            if (!execsByDate[d]) execsByDate[d] = [];
+                                            execsByDate[d].push(ex);
+                                        }
+                                    }
+                                });
+                                const prevMonth = () => {
+                                    const d = new Date(year, month - 2, 1);
+                                    setExecCalMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+                                    setExecCalSelectedDate(null);
+                                };
+                                const nextMonth = () => {
+                                    const d = new Date(year, month, 1);
+                                    setExecCalMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+                                    setExecCalSelectedDate(null);
+                                };
+                                const selectedDateExecs = execCalSelectedDate ? (execsByDate[execCalSelectedDate] || []) : [];
+
+                                return (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                            <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>📅 집행 캘린더</h2>
+                                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                                <button className="btn btn-secondary" style={{ padding: '4px 12px' }} onClick={prevMonth}>◀</button>
+                                                <span style={{ fontSize: 16, fontWeight: 600 }}>{year}년 {month}월</span>
+                                                <button className="btn btn-secondary" style={{ padding: '4px 12px' }} onClick={nextMonth}>▶</button>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, background: '#E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
+                                            {['일','월','화','수','목','금','토'].map(d => (
+                                                <div key={d} style={{ background: '#F7FAFC', padding: '8px 4px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: d === '일' ? '#E53E3E' : d === '토' ? '#3182CE' : '#4A5568' }}>{d}</div>
+                                            ))}
+                                            {Array.from({ length: firstDay }).map((_, i) => (
+                                                <div key={`e-${i}`} style={{ background: '#FAFAFA', minHeight: 70 }} />
+                                            ))}
+                                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                                                const day = i + 1;
+                                                const dateStr = `${execCalMonth}-${String(day).padStart(2,'0')}`;
+                                                const dayExecs = execsByDate[dateStr] || [];
+                                                const total = dayExecs.reduce((s, e) => s + (e.amount || 0), 0);
+                                                const isSelected = execCalSelectedDate === dateStr;
+                                                const dayOfWeek = new Date(year, month - 1, day).getDay();
+                                                return (
+                                                    <div key={day}
+                                                        onClick={() => setExecCalSelectedDate(isSelected ? null : dateStr)}
+                                                        style={{
+                                                            background: isSelected ? '#EBF8FF' : 'white', minHeight: 70, padding: '4px 6px',
+                                                            cursor: dayExecs.length > 0 ? 'pointer' : 'default',
+                                                            borderLeft: isSelected ? '3px solid #1B6B5A' : '3px solid transparent'
+                                                        }}>
+                                                        <div style={{ fontSize: 13, fontWeight: 500, color: dayOfWeek === 0 ? '#E53E3E' : dayOfWeek === 6 ? '#3182CE' : '#2D3748', marginBottom: 4 }}>{day}</div>
+                                                        {dayExecs.length > 0 && (
+                                                            <>
+                                                                <div style={{ fontSize: 11, color: '#1B6B5A', fontWeight: 600 }}>{dayExecs.length}건</div>
+                                                                <div style={{ fontSize: 10, color: '#6B6560' }}>{fmt(total)}</div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {execCalSelectedDate && (
+                                            <div style={{ marginTop: 16 }}>
+                                                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: '#1B6B5A' }}>
+                                                    📋 {execCalSelectedDate} 집행내역 ({selectedDateExecs.length}건)
+                                                </h3>
+                                                {selectedDateExecs.length === 0 ? (
+                                                    <div style={{ textAlign: 'center', color: '#9C9690', padding: 20 }}>이 날짜의 집행 내역이 없습니다.</div>
+                                                ) : selectedDateExecs.map(ex => {
+                                                    const esi = EXECUTION_STATUS[ex.status] || EXECUTION_STATUS.pending;
+                                                    return (
+                                                        <div key={ex.id} className="execution-item" style={{ marginBottom: 8 }}>
+                                                            <div className="execution-header">
+                                                                <div>
+                                                                    <div className="execution-title">{ex.budget_item_name}</div>
+                                                                    <div style={{ fontSize: 13, color: '#6B6560' }}>{ex.description}</div>
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                    <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 10, background: esi.bg, color: esi.color }}>{esi.label}</span>
+                                                                    <div className="execution-amount">{ex.amount?.toLocaleString()}원</div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="execution-meta">
+                                                                <span>💳 {ex.payment_method}</span>
+                                                                <span>🏷️ {ex.category_name} {'>'} {ex.subcategory_name}</span>
+                                                                {ex.recipient && <span>👤 {ex.recipient}</span>}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* ── 비용비율 탭 ──────────────────────────────── */}
+                            {budgetTab === 'ratio' && (() => {
+                                const periodRange = PERIOD_DATE_RANGES[budgetPeriod];
+                                const periodExecutions = periodRange
+                                    ? data.budgetExecutions.filter(ex =>
+                                        ex.execution_date >= periodRange.start && ex.execution_date <= periodRange.end)
+                                    : data.budgetExecutions;
+                                // 소분류별 집계
+                                const execBySubcat = {};
+                                // 세부항목별 집계
+                                const execByItem = {};
+                                periodExecutions.forEach(ex => {
+                                    if (ex.subcategory_id) execBySubcat[ex.subcategory_id] = (execBySubcat[ex.subcategory_id] || 0) + (ex.amount || 0);
+                                    if (ex.budget_item_id) execByItem[ex.budget_item_id] = (execByItem[ex.budget_item_id] || 0) + (ex.amount || 0);
+                                });
+                                const categoryName = ratioTab === 'project' ? '사업비' : '운영비';
+                                const category = BUDGET_DATA.categories.find(c => c.name === categoryName);
+                                const catBudget = category ? getBudgetByPeriod(category, budgetPeriod) : 0;
+                                const catExecuted = category
+                                    ? category.subcategories.reduce((sum, sub) => sum + (execBySubcat[sub.id] || 0), 0)
+                                    : 0;
+                                const catRate = pct(catExecuted, catBudget);
+                                return (
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <h2 style={{ fontSize: '20px', fontWeight: '600' }}>📊 비용 사용비율</h2>
+                                        </div>
+
+                                        {/* 내부 탭: 사업비 / 운영비 */}
+                                        <div className="tab-navigation" style={{ marginBottom: '20px' }}>
+                                            <button
+                                                className={`tab-btn ${ratioTab === 'project' ? 'active' : ''}`}
+                                                onClick={() => setRatioTab('project')}
+                                            >💼 사업비</button>
+                                            <button
+                                                className={`tab-btn ${ratioTab === 'operating' ? 'active' : ''}`}
+                                                onClick={() => setRatioTab('operating')}
+                                            >🏢 운영비</button>
+                                        </div>
+
+                                        {/* 카테고리 전체 요약 */}
+                                        <div className="card" style={{ marginBottom: '16px' }}>
+                                            <div className="card-header">
+                                                <h2 className="card-title">{categoryName} 전체 집행현황</h2>
+                                                <span style={{
+                                                    fontSize: '13px', fontWeight: '600', padding: '3px 10px',
+                                                    borderRadius: '10px',
+                                                    background: catRate >= 90 ? '#FEE2E2' : catRate >= 70 ? '#FEF3C7' : '#DCFCE7',
+                                                    color: catRate >= 90 ? '#DC2626' : catRate >= 70 ? '#D97706' : '#15803D'
+                                                }}>{catRate}%</span>
+                                            </div>
+                                            <div style={{ padding: '6px 0 2px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6B6560', marginBottom: '10px' }}>
+                                                    <span>집행: <strong style={{ color: '#1A1814' }}>{fmt(catExecuted)}원</strong></span>
+                                                    <span>예산: <strong style={{ color: '#1A1814' }}>{fmt(catBudget)}원</strong></span>
+                                                </div>
+                                                <div style={{ background: '#F0EFED', borderRadius: '8px', height: '14px', overflow: 'hidden' }}>
+                                                    <div style={{
+                                                        background: catRate >= 90 ? '#DC2626' : catRate >= 70 ? '#D97706' : '#134E42',
+                                                        width: `${Math.min(100, catRate)}%`,
+                                                        height: '100%', borderRadius: '8px', transition: 'width 0.4s ease'
+                                                    }} />
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '12px', color: '#6B6560' }}>
+                                                    <span>잔액: {fmt(Math.max(0, catBudget - catExecuted))}원</span>
+                                                    <span>{catExecuted > catBudget ? <span style={{ color: '#DC2626' }}>초과: {fmt(catExecuted - catBudget)}원</span> : '—'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 소분류별 + 세부항목 집행률 */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                            {(category?.subcategories || []).map(sub => {
+                                                const subBudget = getBudgetByPeriod(sub, budgetPeriod);
+                                                if (subBudget === 0) return null;
+                                                const subExecuted = execBySubcat[sub.id] || 0;
+                                                const subRate = pct(subExecuted, subBudget);
+                                                const remaining = Math.max(0, subBudget - subExecuted);
+                                                const barColor = subRate >= 90 ? '#DC2626' : subRate >= 70 ? '#D97706' : '#3B82F6';
+                                                const itemsWithBudget = (sub.items || []).filter(item => getBudgetByPeriod(item, budgetPeriod) > 0);
+                                                return (
+                                                    <div key={sub.id} className="card">
+                                                        {/* 소분류 헤더 */}
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{ fontWeight: '600', marginBottom: '3px', color: '#1A1814', fontSize: '14px' }}>{sub.name}</div>
+                                                                <div style={{ fontSize: '12px', color: '#6B6560' }}>예산 {fmt(subBudget)}원</div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
+                                                                <div style={{ fontSize: '22px', fontWeight: '700', color: barColor, lineHeight: 1.1 }}>{subRate}%</div>
+                                                                <div style={{ fontSize: '10px', color: '#9C9690', marginTop: '2px' }}>집행률</div>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ background: '#F0EFED', borderRadius: '6px', height: '8px', overflow: 'hidden', marginBottom: '10px' }}>
+                                                            <div style={{
+                                                                background: barColor,
+                                                                width: `${Math.min(100, subRate)}%`,
+                                                                height: '100%', borderRadius: '6px', transition: 'width 0.3s ease'
+                                                            }} />
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6B6560', marginBottom: itemsWithBudget.length > 0 ? '14px' : '0' }}>
+                                                            <span>집행 <strong style={{ color: '#1A1814' }}>{fmt(subExecuted)}원</strong></span>
+                                                            <span>잔액 <strong style={{ color: remaining === 0 && subExecuted > 0 ? '#DC2626' : '#1A1814' }}>{fmt(remaining)}원</strong></span>
+                                                        </div>
+
+                                                        {/* 세부항목 테이블 */}
+                                                        {itemsWithBudget.length > 0 && (
+                                                            <div style={{ borderTop: '1px solid #EBE8E1', paddingTop: '12px' }}>
+                                                                <div style={{ fontSize: '11px', color: '#9C9690', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>세부 항목</div>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    {itemsWithBudget.map(item => {
+                                                                        const itemBudget = getBudgetByPeriod(item, budgetPeriod);
+                                                                        const itemExecuted = execByItem[item.id] || 0;
+                                                                        const itemRate = pct(itemExecuted, itemBudget);
+                                                                        const itemColor = itemRate >= 90 ? '#DC2626' : itemRate >= 70 ? '#D97706' : '#134E42';
+                                                                        return (
+                                                                            <div key={item.id} style={{ background: '#F9F8F6', borderRadius: '8px', padding: '10px 12px' }}>
+                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                                                        <div style={{ fontSize: '13px', fontWeight: '500', color: '#1A1814', marginBottom: '1px' }}>{item.name}</div>
+                                                                                        <div style={{ fontSize: '11px', color: '#9C9690' }}>{item.type} · 예산 {fmt(itemBudget)}원</div>
+                                                                                    </div>
+                                                                                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '10px' }}>
+                                                                                        <div style={{ fontSize: '15px', fontWeight: '700', color: itemColor }}>{itemRate}%</div>
+                                                                                        <div style={{ fontSize: '10px', color: '#9C9690' }}>{fmt(itemExecuted)}원</div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div style={{ background: '#E5E3DF', borderRadius: '4px', height: '5px', overflow: 'hidden' }}>
+                                                                                    <div style={{
+                                                                                        background: itemColor,
+                                                                                        width: `${Math.min(100, itemRate)}%`,
+                                                                                        height: '100%', borderRadius: '4px', transition: 'width 0.3s ease'
+                                                                                    }} />
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                );
+            };
+
+            // 로그아웃
+            const handleLogout = () => {
+                localStorage.removeItem('bf_user_session');
+                setCurrentUser(null);
+                setCurrentPage('dashboard');
+            };
+
+            // 관리자 페이지 상태
+            const [adminUsers, setAdminUsers] = useState([]);
+            const [adminLoading, setAdminLoading] = useState(false);
+            const [adminError, setAdminError] = useState('');
+            const [adminSuccess, setAdminSuccess] = useState('');
+            const [showUserForm, setShowUserForm] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+            const [userForm, setUserForm] = useState({
+                username: '', name: '', email: '', password: '',
+                role: 'staff', phone: '', organization: '청년노동자인권센터', position: ''
+            });
+
+            const resetUserForm = () => {
+                setUserForm({
+                    username: '', name: '', email: '', password: '',
+                    role: 'staff', phone: '', organization: '청년노동자인권센터', position: ''
+                });
+                setEditingUser(null);
+                setShowUserForm(false);
+            };
+
+            // ── 집행내역 수정/삭제/승인 ────────────────────────────────────
+            const [editingExecution, setEditingExecution] = useState(null);
+            const [executionEditForm, setExecutionEditForm] = useState({});
+            const [executionDeleteId, setExecutionDeleteId] = useState(null);
+            const [executionSaving, setExecutionSaving] = useState(false);
+            const [executionMsg, setExecutionMsg] = useState('');
+            // ── 갤러리 ZIP 다운로드 ───────────────────────────────────────
+            const [galleryZipping, setGalleryZipping] = useState(false);
+
+            // ── 성과지표 (system_settings) ────────────────────────────────
+            const [perfIndicators, setPerfIndicators] = useState({
+                perf_textbook_team: '0', perf_textbook_report: '0',
+                perf_campaign_count: '0', perf_app_released: '0', perf_committee_count: '0'
+            });
+            const [perfEditing, setPerfEditing] = useState(false);
+            const [perfDraft, setPerfDraft] = useState(null);
+            const [perfSaving, setPerfSaving] = useState(false);
+            const [perfMsg, setPerfMsg] = useState('');
+
+            // ── 기관 정보 (system_settings) ──────────────────────────────
+            const [orgSettings, setOrgSettings] = useState({
+                org_name: '', org_phone: '',
+                org_representative: '', org_address: '', org_registration_number: '', org_seal: ''
+            });
+            const [orgSettingsSaving, setOrgSettingsSaving] = useState(false);
+            const [orgSettingsMsg, setOrgSettingsMsg] = useState({ type: '', text: '' });
+
+            // ── 수급자 목록 ───────────────────────────────────────────────
+            const [recipients, setRecipients] = useState([]);
+            const [recipientsLoading, setRecipientsLoading] = useState(false);
+            const [showRecipientForm, setShowRecipientForm] = useState(false);
+            const [editingRecipient, setEditingRecipient] = useState(null);
+            const [recipientForm, setRecipientForm] = useState({
+                name: '', birth_date: '', address: '', phone: '', notes: ''
+            });
+            const [recipientMsg, setRecipientMsg] = useState({ type: '', text: '' });
+
+            // ── 관리자 탭 ─────────────────────────────────────────────────
+            const [adminTab, setAdminTab] = useState('users'); // 'users'|'recipients'|'orgSettings'|'logs'
+
+            // ── 회의진행일지 입력 모달 ─────────────────────────────────────
+            const [meetingMinutesModal, setMeetingMinutesModal] = useState(null); // null | { execution }
+            const [meetingMinutesForm, setMeetingMinutesForm] = useState({
+                title: '', date: '', location: '', content: '', participants: ''
+            });
+
+            // ── 사업변경신청서 입력 모달 ─────────────────────────────────────
+            const [changeApplicationModal, setChangeApplicationModal] = useState(false);
+            const [changeApplicationForm, setChangeApplicationForm] = useState({
+                reason: '',
+                changeDetails: [{ beforeUnit: '', beforeSchedule: '', beforeContent: '',
+                                  afterUnit: '', afterSchedule: '', afterContent: '' }],
+                budgetChanges: {},
+                specificDetails: [{ unitName: '', beforeAmount: 0, afterAmount: 0, basis: '', reason: '' }],
+                applicationDate: new Date().toISOString().slice(0, 10)
+            });
+
+            // ── 기관 정보 저장 ────────────────────────────────────────────
+            const saveOrgSettings = async () => {
+                setOrgSettingsSaving(true);
+                setOrgSettingsMsg({ type: '', text: '' });
+                try {
+                    const rows = [
+                        { setting_key: 'org_name',                setting_value: orgSettings.org_name },
+                        { setting_key: 'org_phone',               setting_value: orgSettings.org_phone },
+                        { setting_key: 'org_representative',      setting_value: orgSettings.org_representative },
+                        { setting_key: 'org_address',             setting_value: orgSettings.org_address },
+                        { setting_key: 'org_registration_number', setting_value: orgSettings.org_registration_number },
+                        { setting_key: 'org_seal',                setting_value: orgSettings.org_seal }
+                    ];
+                    const { error } = await supabase
+                        .from('system_settings')
+                        .upsert(rows, { onConflict: 'setting_key' });
+                    if (error) throw error;
+                    setOrgSettingsMsg({ type: 'success', text: '기관 정보가 저장되었습니다.' });
+                } catch (err) {
+                    console.error('Error saving org settings:', err);
+                    setOrgSettingsMsg({ type: 'error', text: '저장 중 오류가 발생했습니다.' });
+                } finally {
+                    setOrgSettingsSaving(false);
+                }
+            };
+
+            // ── 성과지표 저장 ─────────────────────────────────────────────
+            const handleSavePerfIndicators = async () => {
+                setPerfSaving(true);
+                setPerfMsg('');
+                try {
+                    const rows = Object.entries(perfDraft).map(([k, v]) => ({ setting_key: k, setting_value: String(v) }));
+                    const { error } = await supabase
+                        .from('system_settings')
+                        .upsert(rows, { onConflict: 'setting_key' });
+                    if (error) throw error;
+                    setPerfIndicators({ ...perfDraft });
+                    setPerfEditing(false);
+                    setPerfDraft(null);
+                    setPerfMsg('저장되었습니다.');
+                    setTimeout(() => setPerfMsg(''), 3000);
+                } catch (err) {
+                    console.error('성과지표 저장 오류:', err);
+                    setPerfMsg('저장 중 오류가 발생했습니다.');
+                } finally {
+                    setPerfSaving(false);
+                }
+            };
+
+            // ── 집행내역 수정/삭제/승인 핸들러 ───────────────────────────────
+            const refreshExecutions = async () => {
+                const fresh = await loadBudgetExecutions();
+                setData(prev => ({ ...prev, budgetExecutions: fresh }));
+            };
+
+            const handleUpdateExecution = async () => {
+                if (!editingExecution) return;
+                setExecutionSaving(true);
+                setExecutionMsg('');
+                try {
+                    const { error } = await supabase.from('budget_executions').update({
+                        subcategory_id: executionEditForm.subcategory_id,
+                        subcategory_name: executionEditForm.subcategory_name,
+                        category_name: executionEditForm.category_name,
+                        budget_item_id: executionEditForm.budget_item_id,
+                        budget_item_name: executionEditForm.budget_item_name,
+                        type: executionEditForm.type,
+                        amount: parseInt(executionEditForm.amount) || 0,
+                        payment_method: executionEditForm.payment_method,
+                        execution_date: executionEditForm.execution_date,
+                        recipient: executionEditForm.recipient || '',
+                        description: executionEditForm.description || '',
+                        notes: executionEditForm.notes || null
+                    }).eq('id', editingExecution.id);
+                    if (error) throw error;
+                    setEditingExecution(null);
+                    await refreshExecutions();
+                    setExecutionMsg('수정되었습니다.');
+                    setTimeout(() => setExecutionMsg(''), 3000);
+                } catch (err) {
+                    console.error('집행내역 수정 오류:', err);
+                    setExecutionMsg('수정 중 오류가 발생했습니다.');
+                } finally {
+                    setExecutionSaving(false);
+                }
+            };
+
+            const handleDeleteExecution = async (id) => {
+                try {
+                    await supabase.from('attachments').delete().eq('execution_id', id);
+                    const { error } = await supabase.from('budget_executions').delete().eq('id', id);
+                    if (error) throw error;
+                    setExecutionDeleteId(null);
+                    await refreshExecutions();
+                } catch (err) {
+                    console.error('집행내역 삭제 오류:', err);
+                }
+            };
+
+            const handleChangeExecutionStatus = async (id, newStatus) => {
+                try {
+                    const { error } = await supabase.from('budget_executions')
+                        .update({ status: newStatus }).eq('id', id);
+                    if (error) throw error;
+                    await refreshExecutions();
+                } catch (err) {
+                    console.error('상태 변경 오류:', err);
+                }
+            };
+
+            const handleExportExcel = (selectedOnly = false) => {
+                if (!window.XLSX) { alert('Excel 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return; }
+                const executions = selectedOnly ? filteredExecutions.filter(e => selectedExecIds.has(e.id)) : filteredExecutions;
+                if (executions.length === 0) { alert('내보낼 데이터가 없습니다.'); return; }
+                const rows = executions.map(e => ({
+                    '집행일': e.execution_date || '',
+                    '대분류': e.category_name || '',
+                    '소분류': e.subcategory_name || '',
+                    '항목명': e.budget_item_name || '',
+                    '유형': e.type || '',
+                    '금액(원)': e.amount || 0,
+                    '결제방법': e.payment_method || '',
+                    '수급자': e.recipient || '',
+                    '상태': EXECUTION_STATUS[e.status]?.label || e.status || ''
+                }));
+                const ws = window.XLSX.utils.json_to_sheet(rows);
+                const wb = window.XLSX.utils.book_new();
+                window.XLSX.utils.book_append_sheet(wb, ws, '집행내역');
+                window.XLSX.writeFile(wb, `집행내역_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            };
+
+            const handleGalleryZipDownload = async (galleriesArg) => {
+                if (!window.JSZip) { alert('JSZip 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.'); return; }
+                setGalleryZipping(true);
+                try {
+                    const zip = new window.JSZip();
+                    const galleries = galleriesArg || [];
+                    // Fetch all attachment metadata in parallel
+                    const attsByGallery = await Promise.all(
+                        galleries.map(item =>
+                            supabase.from('attachments')
+                                .select('file_path, file_name')
+                                .eq('gallery_id', item.id)
+                                .not('file_type', 'eq', 'document')
+                                .then(({ data }) => ({ item, atts: data || [] }))
+                        )
+                    );
+                    for (const { item, atts } of attsByGallery) {
+                        for (const att of atts) {
+                            try {
+                                const { data: blob } = await supabase.storage
+                                    .from('attachments').download(att.file_path);
+                                if (blob) {
+                                    const safeTitle = (item.title || '기타').replace(/[/\\:*?"<>|]/g, '_');
+                                    const safeFilename = (att.file_name || 'image').replace(/[/\\:*?"<>|]/g, '_');
+                                    zip.file(`${safeTitle}/${safeFilename}`, blob);
+                                }
+                            } catch (e) {
+                                console.warn('파일 다운로드 실패:', att.file_path, e);
+                            }
+                        }
+                    }
+                    const blob = await zip.generateAsync({ type: 'blob' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `갤러리_${new Date().toISOString().slice(0, 10)}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error('ZIP 생성 오류:', err);
+                    alert('ZIP 생성 중 오류가 발생했습니다.');
+                } finally {
+                    setGalleryZipping(false);
+                }
+            };
+
+            // ── 수급자 목록 로딩 ─────────────────────────────────────────
+            const loadRecipients = async () => {
+                setRecipientsLoading(true);
+                try {
+                    const { data, error } = await supabase
+                        .from('recipients')
+                        .select('id, name, birth_date, address, phone, notes, is_active, created_at')
+                        .eq('is_active', true)
+                        .order('name');
+                    if (error) throw error;
+                    setRecipients(data || []);
+                } catch (err) {
+                    console.error('Error loading recipients:', err);
+                    setRecipientMsg({ type: 'error', text: '수급자 목록을 불러오는 중 오류가 발생했습니다.' });
+                } finally {
+                    setRecipientsLoading(false);
+                }
+            };
+
+            // ── 수급자 저장 (추가/수정) ──────────────────────────────────
+            const handleSaveRecipient = async (e) => {
+                e.preventDefault();
+                setRecipientMsg({ type: '', text: '' });
+                if (!recipientForm.name.trim()) {
+                    setRecipientMsg({ type: 'error', text: '성명은 필수 입력 항목입니다.' });
+                    return;
+                }
+                try {
+                    if (editingRecipient) {
+                        const { error } = await supabase
+                            .from('recipients')
+                            .update({ ...recipientForm, updated_at: new Date().toISOString() })
+                            .eq('id', editingRecipient.id);
+                        if (error) throw error;
+                        setRecipientMsg({ type: 'success', text: `'${recipientForm.name}' 정보가 수정되었습니다.` });
+                    } else {
+                        const { error } = await supabase
+                            .from('recipients')
+                            .insert([{ ...recipientForm, is_active: true }]);
+                        if (error) throw error;
+                        setRecipientMsg({ type: 'success', text: `'${recipientForm.name}' 수급자가 등록되었습니다.` });
+                    }
+                    setRecipientForm({ name: '', birth_date: '', address: '', phone: '', notes: '' });
+                    setEditingRecipient(null);
+                    setShowRecipientForm(false);
+                    await loadRecipients();
+                } catch (err) {
+                    console.error('Error saving recipient:', err);
+                    setRecipientMsg({ type: 'error', text: '저장 중 오류가 발생했습니다.' });
+                }
+            };
+
+            // ── 수급자 삭제 (소프트 삭제) ────────────────────────────────
+            const handleDeleteRecipient = async (r) => {
+                if (!window.confirm(`'${r.name}' 수급자를 삭제하시겠습니까?`)) return;
+                setRecipientMsg({ type: '', text: '' });
+                try {
+                    const { error } = await supabase
+                        .from('recipients')
+                        .update({ is_active: false, updated_at: new Date().toISOString() })
+                        .eq('id', r.id);
+                    if (error) throw error;
+                    setRecipientMsg({ type: 'success', text: `'${r.name}' 수급자가 삭제되었습니다.` });
+                    await loadRecipients();
+                } catch (err) {
+                    console.error('Error deleting recipient:', err);
+                    setRecipientMsg({ type: 'error', text: '삭제 중 오류가 발생했습니다.' });
+                }
+            };
+
+            // 사용자 목록 로딩
+            const loadAdminUsers = async () => {
+                setAdminLoading(true);
+                try {
+                    const { data: users, error } = await supabase
+                        .from('users')
+                        .select('id, username, name, email, role, phone, organization, position, is_active, created_at, updated_at')
+                        .order('created_at', { ascending: true });
+
+                    if (error) throw error;
+                    setAdminUsers(users || []);
+                } catch (err) {
+                    console.error('Error loading users:', err);
+                    setAdminError('사용자 목록을 불러오는 중 오류가 발생했습니다.');
+                } finally {
+                    setAdminLoading(false);
+                }
+            };
+
+            // 사용자 추가
+            const handleAddUser = async (e) => {
+                e.preventDefault();
+                setAdminError('');
+                setAdminSuccess('');
+
+                if (!userForm.username || !userForm.name || !userForm.password) {
+                    setAdminError('아이디, 이름, 비밀번호는 필수 입력 항목입니다.');
+                    return;
+                }
+
+                try {
+                    const { data, error } = await supabase
+                        .from('users')
+                        .insert([{
+                            username: userForm.username,
+                            name: userForm.name,
+                            email: userForm.email || `${userForm.username}@younglabor.org`,
+                            password_hash: await hashPassword(userForm.password), // SHA-256 해시 후 저장
+                            role: userForm.role,
+                            phone: userForm.phone,
+                            organization: userForm.organization,
+                            position: userForm.position,
+                            is_active: true
+                        }])
+                        .select();
+
+                    if (error) {
+                        if (error.message.includes('duplicate') || error.message.includes('unique')) {
+                            setAdminError('이미 존재하는 아이디 또는 이메일입니다.');
+                        } else {
+                            throw error;
+                        }
+                        return;
+                    }
+
+                    setAdminSuccess(`'${userForm.name}' 사용자가 추가되었습니다.`);
+                    resetUserForm();
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error adding user:', err);
+                    setAdminError('사용자 추가 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 사용자 수정
+            const handleUpdateUser = async (e) => {
+                e.preventDefault();
+                setAdminError('');
+                setAdminSuccess('');
+
+                if (!editingUser) return;
+
+                try {
+                    const updateData = {
+                        name: userForm.name,
+                        email: userForm.email,
+                        role: userForm.role,
+                        phone: userForm.phone,
+                        organization: userForm.organization,
+                        position: userForm.position,
+                        updated_at: new Date().toISOString()
+                    };
+
+                    // 비밀번호가 입력된 경우에만 변경 (SHA-256 해시 후 저장)
+                    if (userForm.password) {
+                        updateData.password_hash = await hashPassword(userForm.password);
+                    }
+
+                    const { error } = await supabase
+                        .from('users')
+                        .update(updateData)
+                        .eq('id', editingUser.id);
+
+                    if (error) throw error;
+
+                    setAdminSuccess(`'${userForm.name}' 사용자 정보가 수정되었습니다.`);
+
+                    // 현재 로그인 사용자 정보가 변경된 경우 세션 업데이트
+                    if (currentUser && currentUser.id === editingUser.id) {
+                        const updatedSession = {
+                            ...currentUser,
+                            name: userForm.name,
+                            email: userForm.email,
+                            role: userForm.role,
+                            organization: userForm.organization,
+                            position: userForm.position
+                        };
+                        localStorage.setItem('bf_user_session', JSON.stringify(updatedSession));
+                        setCurrentUser(updatedSession);
+                    }
+
+                    resetUserForm();
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error updating user:', err);
+                    setAdminError('사용자 수정 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 사용자 삭제 (비활성화)
+            const handleDeleteUser = async (user) => {
+                if (user.id === currentUser?.id) {
+                    setAdminError('현재 로그인된 계정은 삭제할 수 없습니다.');
+                    return;
+                }
+
+                if (!confirm(`'${user.name}' (${user.username}) 사용자를 삭제하시겠습니까?\n삭제된 사용자는 로그인할 수 없습니다.`)) {
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from('users')
+                        .update({ is_active: false, updated_at: new Date().toISOString() })
+                        .eq('id', user.id);
+
+                    if (error) throw error;
+
+                    setAdminSuccess(`'${user.name}' 사용자가 삭제(비활성화)되었습니다.`);
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error deleting user:', err);
+                    setAdminError('사용자 삭제 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 사용자 활성화 복원
+            const handleRestoreUser = async (user) => {
+                try {
+                    const { error } = await supabase
+                        .from('users')
+                        .update({ is_active: true, updated_at: new Date().toISOString() })
+                        .eq('id', user.id);
+
+                    if (error) throw error;
+
+                    setAdminSuccess(`'${user.name}' 사용자가 복원되었습니다.`);
+                    await loadAdminUsers();
+                } catch (err) {
+                    console.error('Error restoring user:', err);
+                    setAdminError('사용자 복원 중 오류가 발생했습니다: ' + err.message);
+                }
+            };
+
+            // 수정 모드로 전환
+            const startEditUser = (user) => {
+                setEditingUser(user);
+                setUserForm({
+                    username: user.username,
+                    name: user.name,
+                    email: user.email || '',
+                    password: '',
+                    role: user.role,
+                    phone: user.phone || '',
+                    organization: user.organization || '',
+                    position: user.position || ''
+                });
+                setShowUserForm(true);
+                setAdminError('');
+                setAdminSuccess('');
+            };
+
+            const roleLabels = {
+                admin: '관리자',
+                staff: '직원',
+                participant: '참여자',
+                viewer: '열람자'
+            };
+
+            // 관리자 페이지 진입 시 사용자 목록 로딩
+            useEffect(() => {
+                if (currentPage === 'admin' && adminUsers.length === 0 && !adminLoading) {
+                    loadAdminUsers();
+                }
+            }, [currentPage]);
+
+            // 회계가이드 페이지 렌더링
+            const renderGuide = () => {
+                // DOCUMENT_RULES에서 증빙서류를 파생하는 헬퍼
+                const getDocsList = (ruleKey) => {
+                    const rule = DOCUMENT_RULES[ruleKey];
+                    if (!rule) return ['해당 항목의 증빙서류에 준함'];
+                    return [...(rule.base || []), ...(rule.required || []), ...(rule.conditional || [])];
+                };
+
+                const accountItems = [
+                    { group: '사업비', name: '사업회의비', color: '#2B6CB0', bg: '#EBF8FF',
+                      desc: '행사, 회의 등 진행을 위해 지급되는 장소 대관비, 다과구입, 식비, 다과비 등',
+                      restriction: '인건비성 경비 편성불가',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '주류, 노래방 등 비용 지출 불가. 교통비는 여비교통비 계정으로 별도 지출.',
+                      withholding: false },
+                    { group: '사업비', name: '사업인건비', color: '#C53030', bg: '#FFF5F5',
+                      desc: '강사비, 원고비, 발제비, 토론비, 인터뷰 사례비, 자문비, 회의참석비, 단순인건비 등',
+                      restriction: '단체 내부인에는 지급불가 (대표자, 정기급여 수급자, 사업담당자)',
+                      payment: '계좌이체만 가능 (현금 지급 불가)',
+                      warning: '원천징수금액은 운영통장으로 이체 후 집행. 주민번호 수집 필요.',
+                      withholding: true },
+                    { group: '사업비', name: '지급수수료', color: '#6B46C1', bg: '#FAF5FF',
+                      desc: '영상제작, 행사중계, 디자인, 통/번역, 연구조사, 장비임대 등 외주용역 비용',
+                      restriction: '100만원 이상 용역은 2개 이상 비교견적 필요, 용역계약서 작성 필수',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '개인용역계약 시 추가 서류 필요. 최저가 선택 불필수(품질 중요 시 재단 협의).',
+                      withholding: true },
+                    { group: '사업비', name: '여비교통비', color: '#C05621', bg: '#FFFAF0',
+                      desc: '출장여비(숙박료, 식대) 및 교통비(대중교통, 통행료, 주차료, 자차 유류대), 여행자보험 등',
+                      restriction: '실비지출에 한정, 영수증 필수',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '영수증 없으면 불인정. 사업인건비와 중복지출 불가.',
+                      withholding: false },
+                    { group: '사업비', name: '물품구매비', color: '#276749', bg: '#F0FFF4',
+                      desc: '단위사업에 필요한 물품 구입비용',
+                      restriction: '100만원 이상 구매 시 2개 이상 비교견적 필요',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '적격증빙 불가한 개인 중고거래물품 구입은 인정 불가.',
+                      withholding: false },
+                    { group: '사업비', name: '사업홍보비', color: '#D69E2E', bg: '#FFFFF0', ruleKey: '사업홍보비',
+                      desc: '단위사업 홍보, 사업참여자 모집을 목적으로 지출한 홍보 비용',
+                      restriction: '사업과의 직접적 연관성 입증 필요',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '단위사업과 직접 관련된 홍보만 인정.',
+                      withholding: false },
+                    { group: '사업비', name: '도서인쇄비', color: '#319795', bg: '#E6FFFA', ruleKey: '도서인쇄비',
+                      desc: '자료집, 교재제본, 리플렛 등 인쇄물 제작비',
+                      restriction: '사업목적 부합 인쇄물만 인정',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '사업목적과 부합하는 인쇄물만 인정.',
+                      withholding: false },
+                    { group: '사업비', name: '예비비', color: '#4A5568', bg: '#F7FAFC', ruleKey: null,
+                      desc: '예상 외 소요 비용 (지원금의 1/100 이내 권고)',
+                      restriction: '속한 단위사업 내 다른 항목에 포함시켜 사용 가능 (50만원 이상 시 변경신청 필요)',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '다른 단위사업에 포함시켜 사용 불가 (사업변경신청 필요).',
+                      withholding: false },
+                    { group: '운영비', name: '운영인건비', color: '#B83280', bg: '#FFF5F7',
+                      desc: '단체 활동가(사업담당자)의 기본급여, 법정수당, 퇴직급여적립금, 사회보험 사용자부담금 등',
+                      restriction: '지원단체에 소속된 사람에게만 지급 가능',
+                      payment: '사업전용계좌 → 단체 운영통장으로 일괄 이체 후 지급',
+                      warning: '사업전용계좌에서 바로 지급하지 않음. 운영통장 경유 필수. 1년 미만 퇴직 시 퇴직적립금 반환.',
+                      withholding: false },
+                    { group: '운영비', name: '교육훈련비', color: '#C2410C', bg: '#FFF8F1',
+                      desc: '단체 활동가의 역량강화를 위한 교육비, 대내외 인사 및 위원회 운영 회의비',
+                      restriction: '역량강화 목적에 부합해야 함',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '단체 활동가 역량강화 목적에 부합해야 함.',
+                      withholding: false },
+                    { group: '운영비', name: '임차료', color: '#0E7490', bg: '#F0FFFF',
+                      desc: '사무실 임차비(임대보증금 설정불가), 관리비(집합건물 공용관리비, 장기수선충당금 등)',
+                      restriction: '임대보증금 설정 불가',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '임대보증금은 설정할 수 없음.',
+                      withholding: false },
+                    { group: '운영비', name: '일반관리비', color: '#92400E', bg: '#FFFFF0',
+                      desc: '사무용품, 소모성물품, 수도광열비, 통신비, 제세공과금, 보험료, 금융기관수수료 등 (취득단가 100만원 미만)',
+                      restriction: '취득단가 100만원 미만 물품만',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '사회보험 사용자부담금 등은 운영인건비로 편성할 것.',
+                      withholding: false },
+                    { group: '운영비', name: '홍보비', color: '#553C9A', bg: '#F5F0FF',
+                      desc: '단체홍보, 회원모집, 회원활동지원, 모금활동을 목적으로 지출한 홍보비용',
+                      restriction: '단체홍보 목적에 부합해야 함',
+                      payment: '전용계좌 체크카드 또는 계좌이체',
+                      warning: '사업홍보비와 구분하여 운영.',
+                      withholding: false }
+                ];
+
+                // 원천징수 계산
+                const calcWithholding = () => {
+                    const amount = parseInt(withholdingAmount) || 0;
+                    if (amount <= 0) return null;
+                    const expenseDeduction = Math.floor(amount * expenseRate / 100);
+                    const taxableIncome = amount - expenseDeduction;
+                    const isExempt = taxableIncome <= 50000;
+                    const incomeTax = isExempt ? 0 : Math.floor(taxableIncome * 0.2);
+                    const localTax = isExempt ? 0 : Math.floor(incomeTax * 0.1);
+                    const totalTax = incomeTax + localTax;
+                    const netPayment = amount - totalTax;
+                    return { amount, expenseDeduction, taxableIncome, isExempt, incomeTax, localTax, totalTax, netPayment };
+                };
+
+                const withholdingResult = calcWithholding();
+
+                return (
+                    <div>
+                        <h1 className="section-title">📖 회계처리 가이드</h1>
+                        <p style={{ color: '#6B6560', marginBottom: '20px', fontSize: '14px' }}>
+                            아름다운재단 2026 공익단체 인큐베이팅 지원사업 수행가이드 기반
+                        </p>
+
+                        {/* 탭 네비게이션 */}
+                        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                            {[
+                                { id: 'principles', label: '📋 기본원칙' },
+                                { id: 'accounts', label: '📂 계정항목별 안내' },
+                                { id: 'receipts', label: '🧾 적격증빙 가이드' },
+                                { id: 'withholding', label: '💰 원천징수 계산기' },
+                                { id: 'faq', label: '❓ FAQ' }
+                            ].map(tab => (
+                                <button key={tab.id}
+                                    className={`btn ${guideTab === tab.id ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setGuideTab(tab.id)}
+                                    style={{ fontSize: '13px', padding: '8px 16px' }}>
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* 기본원칙 탭 */}
+                        {guideTab === 'principles' && (
+                            <div>
+                                {/* 회계처리 기본원칙 */}
+                                <div className="card" style={{ marginBottom: '20px' }}>
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>회계처리 기본원칙</h3>
+                                    <div style={{ display: 'grid', gap: '12px' }}>
+                                        {[
+                                            { icon: '🏦', title: '사업전용계좌 사용', desc: '단체 일반회계와 구분하여 사업전용계좌를 사용하고 회계장부를 별도로 관리해야 합니다.' },
+                                            { icon: '💳', title: '체크카드 사용 원칙', desc: '사업전용계좌의 체크카드를 발급받아 사용함을 원칙으로 합니다. 복수 발급 가능합니다.' },
+                                            { icon: '🚫', title: '현금인출 금지', desc: '현금인출 및 전용체크카드 외 지출은 불가능하며, 불가피한 경우 재단의 사전승인이 필요합니다.' },
+                                            { icon: '📝', title: '적격증빙 필수', desc: '모든 지출에는 해당 지출에 대한 적격 영수증빙 서류가 있어야 합니다. 거래명세서·이체내역서만으로는 영수증빙이 되지 않습니다.' },
+                                            { icon: '🔒', title: '용도 외 사용 금지', desc: '지급된 사업비는 지원사업 이외의 용도로 임의사용할 수 없습니다.' },
+                                            { icon: '📊', title: '자부담 분리', desc: '자부담이 있는 경우 전용통장과 분리하여 사용해야 합니다.' }
+                                        ].map((item, i) => (
+                                            <div key={i} style={{ display: 'flex', gap: '12px', padding: '12px', background: '#FAFAF8', borderRadius: '8px', alignItems: 'flex-start' }}>
+                                                <span style={{ fontSize: '20px', flexShrink: 0 }}>{item.icon}</span>
+                                                <div>
+                                                    <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>{item.title}</div>
+                                                    <div style={{ fontSize: '13px', color: '#4A4540', lineHeight: '1.5' }}>{item.desc}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 지출처리 절차 */}
+                                <div className="card" style={{ marginBottom: '20px' }}>
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>지출처리 흐름</h3>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        {[
+                                            { step: '1', label: '지출 발생', desc: '체크카드 결제 또는 계좌이체' },
+                                            { step: '→' },
+                                            { step: '2', label: '영수증 수취', desc: '적격증빙 영수증 확보' },
+                                            { step: '→' },
+                                            { step: '3', label: '지출대장 기록', desc: '통장거래내역 순서대로' },
+                                            { step: '→' },
+                                            { step: '4', label: '증빙서류 편철', desc: '지출대장 순서대로 정리' },
+                                            { step: '→' },
+                                            { step: '5', label: '정산보고', desc: '중간/최종 결과보고' }
+                                        ].map((item, i) => (
+                                            item.step === '→' ?
+                                                <span key={i} style={{ fontSize: '20px', color: '#A39E99' }}>→</span> :
+                                                <div key={i} style={{ flex: '1', minWidth: '120px', padding: '14px', background: '#F0FFF4', borderRadius: '10px', textAlign: 'center', border: '1px solid #C6F6D5' }}>
+                                                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#1B6B5A', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px', fontSize: '14px', fontWeight: '700' }}>{item.step}</div>
+                                                    <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}>{item.label}</div>
+                                                    <div style={{ fontSize: '11px', color: '#6B6560' }}>{item.desc}</div>
+                                                </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 금지 사항 */}
+                                <div className="card" style={{ marginBottom: '20px', border: '1px solid #FED7D7' }}>
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#C53030' }}>주의 및 금지 사항</h3>
+                                    <div style={{ display: 'grid', gap: '10px' }}>
+                                        {[
+                                            '단체 내부거래 금지: 임직원 운영 업체, 계열사, 산하 단체와의 거래는 부적정 집행으로 환수 조치',
+                                            '간편결제 예치금 충전 금지: 제로페이 지역상품권 등 예치금 충전 후 물품 구매 불가',
+                                            '사업전용계좌 간편결제 등록 금지: 카카오페이머니, 네이버포인트 자동충전 등은 사업비 임의전용에 해당',
+                                            '통합지출 지양: 항목이 다른 비용의 통합지출은 가급적 지양. 부득이한 경우 지출대장에 항목별 구분 기재',
+                                            '사업비↔운영비 간 예산변경 불가: 단, 운영비→사업비 전용은 재단승인 시 가능 (역방향 불가)',
+                                            '이체수수료: 해당 예산항목에 편성. 미편성 시 예비비 또는 일반관리비로 지출'
+                                        ].map((item, i) => (
+                                            <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '10px 12px', background: '#FFF5F5', borderRadius: '6px' }}>
+                                                <span style={{ color: '#C53030', fontWeight: '700', flexShrink: 0 }}>⚠</span>
+                                                <span style={{ fontSize: '13px', color: '#4A4540', lineHeight: '1.5' }}>{item}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 사업변경 */}
+                                <div className="card">
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>사업변경 안내</h3>
+                                    <div style={{ display: 'grid', gap: '10px' }}>
+                                        <div style={{ padding: '12px', background: '#FAFAF8', borderRadius: '8px', fontSize: '13px', lineHeight: '1.6' }}>
+                                            <strong>변경 신청 마감:</strong> 사업종료일 2개월 전까지 (2026.10.31)<br/>
+                                            <strong>절차:</strong> 재단 담당자 이메일 문의 → 검토/변경신청서 제출 요청 → 직인 날인 후 제출 → 심사(약 1주) → 결과 회신<br/>
+                                            <strong>예비비 사용:</strong> 속한 단위사업 내 다른 항목에 포함 가능 (50만원 이상 시 사업변경신청 필요)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 계정항목별 안내 탭 */}
+                        {guideTab === 'accounts' && (
+                            <div>
+                                <div style={{ display: 'grid', gap: '8px', marginBottom: selectedAccount !== null ? '24px' : '0' }}>
+                                    {['사업비', '운영비'].map(group => (
+                                        <div key={group}>
+                                            <h3 style={{ fontSize: '15px', fontWeight: '700', margin: '16px 0 10px', color: group === '사업비' ? '#1B6B5A' : '#2B6CB0' }}>
+                                                {group === '사업비' ? '📦 사업비 계정항목' : '🏢 운영비 계정항목'}
+                                            </h3>
+                                            <div style={{ display: 'grid', gap: '6px' }}>
+                                                {accountItems.filter(a => a.group === group).map((account, i) => (
+                                                    <div key={i}
+                                                        onClick={() => setSelectedAccount(selectedAccount?.name === account.name ? null : account)}
+                                                        style={{
+                                                            padding: '14px 16px', background: selectedAccount?.name === account.name ? account.bg : 'white',
+                                                            borderRadius: '10px', cursor: 'pointer', border: `1px solid ${selectedAccount?.name === account.name ? account.color + '40' : '#E2E0DD'}`,
+                                                            transition: 'all 0.2s'
+                                                        }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', background: account.bg, color: account.color }}>{account.name}</span>
+                                                                {account.withholding && <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E' }}>원천징수 대상</span>}
+                                                            </div>
+                                                            <span style={{ fontSize: '18px', color: '#A39E99', transform: selectedAccount?.name === account.name ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: '#6B6560', marginTop: '6px' }}>{account.desc}</div>
+
+                                                        {selectedAccount?.name === account.name && (
+                                                            <div style={{ marginTop: '16px', display: 'grid', gap: '12px' }}>
+                                                                <div style={{ padding: '12px', background: 'white', borderRadius: '8px', border: '1px solid #E2E0DD' }}>
+                                                                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#C53030', marginBottom: '6px' }}>제한사항</div>
+                                                                    <div style={{ fontSize: '13px', color: '#4A4540', lineHeight: '1.5' }}>{account.restriction}</div>
+                                                                </div>
+                                                                <div style={{ padding: '12px', background: 'white', borderRadius: '8px', border: '1px solid #E2E0DD' }}>
+                                                                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#2B6CB0', marginBottom: '6px' }}>결제 방법</div>
+                                                                    <div style={{ fontSize: '13px', color: '#4A4540' }}>{account.payment}</div>
+                                                                </div>
+                                                                <div style={{ padding: '12px', background: 'white', borderRadius: '8px', border: '1px solid #E2E0DD' }}>
+                                                                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#276749', marginBottom: '6px' }}>필요 증빙서류</div>
+                                                                    <ul style={{ margin: '0', paddingLeft: '18px', fontSize: '13px', color: '#4A4540', lineHeight: '1.7' }}>
+                                                                        {getDocsList(account.ruleKey !== undefined ? account.ruleKey : account.name).map((doc, j) => <li key={j}>{doc}</li>)}
+                                                                    </ul>
+                                                                </div>
+                                                                <div style={{ padding: '10px 12px', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FDE68A', fontSize: '12px', color: '#92400E', lineHeight: '1.5' }}>
+                                                                    💡 {account.warning}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 적격증빙 가이드 탭 */}
+                        {guideTab === 'receipts' && (
+                            <div>
+                                <div className="card" style={{ marginBottom: '20px' }}>
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>적격증빙 영수증 우선순위</h3>
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                            <thead>
+                                                <tr style={{ background: '#134E42', color: 'white' }}>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>우선순위</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>증빙유형</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>내용 및 주의사항</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {[
+                                                    { rank: '①', type: '전용계좌 체크카드 매출전표', note: '전용계좌 체크카드 외 카드 사용불가', color: '#276749' },
+                                                    { rank: '②', type: '(전자)세금계산서', note: '일반과세자 및 간이과세자 중 직전년도 공급대가 4,800만원 이상인 경우 발급의무. 이체내역서·사업자등록증 추가 필요', color: '#2B6CB0' },
+                                                    { rank: '③', type: '(전자)계산서', note: '면세사업자에 한해 인정. 이체확인증·면세사업자등록증 추가 필요', color: '#6B46C1' },
+                                                    { rank: '④', type: '현금영수증 (매출증빙)', note: '소득공제용 불가. 이체내역서 추가 필요', color: '#C05621' },
+                                                    { rank: '✕', type: '간이영수증', note: '사용 불가', color: '#C53030' }
+                                                ].map((item, i) => (
+                                                    <tr key={i} style={{ borderBottom: '1px solid #E2E0DD', background: i === 4 ? '#FFF5F5' : 'white' }}>
+                                                        <td style={{ padding: '12px', textAlign: 'center', fontWeight: '700', color: item.color, fontSize: '16px' }}>{item.rank}</td>
+                                                        <td style={{ padding: '12px', fontWeight: '600' }}>{item.type}</td>
+                                                        <td style={{ padding: '12px', color: '#4A4540', lineHeight: '1.5' }}>{item.note}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div className="card" style={{ marginBottom: '20px' }}>
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>영수증 관리 원칙</h3>
+                                    <div style={{ display: 'grid', gap: '10px' }}>
+                                        {[
+                                            { title: '원본 제출', desc: '영수증은 항목·내역이 있는 원본을 제출합니다. 내용이 사라질 수 있으므로 반드시 복사 보관하세요.' },
+                                            { title: '부착 방법', desc: 'A4 1장에 영수증 1장씩 겹침 없이 풀로 부착. 이면지 사용 시 "이면지 활용" 표기.' },
+                                            { title: '출력용 영수증', desc: '별도 부착 없이 영수번호, 지출일자, 지출금액, 지출내역을 기재하여 제출합니다.' },
+                                            { title: '편철 순서', desc: '통장거래내역 순서에 따라 지출대장을 작성하고, 영수증도 같은 순서로 편철합니다.' },
+                                            { title: '이체내역서 필수 정보', desc: '① 예금주명 ② 수취인명 ③ 계좌번호(양쪽) ④ 이체금액 ⑤ 이체일시가 포함되어야 합니다.' }
+                                        ].map((item, i) => (
+                                            <div key={i} style={{ padding: '12px', background: '#FAFAF8', borderRadius: '8px' }}>
+                                                <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px', color: '#1B6B5A' }}>{item.title}</div>
+                                                <div style={{ fontSize: '13px', color: '#4A4540', lineHeight: '1.5' }}>{item.desc}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="card">
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>상품권·선물·수상금 증빙</h3>
+                                    <div style={{ fontSize: '13px', color: '#4A4540', lineHeight: '1.7' }}>
+                                        <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                                            <li>구매 증빙: 구입 영수증 + 수령자 직접 수령 확인 수령증 필요</li>
+                                            <li>체크카드로 구매 권고 (계좌이체 시 현금영수증·세금계산서 발급 불가 → 인보이스·사유서 필요)</li>
+                                            <li>기타소득금액이 건별 5만원 초과 시 소득금액의 22% 원천징수 (상품권·기프티콘도 과세 대상)</li>
+                                            <li>1인당 3만원 이하 상품권·온라인쿠폰: 수령확인증 대신 수령명세표(재단서식)로 대체 가능</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 원천징수 계산기 탭 */}
+                        {guideTab === 'withholding' && (
+                            <div>
+                                <div className="card" style={{ marginBottom: '20px' }}>
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>원천징수 계산기 (기타소득)</h3>
+                                    <div style={{ display: 'grid', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>지급 금액 (원)</label>
+                                            <input type="text" inputMode="numeric" value={fmtInput(withholdingAmount)} onChange={e => setWithholdingAmount(parseInput(e.target.value))}
+                                                placeholder="예: 200,000" style={{ width: '100%', padding: '10px 12px', border: '1px solid #D5D3D0', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>필요경비율</label>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                {[
+                                                    { rate: 60, label: '60% (인적용역: 강연료, 원고료 등)' },
+                                                    { rate: 80, label: '80% (불특정 다수 경쟁 대회 상금)' },
+                                                    { rate: 0, label: '0% (필요경비 없음: 기프티콘 등)' }
+                                                ].map(opt => (
+                                                    <button key={opt.rate}
+                                                        className={`btn ${expenseRate === opt.rate ? 'btn-primary' : 'btn-secondary'}`}
+                                                        onClick={() => setExpenseRate(opt.rate)}
+                                                        style={{ fontSize: '12px', padding: '6px 12px', flex: 1 }}>
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {withholdingResult && withholdingResult.amount > 0 && (
+                                            <div style={{ padding: '20px', background: '#F0FFF4', borderRadius: '12px', border: '1px solid #C6F6D5' }}>
+                                                <div style={{ display: 'grid', gap: '10px', fontSize: '14px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                        <span style={{ color: '#4A4540' }}>지급 금액</span>
+                                                        <span style={{ fontWeight: '600' }}>{withholdingResult.amount.toLocaleString()}원</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                        <span style={{ color: '#4A4540' }}>필요경비 ({expenseRate}%)</span>
+                                                        <span>- {withholdingResult.expenseDeduction.toLocaleString()}원</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #C6F6D5', paddingTop: '8px' }}>
+                                                        <span style={{ color: '#4A4540' }}>기타소득금액</span>
+                                                        <span style={{ fontWeight: '600' }}>{withholdingResult.taxableIncome.toLocaleString()}원</span>
+                                                    </div>
+
+                                                    {withholdingResult.isExempt ? (
+                                                        <div style={{ padding: '12px', background: '#EBF8FF', borderRadius: '8px', textAlign: 'center', fontWeight: '600', color: '#2B6CB0' }}>
+                                                            과세최저한 적용: 기타소득금액 5만원 이하 → 원천징수 없음
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span style={{ color: '#4A4540' }}>소득세 (20%)</span>
+                                                                <span style={{ color: '#C53030' }}>- {withholdingResult.incomeTax.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span style={{ color: '#4A4540' }}>지방소득세 (소득세의 10%)</span>
+                                                                <span style={{ color: '#C53030' }}>- {withholdingResult.localTax.toLocaleString()}원</span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #C6F6D5', paddingTop: '8px' }}>
+                                                                <span style={{ color: '#4A4540' }}>원천징수 합계</span>
+                                                                <span style={{ fontWeight: '700', color: '#C53030' }}>{withholdingResult.totalTax.toLocaleString()}원</span>
+                                                            </div>
+                                                        </>
+                                                    )}
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'white', borderRadius: '8px', border: '2px solid #1B6B5A', fontWeight: '700', fontSize: '16px' }}>
+                                                        <span style={{ color: '#1B6B5A' }}>실수령액</span>
+                                                        <span style={{ color: '#1B6B5A' }}>{withholdingResult.netPayment.toLocaleString()}원</span>
+                                                    </div>
+                                                </div>
+
+                                                {!withholdingResult.isExempt && (
+                                                    <div style={{ marginTop: '12px', padding: '10px', background: '#FFFBEB', borderRadius: '8px', fontSize: '12px', color: '#92400E', lineHeight: '1.5' }}>
+                                                        💡 세율: 필요경비 {expenseRate}% 기준 수입금액의 {expenseRate === 60 ? '8.8' : expenseRate === 80 ? '4.4' : '22'}%
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="card" style={{ marginBottom: '20px' }}>
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>원천징수 처리 절차</h3>
+                                    <div style={{ display: 'grid', gap: '8px' }}>
+                                        {[
+                                            { step: '1', title: '비용 지급 시', desc: '원천징수세액을 공제하고 실수령액을 수령인 계좌로 이체' },
+                                            { step: '2', title: '세액 이체', desc: '원천징수금액을 사업전용계좌에서 단체 운영통장(예수금통장)으로 이체' },
+                                            { step: '3', title: '신고·납부', desc: '지급일이 속하는 달의 다음달 10일까지 원천징수이행상황신고서 작성 및 납부 (반기납부자는 반기 마지막달 다음달 10일까지)' },
+                                            { step: '4', title: '지급명세서', desc: '기타소득: 지급 차년도 2월 말까지 / 근로·퇴직·사업: 차년도 3.10까지 제출' }
+                                        ].map((item, i) => (
+                                            <div key={i} style={{ display: 'flex', gap: '12px', padding: '12px', background: '#FAFAF8', borderRadius: '8px', alignItems: 'flex-start' }}>
+                                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#1B6B5A', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>{item.step}</div>
+                                                <div>
+                                                    <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '2px' }}>{item.title}</div>
+                                                    <div style={{ fontSize: '12px', color: '#4A4540', lineHeight: '1.5' }}>{item.desc}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="card">
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '16px', color: '#134E42' }}>소득구분 및 세율 요약</h3>
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                            <thead>
+                                                <tr style={{ background: '#134E42', color: 'white' }}>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>구분</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'left' }}>설명</th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>세율 (지방소득세 포함)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr style={{ borderBottom: '1px solid #E2E0DD' }}>
+                                                    <td style={{ padding: '12px', fontWeight: '600' }}>기타소득</td>
+                                                    <td style={{ padding: '12px', color: '#4A4540' }}>일시적 용역 제공 대가 (강연료, 자문비, 원고료 등)</td>
+                                                    <td style={{ padding: '12px', textAlign: 'center' }}>필요경비 60%: 수입금액의 <strong>8.8%</strong><br/>필요경비 80%: 수입금액의 <strong>4.4%</strong></td>
+                                                </tr>
+                                                <tr style={{ borderBottom: '1px solid #E2E0DD' }}>
+                                                    <td style={{ padding: '12px', fontWeight: '600' }}>사업소득</td>
+                                                    <td style={{ padding: '12px', color: '#4A4540' }}>독립된 자격으로 계속적 용역 제공 대가</td>
+                                                    <td style={{ padding: '12px', textAlign: 'center' }}>수입금액의 <strong>3.3%</strong></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '12px', fontWeight: '600' }}>근로소득</td>
+                                                    <td style={{ padding: '12px', color: '#4A4540' }}>고용관계 또는 유사 계약에 의한 근로 대가</td>
+                                                    <td style={{ padding: '12px', textAlign: 'center' }}>간이세액표 적용<br/>(일용근로자: <strong>6.6%</strong>)</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div style={{ marginTop: '12px', padding: '10px', background: '#FFFBEB', borderRadius: '8px', fontSize: '12px', color: '#92400E', lineHeight: '1.5' }}>
+                                        💡 과세최저한: 기타소득금액(수입금액-필요경비)이 건별 5만원 이하이면 원천징수 없음. 단, 원천징수이행상황신고와 지급명세서 제출은 필요합니다.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* FAQ 탭 */}
+                        {guideTab === 'faq' && (
+                            <div style={{ display: 'grid', gap: '12px' }}>
+                                {[
+                                    { q: '사업전용계좌에서 바로 원천징수세액을 납부해도 되나요?',
+                                      a: '안 됩니다. 해당 월의 전체 원천징수세액을 합산신고해야 하므로, 사업전용계좌에서 단체 운영계좌(예수금통장)로 이체 후 한번에 신고·납부해야 합니다. 건별 따로 신고 시 마지막 건만 인정되어 누락 가산세가 발생할 수 있습니다.' },
+                                    { q: '미등록단체(모임)인데 원천징수를 해야 하나요?',
+                                      a: '네. 세무서 사업자등록·고유번호등록 여부와 관계없이 소득을 지급하는 자는 원천징수 의무가 있습니다. 단, 고유번호증이 없는 미등록단체가 사업소득을 지급하는 경우 원천징수 의무는 없으며, 수령자가 직접 신고·납부하도록 안내해주세요.' },
+                                    { q: '원천징수가 면제되는 경우는?',
+                                      a: '과세최저한(건별 기타소득금액 5만원 이하)이 적용되는 경우와 소액부징수(세액 1,000원 미만)인 경우 원천징수가 면제됩니다. 단, 원천징수이행상황신고서는 제출해야 하며, 지급명세서 제출이 필요한 경우도 있습니다.' },
+                                    { q: '반기별 납부자인 경우 증빙은 어떻게?',
+                                      a: '국세청 "원천징수세액 반기별 납부 지정 통지" 공문 또는 사유서를 제출하세요. 세액은 지급 시마다 운영계좌로 이체하고, 반기 마지막달 다음달 10일까지 신고·납부합니다.' },
+                                    { q: '이자가 발생하면 어떻게 처리하나요?',
+                                      a: '사업전용계좌 이자수입은 단체의 수입으로 처리합니다. 이자 발생 시마다 운영통장으로 이체하세요. 이자를 사업비로 쓰려면 잡수입 처리 후 자부담으로 집행해야 합니다. 캐시백도 동일하게 처리합니다.' },
+                                    { q: '지출 오류가 발생했을 때는?',
+                                      a: '오류금액을 재입금하여 처리합니다. 지출대장에 수입이 아닌 마이너스(-) 지출로 표기하고, 내역에 "OOO 지출오류 재입금"으로 기재합니다. 구분/단위사업명/항목은 기존과 동일하게 유지합니다.' },
+                                    { q: '지원금 잔액은 언제까지 반납해야 하나요?',
+                                      a: '원칙적으로 사업종료일(12월 31일)까지 환급합니다. 연속지원 선정 시 차년도 사업비 지급을 위해 0원 잔액 증명이 필요하므로 늦어도 2027년 1월 4일까지는 완료해주세요. 환급계좌: 하나은행 162-910010-64604 (아름다운재단).' },
+                                    { q: '개인정보 문서는 어떻게 처리하나요?',
+                                      a: '이력서, 수령확인증 등 수집 시 "개인정보 수집·이용 및 제3자 제공 동의서"를 받아야 합니다. 제공받는 자에 "아름다운재단"을 명시하고, 주민등록번호 뒷자리는 마스킹(숨김처리) 후 제출합니다. 동의서 자체는 재단에 제출하지 않습니다.' },
+                                    { q: '오픈뱅킹으로 이체해도 되나요?',
+                                      a: '권장하지 않습니다. 오픈뱅킹의 경우 서비스 제공 사업자에 따라 이체확인 증명이 원활하지 않은 경우가 있습니다.' }
+                                ].map((item, i) => (
+                                    <div key={i} className="card" style={{ padding: '16px' }}>
+                                        <div style={{ fontWeight: '700', fontSize: '14px', color: '#134E42', marginBottom: '10px', display: 'flex', gap: '8px' }}>
+                                            <span style={{ color: '#1B6B5A', flexShrink: 0 }}>Q{i+1}.</span>
+                                            {item.q}
+                                        </div>
+                                        <div style={{ fontSize: '13px', color: '#4A4540', lineHeight: '1.7', paddingLeft: '28px' }}>
+                                            {item.a}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // ===== 뉴스레터 페이지 렌더링 =====
+            const renderNewsletter = () => {
+                const SCHEDULE_CATS = ['all', '교육', '캠페인', '회의', '평가', '기타'];
+                const BOARD_TYPES = [
+                    { value: 'all', label: '전체' }, { value: 'notice', label: '공지' },
+                    { value: 'materials', label: '자료' }, { value: 'report', label: '보고서' }, { value: 'free', label: '자유' }
+                ];
+
+                const filteredSchedules = (data.schedules || []).filter(s => {
+                    if (newsletterConfig.dateFrom && s.start_date < newsletterConfig.dateFrom) return false;
+                    if (newsletterConfig.dateTo && s.start_date > newsletterConfig.dateTo) return false;
+                    if (newsletterConfig.scheduleCategory !== 'all' && s.category !== newsletterConfig.scheduleCategory) return false;
+                    return true;
+                });
+
+                const filteredBoards = (data.boards || []).filter(b => {
+                    const createdDate = b.created_at ? b.created_at.split('T')[0] : '';
+                    if (newsletterConfig.dateFrom && createdDate < newsletterConfig.dateFrom) return false;
+                    if (newsletterConfig.dateTo && createdDate > newsletterConfig.dateTo) return false;
+                    if (newsletterConfig.boardCategory !== 'all' && b.board_type !== newsletterConfig.boardCategory) return false;
+                    return true;
+                });
+
+                const toggleSchedule = (id) => {
+                    setSelectedScheduleIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+                };
+                const toggleAllSchedules = () => {
+                    setSelectedScheduleIds(prev => prev.size === filteredSchedules.length ? new Set() : new Set(filteredSchedules.map(s => s.id)));
+                };
+                const toggleBoard = (id) => {
+                    setSelectedBoardIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+                };
+                const toggleAllBoards = () => {
+                    setSelectedBoardIds(prev => prev.size === filteredBoards.length ? new Set() : new Set(filteredBoards.map(b => b.id)));
+                };
+
+                const handlePrintNewsletter = () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const html = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
+                    const pw = window.open('', '_blank', 'width=900,height=700');
+                    if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+                    pw.document.write(html);
+                    pw.document.close();
+                };
+
+                // Copy newsletter as rich HTML to clipboard (for SNS paste)
+                const handleCopyNewsletter = async () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const fullHtml = generateNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
+                    // Extract body content only (between <body> and </body>)
+                    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+                    const bodyHtml = bodyMatch ? bodyMatch[1] : fullHtml;
+                    // Remove no-print buttons
+                    const cleanHtml = bodyHtml.replace(/<div class="no-print"[\s\S]*?<\/div>/gi, '');
+                    try {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                'text/html': new Blob([cleanHtml], { type: 'text/html' }),
+                                'text/plain': new Blob([cleanHtml.replace(/<[^>]*>/g, '')], { type: 'text/plain' })
+                            })
+                        ]);
+                        alert('뉴스레터가 클립보드에 복사되었습니다!\n카카오톡, 이메일, 블로그 등에 Ctrl+V로 붙여넣기하세요.');
+                    } catch (err) {
+                        // Fallback: select and copy from hidden element
+                        const temp = document.createElement('div');
+                        temp.innerHTML = cleanHtml;
+                        temp.style.position = 'fixed'; temp.style.left = '-9999px';
+                        document.body.appendChild(temp);
+                        const range = document.createRange();
+                        range.selectNodeContents(temp);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges(); sel.addRange(range);
+                        document.execCommand('copy');
+                        sel.removeAllRanges();
+                        document.body.removeChild(temp);
+                        alert('뉴스레터가 클립보드에 복사되었습니다!');
+                    }
+                };
+
+                // Open full-styled newsletter (Tailwind design) in new window
+                const handleFullNewsletter = () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0 && selGalleries.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const html = generateFullNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, selGalleries, galleryThumbUrls);
+                    const pw = window.open('', '_blank', 'width=900,height=700');
+                    if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+                    pw.document.write(html);
+                    pw.document.close();
+                };
+
+                // Copy full-styled newsletter HTML to clipboard
+                const handleCopyFullNewsletter = async () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0 && selGalleries.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const fullHtml = generateFullNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, selGalleries, galleryThumbUrls);
+                    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+                    const bodyHtml = bodyMatch ? bodyMatch[1] : fullHtml;
+                    const cleanHtml = bodyHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<\/div>/i, '');
+                    try {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                'text/html': new Blob([cleanHtml], { type: 'text/html' }),
+                                'text/plain': new Blob([cleanHtml.replace(/<[^>]*>/g, '')], { type: 'text/plain' })
+                            })
+                        ]);
+                        alert('풀 뉴스레터가 클립보드에 복사되었습니다!\n이메일, 블로그, SNS 등에 붙여넣기하세요.');
+                    } catch (err) {
+                        const temp = document.createElement('div');
+                        temp.innerHTML = cleanHtml;
+                        temp.style.position = 'fixed'; temp.style.left = '-9999px';
+                        document.body.appendChild(temp);
+                        const range = document.createRange();
+                        range.selectNodeContents(temp);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges(); sel.addRange(range);
+                        document.execCommand('copy');
+                        sel.removeAllRanges();
+                        document.body.removeChild(temp);
+                        alert('풀 뉴스레터가 클립보드에 복사되었습니다!');
+                    }
+                };
+
+                // Open section-based newsletter (주요소식, 다가올일정, 우리의생각, 구독, 단체정보)
+                const handleSectionNewsletter = () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0 && selGalleries.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const html = generateSectionNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, selGalleries, galleryThumbUrls, orgSettings);
+                    const pw = window.open('', '_blank', 'width=900,height=700');
+                    if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+                    pw.document.write(html);
+                    pw.document.close();
+                };
+
+                // Copy section-based newsletter HTML to clipboard
+                const handleCopySectionNewsletter = async () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0 && selGalleries.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const fullHtml = generateSectionNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, selGalleries, galleryThumbUrls, orgSettings);
+                    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+                    const bodyHtml = bodyMatch ? bodyMatch[1] : fullHtml;
+                    const cleanHtml = bodyHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<\/div>/i, '');
+                    try {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                'text/html': new Blob([cleanHtml], { type: 'text/html' }),
+                                'text/plain': new Blob([cleanHtml.replace(/<[^>]*>/g, '')], { type: 'text/plain' })
+                            })
+                        ]);
+                        alert('섹션 뉴스레터가 클립보드에 복사되었습니다!\n이메일, 블로그, SNS 등에 붙여넣기하세요.');
+                    } catch (err) {
+                        const temp = document.createElement('div');
+                        temp.innerHTML = cleanHtml;
+                        temp.style.position = 'fixed'; temp.style.left = '-9999px';
+                        document.body.appendChild(temp);
+                        const range = document.createRange();
+                        range.selectNodeContents(temp);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges(); sel.addRange(range);
+                        document.execCommand('copy');
+                        sel.removeAllRanges();
+                        document.body.removeChild(temp);
+                        alert('섹션 뉴스레터가 클립보드에 복사되었습니다!');
+                    }
+                };
+
+                // Open digest-style newsletter in new window
+                const handleDigestNewsletter = () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0 && selGalleries.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const html = generateDigestNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, selGalleries, galleryThumbUrls, orgSettings);
+                    const pw = window.open('', '_blank', 'width=900,height=700');
+                    if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
+                    pw.document.write(html);
+                    pw.document.close();
+                };
+
+                // Copy digest newsletter HTML to clipboard
+                const handleCopyDigestNewsletter = async () => {
+                    const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                    if (selSchedules.length === 0 && selBoards.length === 0 && selGalleries.length === 0) {
+                        alert('뉴스레터에 포함할 항목을 선택해주세요.');
+                        return;
+                    }
+                    const fullHtml = generateDigestNewsletterHTML(newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, selGalleries, galleryThumbUrls, orgSettings);
+                    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+                    const bodyHtml = bodyMatch ? bodyMatch[1] : fullHtml;
+                    const cleanHtml = bodyHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<\/div>/i, '');
+                    try {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                'text/html': new Blob([cleanHtml], { type: 'text/html' }),
+                                'text/plain': new Blob([cleanHtml.replace(/<[^>]*>/g, '')], { type: 'text/plain' })
+                            })
+                        ]);
+                        alert('다이제스트 뉴스레터가 클립보드에 복사되었습니다!\n이메일, 블로그, SNS 등에 붙여넣기하세요.');
+                    } catch (err) {
+                        const temp = document.createElement('div');
+                        temp.innerHTML = cleanHtml;
+                        temp.style.position = 'fixed'; temp.style.left = '-9999px';
+                        document.body.appendChild(temp);
+                        const range = document.createRange();
+                        range.selectNodeContents(temp);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges(); sel.addRange(range);
+                        document.execCommand('copy');
+                        sel.removeAllRanges();
+                        document.body.removeChild(temp);
+                        alert('다이제스트 뉴스레터가 클립보드에 복사되었습니다!');
+                    }
+                };
+
+                // AI batch rewrite all selected board posts
+                const handleBatchRewrite = async () => {
+                    const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                    if (selBoards.length === 0) { alert('게시글을 선택해주세요.'); return; }
+                    const unrewritten = selBoards.filter(b => !rewrittenContents[b.id]);
+                    if (unrewritten.length === 0) { alert('모든 게시글이 이미 재가공되었습니다.'); return; }
+                    if (!confirm(`선택된 게시글 ${unrewritten.length}건을 AI로 일괄 재가공하시겠습니까?`)) return;
+                    for (const b of unrewritten) {
+                        await handleRewriteBoard(b.id, b.content);
+                    }
+                    alert(`${unrewritten.length}건 재가공 완료!`);
+                };
+
+                // Helper: strip HTML tags for board content preview
+                const stripHtml = (html) => { try { return new DOMParser().parseFromString(html || '', 'text/html').body.textContent || ''; } catch { return String(html || '').replace(/<[^>]*>/g, ''); } };
+
+                const selectedSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                const selectedBoardsArr = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+
+                return (
+                    <div>
+                        <h1 className="section-title">📰 뉴스레터 제작</h1>
+
+                        <div className="newsletter-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+                            {/* 좌측: 설정 & 콘텐츠 선택 */}
+                            <div>
+                                {/* 뉴스레터 정보 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <h3 style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>뉴스레터 정보</h3>
+                                    <div className="schedule-form-group">
+                                        <label>제목</label>
+                                        <input type="text" placeholder="예: 청년노동자인권센터 뉴스레터" value={newsletterConfig.title}
+                                            onChange={e => setNewsletterConfig(p => ({...p, title: e.target.value}))} />
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                        <div className="schedule-form-group">
+                                            <label>발행 호수</label>
+                                            <input type="text" placeholder="예: 제3호" value={newsletterConfig.issueNumber}
+                                                onChange={e => setNewsletterConfig(p => ({...p, issueNumber: e.target.value}))} />
+                                        </div>
+                                        <div className="schedule-form-group">
+                                            <label>발행일</label>
+                                            <input type="date" value={newsletterConfig.publishDate}
+                                                onChange={e => setNewsletterConfig(p => ({...p, publishDate: e.target.value}))} />
+                                        </div>
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>인사말</label>
+                                        <textarea rows={3} placeholder="뉴스레터 상단에 표시할 인사말" value={newsletterConfig.greeting}
+                                            onChange={e => setNewsletterConfig(p => ({...p, greeting: e.target.value}))}
+                                            style={{ width: '100%', resize: 'vertical', padding: 8, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>마무리말</label>
+                                        <textarea rows={2} placeholder="뉴스레터 하단에 표시할 마무리말" value={newsletterConfig.closing}
+                                            onChange={e => setNewsletterConfig(p => ({...p, closing: e.target.value}))}
+                                            style={{ width: '100%', resize: 'vertical', padding: 8, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+                                    </div>
+                                </div>
+
+                                {/* 기간 필터 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <h3 style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>기간 필터</h3>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <input type="date" value={newsletterConfig.dateFrom}
+                                            onChange={e => setNewsletterConfig(p => ({...p, dateFrom: e.target.value}))} />
+                                        <span>~</span>
+                                        <input type="date" value={newsletterConfig.dateTo}
+                                            onChange={e => setNewsletterConfig(p => ({...p, dateTo: e.target.value}))} />
+                                    </div>
+                                </div>
+
+                                {/* 일정 선택 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>📅 일정 선택 ({selectedScheduleIds.size}/{filteredSchedules.length})</h3>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <select value={newsletterConfig.scheduleCategory} onChange={e => setNewsletterConfig(p => ({...p, scheduleCategory: e.target.value}))}
+                                                style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}>
+                                                {SCHEDULE_CATS.map(c => <option key={c} value={c}>{c === 'all' ? '전체' : c}</option>)}
+                                            </select>
+                                            <button onClick={toggleAllSchedules} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', background: '#f8f8f8' }}>
+                                                {selectedScheduleIds.size === filteredSchedules.length && filteredSchedules.length > 0 ? '전체해제' : '전체선택'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {filteredSchedules.length === 0 ? (
+                                        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 16 }}>해당 기간의 일정이 없습니다.</p>
+                                    ) : (
+                                        <div style={{ maxHeight: 250, overflowY: 'auto' }}>
+                                            {filteredSchedules.map(s => (
+                                                <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 13 }}>
+                                                    <input type="checkbox" checked={selectedScheduleIds.has(s.id)} onChange={() => toggleSchedule(s.id)} />
+                                                    <span style={{ color: '#888', whiteSpace: 'nowrap', fontSize: 12 }}>{s.start_date}</span>
+                                                    <span style={{ flex: 1, fontWeight: 500 }}>{s.title}</span>
+                                                    <span style={{ background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: 10, fontSize: 11 }}>{s.category}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 게시글 선택 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>📋 게시글 선택 ({selectedBoardIds.size}/{filteredBoards.length})</h3>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <select value={newsletterConfig.boardCategory} onChange={e => setNewsletterConfig(p => ({...p, boardCategory: e.target.value}))}
+                                                style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}>
+                                                {BOARD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                            </select>
+                                            <button onClick={toggleAllBoards} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', background: '#f8f8f8' }}>
+                                                {selectedBoardIds.size === filteredBoards.length && filteredBoards.length > 0 ? '전체해제' : '전체선택'}
+                                            </button>
+                                            {selectedBoardIds.size > 0 && (
+                                                <button onClick={handleBatchRewrite}
+                                                    disabled={rewritingBoardId !== null}
+                                                    style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #c4b5fd', borderRadius: 4, cursor: rewritingBoardId ? 'not-allowed' : 'pointer', background: rewritingBoardId ? '#f3f0ff' : 'linear-gradient(135deg,#8b5cf6,#6366f1)', color: rewritingBoardId ? '#999' : '#fff', fontWeight: 600 }}>
+                                                    {rewritingBoardId ? '재가공 중...' : '✨ AI 일괄 재가공'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {filteredBoards.length === 0 ? (
+                                        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 16 }}>해당 기간의 게시글이 없습니다.</p>
+                                    ) : (
+                                        <div style={{ maxHeight: 250, overflowY: 'auto' }}>
+                                            {filteredBoards.map(b => {
+                                                const typeLabels = { notice: '📢 공지', materials: '📁 자료', report: '📊 보고서', free: '💬 자유' };
+                                                return (
+                                                    <label key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 13 }}>
+                                                        <input type="checkbox" checked={selectedBoardIds.has(b.id)} onChange={() => toggleBoard(b.id)} />
+                                                        <span style={{ color: '#888', whiteSpace: 'nowrap', fontSize: 11 }}>{typeLabels[b.board_type] || b.board_type}</span>
+                                                        <span style={{ flex: 1, fontWeight: 500 }}>{b.title}</span>
+                                                        <span style={{ color: '#aaa', fontSize: 11 }}>{b.created_at ? b.created_at.split('T')[0] : ''}</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 갤러리 선택 */}
+                                <div className="card" style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>📸 갤러리 선택 ({selectedGalleryNewsletterIds.size}/{(data.galleries || []).length})</h3>
+                                        <button onClick={() => {
+                                            const all = (data.galleries || []).map(g => g.id);
+                                            setSelectedGalleryNewsletterIds(prev => prev.size === all.length ? new Set() : new Set(all));
+                                        }} style={{ padding: '4px 10px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', background: '#f8f8f8' }}>
+                                            {selectedGalleryNewsletterIds.size === (data.galleries || []).length && (data.galleries || []).length > 0 ? '전체해제' : '전체선택'}
+                                        </button>
+                                    </div>
+                                    {(data.galleries || []).length === 0 ? (
+                                        <p style={{ color: '#999', fontSize: 13, textAlign: 'center', padding: 16 }}>갤러리 항목이 없습니다.</p>
+                                    ) : (
+                                        <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                                            {(data.galleries || []).map(g => (
+                                                <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 13 }}>
+                                                    <input type="checkbox" checked={selectedGalleryNewsletterIds.has(g.id)}
+                                                        onChange={() => setSelectedGalleryNewsletterIds(prev => { const n = new Set(prev); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; })} />
+                                                    <span style={{ color: '#f59e0b', fontSize: 11 }}>📸</span>
+                                                    <span style={{ flex: 1, fontWeight: 500 }}>{g.title}</span>
+                                                    <span style={{ color: '#aaa', fontSize: 11 }}>{g.category}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 우측: 미리보기 */}
+                            <div>
+                                <div className="card" style={{ position: 'sticky', top: 20 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>미리보기</h3>
+                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                            <button className="btn" onClick={handleDigestNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13, background: 'linear-gradient(135deg,#0ea5e9,#2563eb)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                                📋 다이제스트
+                                            </button>
+                                            <button className="btn" onClick={handleCopyDigestNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13, background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                                📋 다이제스트 복사
+                                            </button>
+                                            <button className="btn" onClick={handleSectionNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13, background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                                📰 섹션
+                                            </button>
+                                            <button className="btn" onClick={handleCopySectionNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13, background: '#047857', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                                📋 섹션 복사
+                                            </button>
+                                            <button className="btn" onClick={handleFullNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                                🎨 풀 뉴스레터
+                                            </button>
+                                            <button className="btn" onClick={handleCopyFullNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                                📋 풀 복사
+                                            </button>
+                                            <button className="btn" onClick={handleCopyNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13, background: '#1e1e2e', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                                                📋 SNS 복사
+                                            </button>
+                                            <button className="btn btn-primary" onClick={handlePrintNewsletter}
+                                                style={{ padding: '8px 16px', fontSize: 13 }}>
+                                                🖨️ 인쇄
+                                            </button>
+                                        </div>
+                                        <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }}
+                                            onClick={() => {
+                                                const selSchedules = (data.schedules || []).filter(s => selectedScheduleIds.has(s.id));
+                                                const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
+                                                if (selSchedules.length === 0 && selBoards.length === 0) { alert('뉴스레터에 포함할 항목을 선택해주세요.'); return; }
+                                                const secs = [{ type: 'paragraph', text: newsletterConfig.title || '뉴스레터' },
+                                                    { type: 'paragraph', text: `${DEFAULT_ORG_NAME}${newsletterConfig.issueNumber ? ' | ' + newsletterConfig.issueNumber : ''} | ${newsletterConfig.publishDate}` }];
+                                                if (newsletterConfig.greeting) secs.push({ type: 'paragraph', text: newsletterConfig.greeting });
+                                                if (selSchedules.length > 0) {
+                                                    secs.push({ type: 'paragraph', text: '주요 일정' });
+                                                    secs.push({ type: 'table', headers: ['날짜', '제목', '카테고리', '장소'],
+                                                        rows: selSchedules.map(s => [s.start_date||'', s.title||'', s.category||'', s.location||'-']) });
+                                                }
+                                                if (selBoards.length > 0) {
+                                                    secs.push({ type: 'paragraph', text: '주요 소식' });
+                                                    selBoards.forEach(b => { secs.push({ type: 'paragraph', text: b.title }); secs.push({ type: 'paragraph', text: (b.content||'').replace(/<[^>]*>/g, '') }); });
+                                                }
+                                                if (newsletterConfig.closing) secs.push({ type: 'paragraph', text: newsletterConfig.closing });
+                                                downloadHWPX('뉴스레터', secs, `뉴스레터_${formatLocalDate()}.hwpx`);
+                                            }}>📄 한글</button>
+                                    </div>
+
+                                    <div style={{ borderRadius: 16, overflow: 'hidden', background: '#f5f5f5', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
+                                        {/* Hero Header */}
+                                        <div style={{ background: 'linear-gradient(135deg,#134E42,#0f766e,#06b6d4)', padding: '36px 24px 28px', textAlign: 'center', borderRadius: '0 0 24px 24px' }}>
+                                            <div style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(255,255,255,0.15)', borderRadius: 16, fontSize: 11, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>
+                                                {newsletterConfig.issueNumber ? `${newsletterConfig.issueNumber} · ` : ''}{newsletterConfig.publishDate}
+                                            </div>
+                                            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 4px', letterSpacing: -0.5 }}>{newsletterConfig.title || '뉴스레터 제목'}</h2>
+                                            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 0 }}>{DEFAULT_ORG_NAME}</p>
+                                        </div>
+
+                                        <div style={{ padding: '20px 20px' }}>
+                                        {/* Greeting */}
+                                        {newsletterConfig.greeting && (
+                                            <div style={{ margin: '0 0 16px', padding: '14px 16px', background: 'linear-gradient(135deg,#f0fdf4,#ecfdf5)', borderRadius: 12, borderLeft: '3px solid #10b981', whiteSpace: 'pre-line', fontSize: 12 }}>
+                                                {newsletterConfig.greeting}
+                                            </div>
+                                        )}
+
+                                        {/* Selected schedules preview */}
+                                        {selectedSchedules.length > 0 && (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                                    <div style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#6366f1,#a855f7)', borderRadius: 2 }}></div>
+                                                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1e1e2e', margin: 0 }}>주요 일정</h4>
+                                                </div>
+                                                {(() => { const cc_ = { '교육': '#6366f1', '캠페인': '#ec4899', '회의': '#f59e0b', '평가': '#10b981', '기타': '#8b5cf6' }; return selectedSchedules.map(s => {
+                                                    const cc = cc_[s.category] || '#6b7280';
+                                                    return (
+                                                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0', marginBottom: 8 }}>
+                                                        <div style={{ minWidth: 42, textAlign: 'center' }}>
+                                                            <div style={{ fontSize: 10, color: '#999' }}>{(s.start_date||'').slice(5,7)}월</div>
+                                                            <div style={{ fontSize: 18, fontWeight: 800, color: '#1e1e2e' }}>{(s.start_date||'').slice(8)}</div>
+                                                            {s.end_date && s.end_date !== s.start_date && <div style={{ fontSize: 9, color: '#bbb', marginTop: 1 }}>~ {s.end_date.slice(5)}</div>}
+                                                        </div>
+                                                        <div style={{ width: 1, height: 28, background: '#eee' }}></div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontSize: 12, fontWeight: 600, color: '#1e1e2e' }}>{s.title}</div>
+                                                            <div style={{ fontSize: 10, color: '#999' }}>{s.location || ''}</div>
+                                                        </div>
+                                                        <span style={{ padding: '3px 10px', background: `${cc}15`, color: cc, fontSize: 10, fontWeight: 600, borderRadius: 16 }}>{s.category}</span>
+                                                    </div>
+                                                    );
+                                                }); })()}
+                                            </div>
+                                        )}
+
+                                        {/* Selected boards preview */}
+                                        {selectedBoardsArr.length > 0 && (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                                    <div style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#3b82f6,#06b6d4)', borderRadius: 2 }}></div>
+                                                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1e1e2e', margin: 0 }}>주요 소식</h4>
+                                                </div>
+                                                {(() => { const tc = { notice: '#ef4444', materials: '#3b82f6', report: '#8b5cf6', free: '#6b7280' };
+                                                    const tl = { notice: '공지', materials: '자료', report: '보고서', free: '자유' };
+                                                    return selectedBoardsArr.map(b => (
+                                                    <div key={b.id} style={{ marginBottom: 10, padding: '14px 16px', background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                                            <span style={{ width: 6, height: 6, background: tc[b.board_type]||'#999', borderRadius: '50%', display: 'inline-block' }}></span>
+                                                            <span style={{ fontSize: 10, fontWeight: 600, color: tc[b.board_type]||'#999' }}>{tl[b.board_type]||b.board_type}</span>
+                                                            <span style={{ fontSize: 10, color: '#ccc', marginLeft: 'auto' }}>{b.created_at?.split('T')[0]}</span>
+                                                        </div>
+                                                        <div style={{ fontWeight: 700, fontSize: 13, color: '#1e1e2e', marginBottom: 4 }}>{b.title}</div>
+                                                        {(boardImageUrls[b.id] || []).length > 0 && (
+                                                            <div style={{ margin: '6px 0', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                                                {boardImageUrls[b.id].map((url, i) => (
+                                                                    <img key={i} src={url} alt="" style={{ maxWidth: '100%', maxHeight: 160, borderRadius: 8, objectFit: 'cover' }} />
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <div style={{ color: '#777', fontSize: 11 }}>
+                                                            {rewrittenContents[b.id]
+                                                                ? <span style={{ color: '#10b981' }}>{rewrittenContents[b.id]}</span>
+                                                                : <>{stripHtml(b.content).slice(0, 200)}{stripHtml(b.content).length > 200 ? '...' : ''}</>
+                                                            }
+                                                        </div>
+                                                        <div style={{ marginTop: 6, display: 'flex', gap: 4 }}>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleRewriteBoard(b.id, b.content); }}
+                                                                disabled={rewritingBoardId === b.id}
+                                                                style={{ fontSize: 10, padding: '3px 8px', border: '1px solid #e0e0e0', borderRadius: 6, cursor: 'pointer', background: rewritingBoardId === b.id ? '#f0f0f0' : '#fafafa', color: '#555' }}>
+                                                                {rewritingBoardId === b.id ? '재가공 중...' : '✨ AI 재가공'}
+                                                            </button>
+                                                            {rewrittenContents[b.id] && (
+                                                                <button onClick={(e) => { e.stopPropagation(); setRewrittenContents(prev => { const n = {...prev}; delete n[b.id]; return n; }); }}
+                                                                    style={{ fontSize: 10, padding: '3px 8px', border: '1px solid #e0e0e0', borderRadius: 6, cursor: 'pointer', background: '#fff', color: '#999' }}>
+                                                                    원본 복원
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    ));
+                                                })()}
+                                            </div>
+                                        )}
+
+                                        {/* Selected galleries preview */}
+                                        {(() => { const selGalleries = (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id));
+                                            return selGalleries.length > 0 && (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                                    <div style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#f59e0b,#ef4444)', borderRadius: 2 }}></div>
+                                                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#1e1e2e', margin: 0 }}>갤러리</h4>
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                                                    {selGalleries.map(g => (
+                                                        <div key={g.id} style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #f0f0f0', background: '#fff' }}>
+                                                            {galleryThumbUrls[g.id] ? <img src={galleryThumbUrls[g.id]} alt="" style={{ width: '100%', height: 100, objectFit: 'cover' }} />
+                                                                : <div style={{ width: '100%', height: 100, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 20 }}>📷</div>}
+                                                            <div style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, color: '#1e1e2e' }}>{g.title}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ); })()}
+
+                                        {/* Closing */}
+                                        {newsletterConfig.closing && (
+                                            <div style={{ margin: '16px 0 0', padding: '14px 16px', background: '#f8f9fa', borderRadius: 12, whiteSpace: 'pre-line', fontSize: 12 }}>
+                                                {newsletterConfig.closing}
+                                            </div>
+                                        )}
+                                        </div>
+
+                                        {/* Empty state */}
+                                        {selectedSchedules.length === 0 && selectedBoardsArr.length === 0 && !newsletterConfig.greeting && !newsletterConfig.closing && (
+                                            <div style={{ textAlign: 'center', color: '#ccc', padding: '60px 20px' }}>
+                                                <p style={{ fontSize: 32, marginBottom: 8 }}>📰</p>
+                                                <p>일정이나 게시글을 선택하면 미리보기가 표시됩니다</p>
+                                            </div>
+                                        )}
+
+                                        {/* Footer */}
+                                        <div style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid #ddd', textAlign: 'center', fontSize: 11, color: '#aaa' }}>
+                                            {DEFAULT_ORG_NAME} · 아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // 관리자 페이지 렌더링
+            const renderAdmin = () => {
+                return (
+                    <div>
+                        <h1 className="section-title">⚙️ 관리자</h1>
+                        <p className="section-subtitle">사용자 계정, 수급자 정보, 기관 정보를 관리합니다.</p>
+
+                        {/* 탭 바 */}
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #E2E8F0', paddingBottom: '0' }}>
+                            {[
+                                { key: 'users', label: '👤 사용자 관리' },
+                                { key: 'recipients', label: '📋 수급자 관리' },
+                                { key: 'orgSettings', label: '🏢 기관 정보' },
+                                { key: 'logs', label: '📜 활동 로그' }
+                            ].map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setAdminTab(tab.key)}
+                                    style={{
+                                        padding: '10px 20px',
+                                        border: 'none',
+                                        borderBottom: adminTab === tab.key ? '3px solid #1B6B5A' : '3px solid transparent',
+                                        background: 'none',
+                                        color: adminTab === tab.key ? '#1B6B5A' : '#6B6560',
+                                        fontWeight: adminTab === tab.key ? '700' : '400',
+                                        fontSize: '14px',
+                                        cursor: 'pointer',
+                                        marginBottom: '-2px'
+                                    }}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* ── 수급자 관리 탭 ─────────────────────────────────────── */}
+                        {adminTab === 'recipients' && (
+                            <div>
+                                {recipientMsg.text && (
+                                    <div className={recipientMsg.type === 'success' ? 'success-message' : 'error-message'}>
+                                        {recipientMsg.text}
+                                    </div>
+                                )}
+                                <div style={{ marginBottom: '24px' }}>
+                                    {!showRecipientForm ? (
+                                        <button className="btn btn-primary" onClick={() => {
+                                            setShowRecipientForm(true);
+                                            setEditingRecipient(null);
+                                            setRecipientForm({ name: '', birth_date: '', address: '', phone: '', notes: '' });
+                                            setRecipientMsg({ type: '', text: '' });
+                                        }}>
+                                            + 수급자 등록
+                                        </button>
+                                    ) : (
+                                        <div className="admin-form-card">
+                                            <h3>{editingRecipient ? `✏️ '${editingRecipient.name}' 정보 수정` : '➕ 수급자 등록'}</h3>
+                                            <form onSubmit={handleSaveRecipient}>
+                                                <div className="form-grid">
+                                                    <div className="form-group">
+                                                        <label>성명 *</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.name}
+                                                            onChange={e => setRecipientForm({...recipientForm, name: e.target.value})}
+                                                            placeholder="수급자 성명"
+                                                            required
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>생년월일</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.birth_date}
+                                                            onChange={e => setRecipientForm({...recipientForm, birth_date: e.target.value})}
+                                                            placeholder="예: 850101 또는 1985-01-01"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>전화번호</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.phone}
+                                                            onChange={e => setRecipientForm({...recipientForm, phone: e.target.value})}
+                                                            placeholder="010-0000-0000"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                                        <label>주소</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.address}
+                                                            onChange={e => setRecipientForm({...recipientForm, address: e.target.value})}
+                                                            placeholder="도로명 주소"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                                        <label>비고</label>
+                                                        <input
+                                                            type="text"
+                                                            value={recipientForm.notes}
+                                                            onChange={e => setRecipientForm({...recipientForm, notes: e.target.value})}
+                                                            placeholder="메모 (선택)"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                                                    <button type="submit" className="btn btn-primary">
+                                                        {editingRecipient ? '수정 저장' : '수급자 등록'}
+                                                    </button>
+                                                    <button type="button" className="btn btn-secondary" onClick={() => {
+                                                        setShowRecipientForm(false);
+                                                        setEditingRecipient(null);
+                                                        setRecipientForm({ name: '', birth_date: '', address: '', phone: '', notes: '' });
+                                                    }}>
+                                                        취소
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {recipientsLoading ? (
+                                    <div className="loading">
+                                        <div className="loading-spinner"></div>
+                                        <div>수급자 목록을 불러오고 있습니다...</div>
+                                    </div>
+                                ) : (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table className="user-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>성명</th>
+                                                    <th>생년월일</th>
+                                                    <th>전화번호</th>
+                                                    <th>주소</th>
+                                                    <th>비고</th>
+                                                    <th>관리</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {recipients.map(r => (
+                                                    <tr key={r.id}>
+                                                        <td style={{ fontWeight: '500' }}>{r.name}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.birth_date || '-'}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.phone || '-'}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.address || '-'}</td>
+                                                        <td style={{ color: '#6B6560', fontSize: '13px' }}>{r.notes || '-'}</td>
+                                                        <td>
+                                                            <div className="admin-actions">
+                                                                <button
+                                                                    className="btn btn-secondary btn-sm"
+                                                                    onClick={() => {
+                                                                        setEditingRecipient(r);
+                                                                        setRecipientForm({
+                                                                            name: r.name,
+                                                                            birth_date: r.birth_date || '',
+                                                                            address: r.address || '',
+                                                                            phone: r.phone || '',
+                                                                            notes: r.notes || ''
+                                                                        });
+                                                                        setShowRecipientForm(true);
+                                                                        setRecipientMsg({ type: '', text: '' });
+                                                                    }}
+                                                                >
+                                                                    수정
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-danger btn-sm"
+                                                                    onClick={() => handleDeleteRecipient(r)}
+                                                                >
+                                                                    삭제
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {recipients.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#A0AEC0' }}>
+                                                            등록된 수급자가 없습니다.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                        <div style={{ marginTop: '16px', fontSize: '13px', color: '#A0AEC0' }}>
+                                            총 {recipients.length}명
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── 기관 정보 탭 ──────────────────────────────────────── */}
+                        {adminTab === 'orgSettings' && (
+                            <div>
+                                {orgSettingsMsg.text && (
+                                    <div className={orgSettingsMsg.type === 'success' ? 'success-message' : 'error-message'}>
+                                        {orgSettingsMsg.text}
+                                    </div>
+                                )}
+                                <div className="admin-form-card">
+                                    <h3>🏢 기관 정보 설정</h3>
+                                    <p style={{ fontSize: '13px', color: '#6B6560', marginBottom: '16px' }}>
+                                        급여지급명세서의 "지급자" 항목에 자동으로 채워집니다.
+                                    </p>
+                                    <div className="form-grid">
+                                        <div className="form-group">
+                                            <label>기관명</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_name}
+                                                onChange={e => setOrgSettings({...orgSettings, org_name: e.target.value})}
+                                                placeholder="기관(단체) 이름"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>기관 전화번호</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_phone}
+                                                onChange={e => setOrgSettings({...orgSettings, org_phone: e.target.value})}
+                                                placeholder="000-000-0000"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>대표자명</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_representative}
+                                                onChange={e => setOrgSettings({...orgSettings, org_representative: e.target.value})}
+                                                placeholder="대표자 이름"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>사업자등록번호 (고유번호)</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_registration_number}
+                                                onChange={e => setOrgSettings({...orgSettings, org_registration_number: e.target.value})}
+                                                placeholder="000-00-00000"
+                                            />
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label>기관주소</label>
+                                            <input
+                                                type="text"
+                                                value={orgSettings.org_address}
+                                                onChange={e => setOrgSettings({...orgSettings, org_address: e.target.value})}
+                                                placeholder="도로명 주소"
+                                            />
+                                        </div>
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label>단체직인 이미지</label>
+                                            {orgSettings.org_seal && (
+                                                <div style={{ marginBottom: '8px' }}>
+                                                    <img
+                                                        src={orgSettings.org_seal}
+                                                        alt="등록된 단체직인"
+                                                        style={{ maxHeight: '80px', border: '1px solid #ddd', borderRadius: '4px', padding: '4px', background: '#f9f9f9' }}
+                                                    />
+                                                </div>
+                                            )}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={e => {
+                                                    const file = e.target.files[0];
+                                                    if (!file) return;
+                                                    const reader = new FileReader();
+                                                    reader.onload = ev => setOrgSettings({...orgSettings, org_seal: ev.target.result});
+                                                    reader.readAsDataURL(file);
+                                                }}
+                                            />
+                                            {orgSettings.org_seal && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary"
+                                                    style={{ marginTop: '6px', fontSize: '12px' }}
+                                                    onClick={() => setOrgSettings({...orgSettings, org_seal: ''})}
+                                                >
+                                                    🗑 직인 삭제
+                                                </button>
+                                            )}
+                                            <p style={{ fontSize: '12px', color: '#9C9690', marginTop: '4px' }}>
+                                                PNG/JPG 권장. 배경이 투명한 PNG 사용 시 가장 자연스럽습니다.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: '16px' }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={saveOrgSettings}
+                                            disabled={orgSettingsSaving}
+                                        >
+                                            {orgSettingsSaving ? '저장 중...' : '💾 저장'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── 사용자 관리 탭 ─────────────────────────────────────── */}
+                        {adminTab === 'users' && (<div>
+                        {adminError && <div className="error-message">{adminError}</div>}
+                        {adminSuccess && <div className="success-message">{adminSuccess}</div>}
+
+                        {/* 사용자 추가/수정 폼 */}
+                        <div style={{ marginBottom: '24px' }}>
+                            {!showUserForm ? (
+                                <button className="btn btn-primary" onClick={() => { setShowUserForm(true); setEditingUser(null); setUserForm({ username: '', name: '', email: '', password: '', role: 'staff', phone: '', organization: '청년노동자인권센터', position: '' }); }}>
+                                    + 새 사용자 추가
+                                </button>
+                            ) : (
+                                <div className="admin-form-card">
+                                    <h3>{editingUser ? `✏️ '${editingUser.name}' 정보 수정` : '➕ 새 사용자 추가'}</h3>
+                                    <form onSubmit={editingUser ? handleUpdateUser : handleAddUser}>
+                                        <div className="form-grid">
+                                            <div className="form-group">
+                                                <label>아이디 *</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.username}
+                                                    onChange={e => setUserForm({...userForm, username: e.target.value})}
+                                                    placeholder="영문 아이디"
+                                                    required
+                                                    disabled={!!editingUser}
+                                                    style={editingUser ? { background: '#EDF2F7', cursor: 'not-allowed' } : {}}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>이름 *</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.name}
+                                                    onChange={e => setUserForm({...userForm, name: e.target.value})}
+                                                    placeholder="사용자 이름"
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>{editingUser ? '새 비밀번호 (변경시에만)' : '비밀번호 *'}</label>
+                                                <input
+                                                    type="password"
+                                                    value={userForm.password}
+                                                    onChange={e => setUserForm({...userForm, password: e.target.value})}
+                                                    placeholder={editingUser ? '변경하지 않으려면 비워두세요' : '비밀번호 입력'}
+                                                    required={!editingUser}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>역할</label>
+                                                <select
+                                                    value={userForm.role}
+                                                    onChange={e => setUserForm({...userForm, role: e.target.value})}
+                                                >
+                                                    <option value="admin">관리자</option>
+                                                    <option value="staff">직원</option>
+                                                    <option value="participant">참여자</option>
+                                                    <option value="viewer">열람자</option>
+                                                </select>
+                                            </div>
+                                            <div className="form-group">
+                                                <label>이메일</label>
+                                                <input
+                                                    type="email"
+                                                    value={userForm.email}
+                                                    onChange={e => setUserForm({...userForm, email: e.target.value})}
+                                                    placeholder="email@example.com"
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>전화번호</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.phone}
+                                                    onChange={e => setUserForm({...userForm, phone: e.target.value})}
+                                                    placeholder="010-0000-0000"
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>소속</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.organization}
+                                                    onChange={e => setUserForm({...userForm, organization: e.target.value})}
+                                                    placeholder="소속 단체명"
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>직위</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.position}
+                                                    onChange={e => setUserForm({...userForm, position: e.target.value})}
+                                                    placeholder="직위/직책"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                                            <button type="submit" className="btn btn-primary">
+                                                {editingUser ? '수정 저장' : '사용자 추가'}
+                                            </button>
+                                            <button type="button" className="btn btn-secondary" onClick={resetUserForm}>
+                                                취소
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 사용자 목록 */}
+                        {adminLoading ? (
+                            <div className="loading">
+                                <div className="loading-spinner"></div>
+                                <div>사용자 목록을 불러오고 있습니다...</div>
+                            </div>
+                        ) : (
+                            <div style={{ overflowX: 'auto' }}>
+                                <table className="user-table">
+                                    <thead>
+                                        <tr>
+                                            <th>아이디</th>
+                                            <th>이름</th>
+                                            <th>역할</th>
+                                            <th>이메일</th>
+                                            <th>소속</th>
+                                            <th>상태</th>
+                                            <th>관리</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {adminUsers.map(user => (
+                                            <tr key={user.id}>
+                                                <td style={{ fontWeight: '500' }}>{user.username}</td>
+                                                <td>{user.name}</td>
+                                                <td>
+                                                    <span className={`role-badge role-${user.role}`}>
+                                                        {roleLabels[user.role] || user.role}
+                                                    </span>
+                                                </td>
+                                                <td style={{ color: '#6B6560', fontSize: '13px' }}>{user.email}</td>
+                                                <td style={{ color: '#6B6560', fontSize: '13px' }}>{user.organization || '-'}</td>
+                                                <td>
+                                                    {user.is_active ? (
+                                                        <span className="status-active" style={{ fontSize: '13px' }}>● 활성</span>
+                                                    ) : (
+                                                        <span className="status-inactive" style={{ fontSize: '13px' }}>● 비활성</span>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <div className="admin-actions">
+                                                        <button
+                                                            className="btn btn-secondary btn-sm"
+                                                            onClick={() => startEditUser(user)}
+                                                        >
+                                                            수정
+                                                        </button>
+                                                        {user.is_active ? (
+                                                            <button
+                                                                className="btn btn-danger btn-sm"
+                                                                onClick={() => handleDeleteUser(user)}
+                                                            >
+                                                                삭제
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                className="btn btn-secondary btn-sm"
+                                                                onClick={() => handleRestoreUser(user)}
+                                                                style={{ color: '#22543D' }}
+                                                            >
+                                                                복원
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {adminUsers.length === 0 && (
+                                            <tr>
+                                                <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#A0AEC0' }}>
+                                                    등록된 사용자가 없습니다.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                                <div style={{ marginTop: '16px', fontSize: '13px', color: '#A0AEC0' }}>
+                                    총 {adminUsers.length}명 (활성: {adminUsers.filter(u => u.is_active).length}명, 비활성: {adminUsers.filter(u => !u.is_active).length}명)
+                                </div>
+                            </div>
+                        )}
+                        </div>)}
+
+                        {/* ── F-04: 활동 로그 탭 ─────────────────────────────────────── */}
+                        {adminTab === 'logs' && (
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                        <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>📜 활동 로그</h3>
+                                        <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={loadActivityLogs}>🔄 새로고침</button>
+                                    </div>
+                                    {/* F-04: 필터링 */}
+                                    <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                                        <select className="form-input" style={{ width: 'auto', fontSize: 13 }} value={logFilterUser} onChange={e => setLogFilterUser(e.target.value)}>
+                                            <option value="">사용자 전체</option>
+                                            {[...new Set(activityLogs.map(l => l.user_name).filter(Boolean))].map(u => (
+                                                <option key={u} value={u}>{u}</option>
+                                            ))}
+                                        </select>
+                                        <select className="form-input" style={{ width: 'auto', fontSize: 13 }} value={logFilterAction} onChange={e => setLogFilterAction(e.target.value)}>
+                                            <option value="">작업 유형 전체</option>
+                                            <option value="등록">등록</option>
+                                            <option value="수정">수정</option>
+                                            <option value="삭제">삭제</option>
+                                            <option value="승인">승인</option>
+                                            <option value="댓글">댓글</option>
+                                            <option value="프로필">프로필</option>
+                                            <option value="일괄">일괄</option>
+                                        </select>
+                                        <input type="date" className="form-input" style={{ width: 'auto', fontSize: 13 }} value={logFilterDateFrom} onChange={e => setLogFilterDateFrom(e.target.value)} title="시작일" />
+                                        <span style={{ fontSize: 12, color: '#718096', lineHeight: '32px' }}>~</span>
+                                        <input type="date" className="form-input" style={{ width: 'auto', fontSize: 13 }} value={logFilterDateTo} onChange={e => setLogFilterDateTo(e.target.value)} title="종료일" />
+                                        <span style={{ fontSize: 12, color: '#718096', lineHeight: '32px' }}>{filteredLogs.length}건</span>
+                                    </div>
+                                    {activityLogs.length === 0 ? (
+                                        <div style={{ textAlign: 'center', color: '#A0AEC0', padding: 40 }}>
+                                            기록된 활동 로그가 없습니다.
+                                            <div style={{ marginTop: 12 }}>
+                                                <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={loadActivityLogs}>로그 불러오기</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+                                            {filteredLogs.map(log => (
+                                                <div key={log.id} style={{ padding: '10px 0', borderBottom: '1px solid #F0F0F0', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                                    <div style={{ fontSize: 20 }}>
+                                                        {log.action.includes('삭제') ? '🗑️' : log.action.includes('수정') ? '✏️' : log.action.includes('등록') || log.action.includes('작성') ? '📝' : log.action.includes('승인') ? '✅' : log.action.includes('로그인') ? '🔑' : '📋'}
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontSize: 14, fontWeight: 500, color: '#2D3748' }}>{log.action}</div>
+                                                        {log.details && <div style={{ fontSize: 13, color: '#718096', marginTop: 2 }}>{log.details}</div>}
+                                                        <div style={{ fontSize: 11, color: '#A0AEC0', marginTop: 4 }}>
+                                                            {log.user_name || '시스템'} • {new Date(log.created_at).toLocaleString('ko-KR')}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const renderContent = () => {
+                if (loading) {
+                    return (
+                        <div className="loading">
+                            <div className="loading-spinner"></div>
+                            <div>데이터를 불러오고 있습니다...</div>
+                        </div>
+                    );
+                }
+
+                if (error) {
+                    return (
+                        <div>
+                            <div className="error-message">
+                                {error}
+                            </div>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => window.location.reload()}
+                            >
+                                다시 시도
+                            </button>
+                        </div>
+                    );
+                }
+
+                switch(currentPage) {
+                    case "dashboard": return renderDashboard();
+                    case "budget": return renderBudget();
+                    case "schedule": return renderSchedule();
+                    case "gallery": return renderGallery();
+                    case "board": return renderBoard();
+                    case "guide": return renderGuide();
+                    case "newsletter": return renderNewsletter();
+                    case "admin": return currentUser?.role === 'admin' ? renderAdmin() : renderDashboard();
+                    default: return renderDashboard();
+                }
+            };
+
+            // 로그인 안 된 경우 로그인 페이지 표시
+            if (!currentUser) {
+                return <LoginPage onLogin={setCurrentUser} />;
+            }
+
+            return (
+                <div>
+                    {/* Header */}
+                    <div className="header">
+                        <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
+                                    아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                                </h1>
+                                <p style={{ margin: '8px 0 0 0', fontSize: '15px', opacity: 0.9 }}>
+                                    청년노동자인권센터 • 총 예산 7천만원
+                                </p>
+                            </div>
+                            <div className="header-user-info">
+                                <div style={{ textAlign: 'right' }}>
+                                    <div className="user-name" style={{ cursor: 'pointer', textDecoration: 'underline dotted' }} onClick={openProfileModal} title="프로필 수정">{currentUser.name}</div>
+                                    <div className="user-role">{roleLabels[currentUser.role] || currentUser.role}</div>
+                                </div>
+                                <button className="logout-btn" onClick={handleLogout}>
+                                    로그아웃
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="container">
+                        {/* Navigation */}
+                        <div className="navigation">
+                            {[
+                                { id: 'dashboard', label: '🏠 대시보드', description: '전체 현황 보기' },
+                                {
+                                    id: 'budget',
+                                    label: '💰 예산관리',
+                                    description: '고급 예산 집행 시스템'
+                                },
+                                { id: 'schedule', label: '📅 일정관리', description: '사업 일정 및 참여자 관리' },
+                                { id: 'gallery', label: '📸 갤러리', description: '현장 사진 및 결과물' },
+                                { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' },
+                                { id: 'guide', label: '📖 회계가이드', description: '회계처리방식 안내' },
+                                { id: 'newsletter', label: '📰 뉴스레터', description: '일정·게시글 뉴스레터 제작' },
+                                ...(currentUser.role === 'admin' ? [{ id: 'admin', label: '⚙️ 관리자', description: '사용자 및 시스템 관리' }] : [])
+                            ].map(nav => (
+                                <button
+                                    key={nav.id}
+                                    className={`nav-btn ${currentPage === nav.id ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setCurrentPage(nav.id);
+                                        // Reset board/gallery views when navigating
+                                        if (nav.id === 'board') { setBoardView('list'); setSelectedPost(null); setEditingPost(null); }
+                                        if (nav.id === 'gallery') { setGalleryView('list'); setSelectedGalleryItem(null); setEditingGalleryItem(null); }
+                                    }}
+                                    title={nav.description}
+                                >
+                                    {nav.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Content */}
+                        <div className="content-area">
+                            {renderContent()}
+                        </div>
+                    </div>
+
+                    {/* F-03: 프로필 수정 모달 */}
+                    {profileModal && (
+                        <div className="schedule-modal-overlay" onClick={() => setProfileModal(false)}>
+                            <div className="schedule-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+                                <div className="schedule-modal-header">
+                                    <h3>👤 프로필 수정</h3>
+                                    <button className="schedule-modal-close" onClick={() => setProfileModal(false)}>&times;</button>
+                                </div>
+                                <div className="schedule-modal-body">
+                                    {profileMsg && <div style={{ padding: '8px 12px', marginBottom: 12, borderRadius: 8, fontSize: 13, background: profileMsg.includes('실패') || profileMsg.includes('일치') || profileMsg.includes('입력') ? '#FED7D7' : '#C6F6D5', color: profileMsg.includes('실패') || profileMsg.includes('일치') || profileMsg.includes('입력') ? '#9B2C2C' : '#22543D' }}>{profileMsg}</div>}
+                                    <div className="schedule-form-group">
+                                        <label>이름</label>
+                                        <input type="text" value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>이메일</label>
+                                        <input type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>전화번호</label>
+                                        <input type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))} />
+                                    </div>
+                                    <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 16, paddingTop: 16 }}>
+                                        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#E53E3E' }}>🔒 비밀번호 변경</div>
+                                        <div className="schedule-form-group">
+                                            <label>현재 비밀번호</label>
+                                            <input type="password" value={profileForm.currentPassword} onChange={e => setProfileForm(p => ({ ...p, currentPassword: e.target.value }))} />
+                                        </div>
+                                        <div className="schedule-form-group">
+                                            <label>새 비밀번호</label>
+                                            <input type="password" value={profileForm.newPassword} onChange={e => setProfileForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="변경 시에만 입력" />
+                                            {profileForm.newPassword && (() => {
+                                                const s = getPasswordStrength(profileForm.newPassword);
+                                                return s && (
+                                                    <div style={{ marginTop: 6 }}>
+                                                        <div style={{ height: 4, background: '#E2E8F0', borderRadius: 2, overflow: 'hidden' }}>
+                                                            <div style={{ width: s.width, height: '100%', background: s.color, borderRadius: 2, transition: 'width 0.3s' }} />
+                                                        </div>
+                                                        <span style={{ fontSize: 11, color: s.color, fontWeight: 600 }}>{s.label}</span>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                        <div className="schedule-form-group">
+                                            <label>새 비밀번호 확인</label>
+                                            <input type="password" value={profileForm.confirmPassword} onChange={e => setProfileForm(p => ({ ...p, confirmPassword: e.target.value }))} placeholder="새 비밀번호 재입력" />
+                                            {profileForm.confirmPassword && profileForm.newPassword !== profileForm.confirmPassword && (
+                                                <span style={{ fontSize: 11, color: '#E53E3E', marginTop: 4, display: 'block' }}>비밀번호가 일치하지 않습니다.</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="schedule-modal-footer">
+                                    <button className="btn btn-secondary" onClick={() => setProfileModal(false)}>취소</button>
+                                    <button className="btn btn-primary" onClick={saveProfile}>저장</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 회의진행일지 입력 모달 */}
+                    {meetingMinutesModal && (
+                        <div className="schedule-modal-overlay" onClick={() => setMeetingMinutesModal(null)}>
+                            <div className="schedule-modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+                                <div className="schedule-modal-header">
+                                    <h3>📋 회의진행일지 생성</h3>
+                                    <button className="schedule-modal-close" onClick={() => setMeetingMinutesModal(null)}>&times;</button>
+                                </div>
+                                <div className="schedule-modal-body">
+                                    <div className="schedule-form-group">
+                                        <label>회의 제목</label>
+                                        <input type="text" value={meetingMinutesForm.title}
+                                            onChange={e => setMeetingMinutesForm(p => ({ ...p, title: e.target.value }))}
+                                            placeholder="예: 2026년 청년노동권리교육 자문 회의" />
+                                    </div>
+                                    <div className="schedule-form-row">
+                                        <div className="schedule-form-group">
+                                            <label>일시</label>
+                                            <input type="text" value={meetingMinutesForm.date}
+                                                onChange={e => setMeetingMinutesForm(p => ({ ...p, date: e.target.value }))}
+                                                placeholder="예: 2026-03-10 14:00" />
+                                        </div>
+                                        <div className="schedule-form-group">
+                                            <label>장소</label>
+                                            <input type="text" value={meetingMinutesForm.location}
+                                                onChange={e => setMeetingMinutesForm(p => ({ ...p, location: e.target.value }))}
+                                                placeholder="예: 청년노동자인권센터 사무실" />
+                                        </div>
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>회의 내용 / 안건</label>
+                                        <textarea rows="4" value={meetingMinutesForm.content}
+                                            onChange={e => setMeetingMinutesForm(p => ({ ...p, content: e.target.value }))}
+                                            placeholder="회의에서 다룬 안건, 논의 내용, 결정 사항 등을 입력하세요." />
+                                    </div>
+                                    <div className="schedule-form-group">
+                                        <label>참석자 명단 <span style={{ fontWeight: 'normal', color: '#9C9690', fontSize: '12px' }}>(한 줄에 한 명씩 입력)</span></label>
+                                        <textarea rows="5" value={meetingMinutesForm.participants}
+                                            onChange={e => setMeetingMinutesForm(p => ({ ...p, participants: e.target.value }))}
+                                            placeholder={'홍길동\n김영희\n이철수'} />
+                                    </div>
+                                </div>
+                                <div className="schedule-modal-footer">
+                                    <button className="btn" style={{ background: '#F8F6F1', border: '1px solid #EBE8E1', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                        onClick={() => setMeetingMinutesModal(null)}>
+                                        취소
+                                    </button>
+                                    <button className="btn btn-primary"
+                                        onClick={() => {
+                                            const participantList = meetingMinutesForm.participants
+                                                .split('\n')
+                                                .map(s => s.trim())
+                                                .filter(Boolean);
+                                            openMeetingMinutes({
+                                                title: meetingMinutesForm.title,
+                                                date: meetingMinutesForm.date,
+                                                location: meetingMinutesForm.location,
+                                                content: meetingMinutesForm.content,
+                                                participants: participantList
+                                            }, orgSettings);
+                                            setMeetingMinutesModal(null);
+                                        }}>
+                                        📋 문서 생성
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 사업변경신청서 입력 모달 */}
+                    {changeApplicationModal && (
+                        <div className="schedule-modal-overlay" onClick={() => setChangeApplicationModal(false)}>
+                            <div className="schedule-modal" style={{ maxWidth: 860, maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+                                <div className="schedule-modal-header">
+                                    <h3>📝 사업변경신청서 생성</h3>
+                                    <button className="schedule-modal-close" onClick={() => setChangeApplicationModal(false)}>&times;</button>
+                                </div>
+                                <div className="schedule-modal-body">
+                                    {/* 섹션 1: 사유 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>1. 사업변경취지 및 사유</label>
+                                        <textarea rows="4" value={changeApplicationForm.reason}
+                                            onChange={e => setChangeApplicationForm(p => ({ ...p, reason: e.target.value }))}
+                                            placeholder="사업변경의 취지와 사유를 입력하세요." />
+                                    </div>
+
+                                    {/* 섹션 2: 사업변경내역 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>2. 사업변경내역</label>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: 8 }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th colSpan="3" style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>변경 전</th>
+                                                        <th colSpan="3" style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>변경 후</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '40px' }}></th>
+                                                    </tr>
+                                                    <tr>
+                                                        {['단위사업', '일정', '추진내용', '단위사업', '일정', '추진내용'].map((h, i) => (
+                                                            <th key={i} style={{ background: '#f9f9f9', border: '1px solid #ddd', padding: '4px 6px', fontSize: '11px', textAlign: 'center' }}>{h}</th>
+                                                        ))}
+                                                        <th style={{ background: '#f9f9f9', border: '1px solid #ddd', padding: '4px' }}></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {changeApplicationForm.changeDetails.map((row, idx) => (
+                                                        <tr key={idx}>
+                                                            {['beforeUnit', 'beforeSchedule', 'beforeContent', 'afterUnit', 'afterSchedule', 'afterContent'].map(field => (
+                                                                <td key={field} style={{ border: '1px solid #ddd', padding: '2px' }}>
+                                                                    <input type="text" value={row[field]}
+                                                                        style={{ width: '100%', border: 'none', padding: '4px', fontSize: '11px', background: 'transparent' }}
+                                                                        onChange={e => {
+                                                                            const updated = [...changeApplicationForm.changeDetails];
+                                                                            updated[idx] = { ...updated[idx], [field]: e.target.value };
+                                                                            setChangeApplicationForm(p => ({ ...p, changeDetails: updated }));
+                                                                        }} />
+                                                                </td>
+                                                            ))}
+                                                            <td style={{ border: '1px solid #ddd', padding: '2px', textAlign: 'center' }}>
+                                                                {changeApplicationForm.changeDetails.length > 1 && (
+                                                                    <button style={{ background: 'none', border: 'none', color: '#D32F2F', cursor: 'pointer', fontSize: '14px' }}
+                                                                        onClick={() => {
+                                                                            const updated = changeApplicationForm.changeDetails.filter((_, i) => i !== idx);
+                                                                            setChangeApplicationForm(p => ({ ...p, changeDetails: updated }));
+                                                                        }}>✕</button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <button style={{ marginTop: 6, padding: '4px 12px', fontSize: '12px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer' }}
+                                            onClick={() => setChangeApplicationForm(p => ({
+                                                ...p,
+                                                changeDetails: [...p.changeDetails, { beforeUnit: '', beforeSchedule: '', beforeContent: '', afterUnit: '', afterSchedule: '', afterContent: '' }]
+                                            }))}>
+                                            + 행 추가
+                                        </button>
+                                    </div>
+
+                                    {/* 섹션 3: 예산변경내역 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>3. 예산변경내역</label>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: 8 }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '15%' }}>관리그룹</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '25%' }}>단위사업</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '20%' }}>변경전 (원)</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '20%' }}>변경후 (원)</th>
+                                                        <th style={{ background: '#f0f0f0', border: '1px solid #ddd', padding: '6px', width: '20%' }}>증감</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {BUDGET_DATA.categories.map(cat => {
+                                                        let catBeforeTotal = 0;
+                                                        let catAfterTotal = 0;
+                                                        const subRows = cat.subcategories.map(sub => {
+                                                            const bc = changeApplicationForm.budgetChanges[sub.id] || { before: sub.budget, after: sub.budget };
+                                                            catBeforeTotal += bc.before;
+                                                            catAfterTotal += bc.after;
+                                                            const diff = bc.after - bc.before;
+                                                            const changed = diff !== 0;
+                                                            return (
+                                                                <tr key={sub.id} style={changed ? { background: '#FFFDE7' } : {}}>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', fontSize: '11px' }}>{cat.name}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', fontSize: '11px' }}>{sub.name}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px', color: '#666' }}>
+                                                                        {fmt(bc.before)}
+                                                                    </td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '2px' }}>
+                                                                        <input type="text" inputMode="numeric" value={fmtInput(bc.after)}
+                                                                            style={{ width: '100%', border: 'none', padding: '4px', fontSize: '11px', textAlign: 'right', background: 'transparent' }}
+                                                                            onChange={e => {
+                                                                                const val = Number(parseInput(e.target.value)) || 0;
+                                                                                setChangeApplicationForm(p => ({
+                                                                                    ...p,
+                                                                                    budgetChanges: { ...p.budgetChanges, [sub.id]: { ...p.budgetChanges[sub.id], after: val } }
+                                                                                }));
+                                                                            }} />
+                                                                    </td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px',
+                                                                        color: diff > 0 ? '#1B6B5A' : diff < 0 ? '#D32F2F' : '#666' }}>
+                                                                        {diff > 0 ? '+' : ''}{fmt(diff)}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        });
+                                                        return (
+                                                            <React.Fragment key={cat.id}>
+                                                                {subRows}
+                                                                <tr style={{ background: '#f5f5f5', fontWeight: 'bold' }}>
+                                                                    <td colSpan="2" style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{cat.name} 소계</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>{fmt(catBeforeTotal)}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>{fmt(catAfterTotal)}</td>
+                                                                    <td style={{ border: '1px solid #ddd', padding: '4px 6px', textAlign: 'right', fontSize: '11px',
+                                                                        color: (catAfterTotal - catBeforeTotal) > 0 ? '#1B6B5A' : (catAfterTotal - catBeforeTotal) < 0 ? '#D32F2F' : '#666' }}>
+                                                                        {(catAfterTotal - catBeforeTotal) > 0 ? '+' : ''}{fmt(catAfterTotal - catBeforeTotal)}
+                                                                    </td>
+                                                                </tr>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                    {(() => {
+                                                        let totalBefore = 0, totalAfter = 0;
+                                                        BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sub => {
+                                                            const bc = changeApplicationForm.budgetChanges[sub.id] || { before: sub.budget, after: sub.budget };
+                                                            totalBefore += bc.before;
+                                                            totalAfter += bc.after;
+                                                        }));
+                                                        const totalDiff = totalAfter - totalBefore;
+                                                        return (
+                                                            <tr style={{ background: '#e8e8e8', fontWeight: 'bold' }}>
+                                                                <td colSpan="2" style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>합 계</td>
+                                                                <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'right' }}>{fmt(totalBefore)}</td>
+                                                                <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'right' }}>{fmt(totalAfter)}</td>
+                                                                <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'right',
+                                                                    color: totalDiff > 0 ? '#1B6B5A' : totalDiff < 0 ? '#D32F2F' : '#666' }}>
+                                                                    {totalDiff > 0 ? '+' : ''}{fmt(totalDiff)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })()}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* 섹션 4: 구체내역 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>4. 구체내역</label>
+                                        {changeApplicationForm.specificDetails.map((detail, idx) => (
+                                            <div key={idx} style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, marginTop: 8, position: 'relative', background: '#fafafa' }}>
+                                                {changeApplicationForm.specificDetails.length > 1 && (
+                                                    <button style={{ position: 'absolute', top: 6, right: 8, background: 'none', border: 'none', color: '#D32F2F', cursor: 'pointer', fontSize: '14px' }}
+                                                        onClick={() => {
+                                                            const updated = changeApplicationForm.specificDetails.filter((_, i) => i !== idx);
+                                                            setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                        }}>✕</button>
+                                                )}
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+                                                    <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                        <label style={{ fontSize: '12px' }}>단위사업명</label>
+                                                        <input type="text" value={detail.unitName}
+                                                            onChange={e => {
+                                                                const updated = [...changeApplicationForm.specificDetails];
+                                                                updated[idx] = { ...updated[idx], unitName: e.target.value };
+                                                                setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                            }}
+                                                            placeholder="예: 노동안전보건 교과서 기초연구" />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                                        <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                            <label style={{ fontSize: '12px' }}>변경전 금액</label>
+                                                            <input type="text" inputMode="numeric" value={fmtInput(detail.beforeAmount)}
+                                                                onChange={e => {
+                                                                    const updated = [...changeApplicationForm.specificDetails];
+                                                                    updated[idx] = { ...updated[idx], beforeAmount: Number(parseInput(e.target.value)) || 0 };
+                                                                    setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                                }} />
+                                                        </div>
+                                                        <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                            <label style={{ fontSize: '12px' }}>변경후 금액</label>
+                                                            <input type="text" inputMode="numeric" value={fmtInput(detail.afterAmount)}
+                                                                onChange={e => {
+                                                                    const updated = [...changeApplicationForm.specificDetails];
+                                                                    updated[idx] = { ...updated[idx], afterAmount: Number(parseInput(e.target.value)) || 0 };
+                                                                    setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                                }} />
+                                                        </div>
+                                                        <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                            <label style={{ fontSize: '12px' }}>증감</label>
+                                                            <div style={{ padding: '8px', fontSize: '12px', color: (detail.afterAmount - detail.beforeAmount) > 0 ? '#1B6B5A' : (detail.afterAmount - detail.beforeAmount) < 0 ? '#D32F2F' : '#666' }}>
+                                                                {(detail.afterAmount - detail.beforeAmount) > 0 ? '+' : ''}{fmt(detail.afterAmount - detail.beforeAmount)}원
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                        <label style={{ fontSize: '12px' }}>산출근거</label>
+                                                        <textarea rows="2" value={detail.basis}
+                                                            onChange={e => {
+                                                                const updated = [...changeApplicationForm.specificDetails];
+                                                                updated[idx] = { ...updated[idx], basis: e.target.value };
+                                                                setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                            }}
+                                                            placeholder="산출근거를 입력하세요" />
+                                                    </div>
+                                                    <div className="schedule-form-group" style={{ marginBottom: 4 }}>
+                                                        <label style={{ fontSize: '12px' }}>사유</label>
+                                                        <textarea rows="2" value={detail.reason}
+                                                            onChange={e => {
+                                                                const updated = [...changeApplicationForm.specificDetails];
+                                                                updated[idx] = { ...updated[idx], reason: e.target.value };
+                                                                setChangeApplicationForm(p => ({ ...p, specificDetails: updated }));
+                                                            }}
+                                                            placeholder="변경 사유를 입력하세요" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <button style={{ marginTop: 8, padding: '4px 12px', fontSize: '12px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer' }}
+                                            onClick={() => setChangeApplicationForm(p => ({
+                                                ...p,
+                                                specificDetails: [...p.specificDetails, { unitName: '', beforeAmount: 0, afterAmount: 0, basis: '', reason: '' }]
+                                            }))}>
+                                            + 항목 추가
+                                        </button>
+                                    </div>
+
+                                    {/* 신청일 */}
+                                    <div className="schedule-form-group">
+                                        <label style={{ fontWeight: 'bold', fontSize: '14px' }}>신청일</label>
+                                        <input type="date" value={changeApplicationForm.applicationDate}
+                                            onChange={e => setChangeApplicationForm(p => ({ ...p, applicationDate: e.target.value }))} />
+                                    </div>
+                                </div>
+                                <div className="schedule-modal-footer">
+                                    <button className="btn" style={{ background: '#F8F6F1', border: '1px solid #EBE8E1', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                        onClick={() => setChangeApplicationModal(false)}>
+                                        취소
+                                    </button>
+                                    <button className="btn btn-primary"
+                                        onClick={() => {
+                                            openChangeApplication(changeApplicationForm, orgSettings);
+                                            setChangeApplicationModal(false);
+                                        }}>
+                                        📝 문서 생성
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // 앱 렌더링
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ProjectManagementSystem />);
