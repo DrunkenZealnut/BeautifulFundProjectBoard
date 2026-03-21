@@ -1,8 +1,12 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-18T00:00:00.000Z",
-  "activeFeatures": [],
-  "primaryFeature": null,
+  "lastUpdated": "2026-03-21T06:39:53.771Z",
+  "activeFeatures": [
+    "메인페이지스타일변경",
+    "api",
+    "js"
+  ],
+  "primaryFeature": "메인페이지스타일변경",
   "features": {
     "BeautifulFundProjectBoard": {
       "phase": "completed",
@@ -42,6 +46,47 @@
       "startedAt": "2026-03-11T00:00:00.000Z",
       "archivedAt": "2026-03-18T00:00:00.000Z",
       "archivedTo": "docs/archive/2026-03/F-06-pdf-generation/"
+    },
+    "메인페이지스타일변경": {
+      "phase": "design",
+      "phaseNumber": 2,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {
+        "plan": "docs/01-plan/features/메인페이지스타일변경.plan.md",
+        "design": "docs/02-design/features/메인페이지스타일변경.design.md"
+      },
+      "timestamps": {
+        "started": "2026-03-22T00:00:00.000Z",
+        "lastUpdated": "2026-03-22T00:00:00.000Z"
+      }
+    },
+    "api": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-19T02:35:27.400Z",
+        "lastUpdated": "2026-03-20T06:05:26.551Z"
+      },
+      "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/api/rewrite.py"
+    },
+    "js": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-21T06:39:53.771Z",
+        "lastUpdated": "2026-03-21T06:39:53.771Z"
+      },
+      "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/js/app.jsx"
     }
   },
   "pipeline": {
@@ -52,7 +97,7 @@
   "session": {
     "startedAt": "2026-03-06T02:05:39.704Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-11T00:00:00.000Z"
+    "lastActivity": "2026-03-21T06:39:53.771Z"
   },
   "history": [
     {
@@ -97,6 +142,36 @@
       "feature": "F-10-newsletter",
       "phase": "archived",
       "action": "archived"
+    },
+    {
+      "timestamp": "2026-03-19T02:35:27.400Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-19T02:41:32.135Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-20T05:47:42.348Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-20T06:05:26.551Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-21T06:39:53.771Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
     }
   ]
 }

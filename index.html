@@ -149,6 +149,139 @@
             font-weight: 500;
         }
 
+        /* ═══ Dashboard Redesign (dash-*) ═══ */
+        .dash-hero {
+            background: linear-gradient(135deg, #134E42 0%, #1B6B5A 50%, #22896E 100%);
+            border-radius: 16px;
+            padding: 28px 28px 24px;
+            margin-bottom: 20px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        .dash-hero::before {
+            content: '';
+            position: absolute;
+            top: -60%;
+            right: -15%;
+            width: 280px;
+            height: 280px;
+            background: radial-gradient(circle, rgba(255,255,255,0.07) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .dash-hero-title { font-size: 22px; font-weight: 700; margin: 0 0 2px 0; }
+        .dash-hero-sub { font-size: 13px; opacity: 0.7; margin: 0 0 4px 0; }
+        .dash-hero-gauge {
+            display: flex; align-items: center; gap: 16px;
+            margin-top: 16px; padding: 14px 18px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px; backdrop-filter: blur(4px);
+        }
+        .dash-hero-gauge-pct { font-size: 36px; font-weight: 800; line-height: 1; }
+        .dash-hero-gauge-bar { flex: 1; }
+        .dash-hero-gauge-bar-track {
+            height: 8px; background: rgba(255,255,255,0.2);
+            border-radius: 4px; overflow: hidden; margin: 6px 0;
+        }
+        .dash-hero-gauge-bar-fill {
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg, #6EE7B7, #34D399);
+            transition: width 0.6s ease;
+        }
+
+        .dash-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .dash-stat-card {
+            border-radius: 14px;
+            padding: 18px;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: none;
+        }
+        .dash-stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+        .dash-stat-icon {
+            width: 38px; height: 38px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; margin-bottom: 10px; color: white;
+        }
+        .dash-stat-value { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 2px; }
+        .dash-stat-label { font-size: 12px; font-weight: 500; opacity: 0.7; }
+        .dash-stat-sub { font-size: 11px; opacity: 0.5; margin-top: 4px; }
+
+        .dash-section-header {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 16px; padding-bottom: 10px;
+            border-bottom: 2px solid #F0EDE8;
+        }
+        .dash-section-header h2 {
+            font-size: 16px; font-weight: 700; color: #2D2D2D; margin: 0; flex: 1;
+        }
+        .dash-section-icon {
+            width: 30px; height: 30px;
+            background: linear-gradient(135deg, #134E42, #1B6B5A);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 14px; flex-shrink: 0;
+        }
+
+        .dash-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+        }
+        .dash-kpi-card {
+            background: #fff; border-radius: 12px;
+            padding: 16px 18px; border: 1px solid #EBE8E1;
+            border-left: 4px solid var(--kpi-color, #134E42);
+            transition: box-shadow 0.2s;
+        }
+        .dash-kpi-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+
+        .dash-timeline-item {
+            display: flex; gap: 12px; padding: 10px 0;
+            border-bottom: 1px solid #F3F1ED;
+            cursor: pointer; transition: background 0.15s;
+        }
+        .dash-timeline-item:hover { background: #FAFAF8; border-radius: 8px; }
+        .dash-timeline-item:last-child { border-bottom: none; }
+        .dash-date-badge {
+            min-width: 46px; text-align: center;
+            background: linear-gradient(135deg, #EBF4FF, #DBEAFE);
+            border-radius: 10px; padding: 6px 4px; flex-shrink: 0;
+        }
+        .dash-date-month { font-size: 10px; color: #3B82F6; font-weight: 600; text-transform: uppercase; }
+        .dash-date-day { font-size: 18px; font-weight: 800; color: #1E3A5F; line-height: 1; }
+
+        .dash-post-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 0; border-bottom: 1px solid #F3F1ED;
+            cursor: pointer; transition: background 0.15s;
+        }
+        .dash-post-item:hover { background: #FAFAF8; border-radius: 8px; }
+        .dash-post-item:last-child { border-bottom: none; }
+        .dash-post-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+        @media (max-width: 900px) {
+            .dash-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 600px) {
+            .dash-hero { padding: 20px 18px 16px; }
+            .dash-hero-title { font-size: 18px; }
+            .dash-hero-gauge-pct { font-size: 28px; }
+            .dash-kpi-grid { grid-template-columns: 1fr; }
+        }
+        /* ═══ End Dashboard Redesign ═══ */
+
         .section-title {
             font-size: 24px;
             font-weight: 700;
@@ -4672,8 +4805,25 @@
 
                 return (
                 <div>
-                    <h1 className="section-title">🏠 전체 현황</h1>
-                    <p className="section-subtitle">청년노동자인권센터 2026년 공익단체 인큐베이팅 지원사업의 전체 현황을 확인할 수 있습니다.</p>
+                    {/* 환영 배너 */}
+                    <div className="dash-hero">
+                        <p className="dash-hero-sub">
+                            {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+                        </p>
+                        <h1 className="dash-hero-title">
+                            안녕하세요, {currentUser?.name || '관리자'}님
+                        </h1>
+                        <div className="dash-hero-gauge">
+                            <div className="dash-hero-gauge-pct">{budgetPct}%</div>
+                            <div className="dash-hero-gauge-bar">
+                                <div style={{ fontSize: 12, opacity: 0.7 }}>예산 집행률</div>
+                                <div className="dash-hero-gauge-bar-track">
+                                    <div className="dash-hero-gauge-bar-fill" style={{ width: `${Math.min(budgetPct, 100)}%` }} />
+                                </div>
+                                <div style={{ fontSize: 11, opacity: 0.55 }}>{fmt(totalSpent)}원 / {fmt(CONFIG.TOTAL_BUDGET)}원</div>
+                            </div>
+                        </div>
+                    </div>
 
                     {/* F-01: 알림 배너 */}
                     {alerts.length > 0 && (
@@ -4785,41 +4935,28 @@
                         );
                     })()}
 
-                    <div className="stats-grid">
-                        <div
-                            className="stat-card"
-                            style={{ cursor: 'pointer', position: 'relative' }}
-                            onClick={() => setCurrentPage('budget')}
-                        >
-                            <div className="stat-value">{data.stats.usageRate || 0}%</div>
-                            <div className="stat-label">예산 집행률</div>
-                            <div style={{
-                                position: 'absolute',
-                                top: '8px',
-                                right: '8px',
-                                fontSize: '14px',
-                                opacity: '0.6'
-                            }}>
-                                💰
-                            </div>
+                    <div className="dash-stats-grid">
+                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #E6F4F0, #D1EDE6)' }} onClick={() => setCurrentPage('budget')}>
+                            <div className="dash-stat-icon" style={{ background: '#134E42' }}>💰</div>
+                            <div className="dash-stat-value" style={{ color: '#134E42' }}>{data.stats.usageRate || 0}%</div>
+                            <div className="dash-stat-label" style={{ color: '#1B6B5A' }}>예산 집행률</div>
+                            <div className="dash-stat-sub" style={{ color: '#1B6B5A' }}>{fmt(totalSpent)}원 집행</div>
                         </div>
-                        <div className="stat-card" onClick={() => setCurrentPage('schedule')} style={{ cursor: 'pointer' }}>
-                            <div className="stat-value">{data.stats.upcomingSchedules || 0}</div>
-                            <div className="stat-label">예정된 일정</div>
-                            <div style={{ fontSize: '12px', color: '#9C9690', marginTop: '4px' }}>
-                                전체: {data.schedules ? data.schedules.length : 0}개
-                                {data.schedules && data.schedules.length === 0 && (
-                                    <div>⚠️ 스케줄 데이터 없음</div>
-                                )}
-                            </div>
+                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #EBF4FF, #DBEAFE)' }} onClick={() => setCurrentPage('schedule')}>
+                            <div className="dash-stat-icon" style={{ background: '#2563EB' }}>📅</div>
+                            <div className="dash-stat-value" style={{ color: '#1E40AF' }}>{data.stats.upcomingSchedules || 0}</div>
+                            <div className="dash-stat-label" style={{ color: '#2563EB' }}>예정된 일정</div>
+                            <div className="dash-stat-sub" style={{ color: '#3B82F6' }}>전체 {data.schedules ? data.schedules.length : 0}개</div>
                         </div>
-                        <div className="stat-card" role="button" tabIndex={0} onClick={() => setCurrentPage('gallery')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('gallery'); } }} style={{ cursor: 'pointer' }}>
-                            <div className="stat-value">{data.stats.totalGalleries || 0}</div>
-                            <div className="stat-label">갤러리 사진</div>
+                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #FEF9EE, #FEF3C7)' }} onClick={() => setCurrentPage('gallery')} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('gallery'); } }}>
+                            <div className="dash-stat-icon" style={{ background: '#D97706' }}>📸</div>
+                            <div className="dash-stat-value" style={{ color: '#92400E' }}>{data.stats.totalGalleries || 0}</div>
+                            <div className="dash-stat-label" style={{ color: '#D97706' }}>갤러리 사진</div>
                         </div>
-                        <div className="stat-card" role="button" tabIndex={0} onClick={() => setCurrentPage('board')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('board'); } }} style={{ cursor: 'pointer' }}>
-                            <div className="stat-value">{data.stats.totalBoards || 0}</div>
-                            <div className="stat-label">게시글</div>
+                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #F3F0FF, #EDE9FE)' }} onClick={() => setCurrentPage('board')} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('board'); } }}>
+                            <div className="dash-stat-icon" style={{ background: '#7C3AED' }}>📋</div>
+                            <div className="dash-stat-value" style={{ color: '#5B21B6' }}>{data.stats.totalBoards || 0}</div>
+                            <div className="dash-stat-label" style={{ color: '#7C3AED' }}>게시글</div>
                         </div>
                     </div>
 
@@ -4993,13 +5130,17 @@
 
                     <div className="grid-2">
                         <div className="card">
-                            <div className="card-header">
-                                <h2 className="card-title">📅 예정된 일정</h2>
+                            <div className="dash-section-header">
+                                <div className="dash-section-icon">📅</div>
+                                <h2>예정된 일정</h2>
                                 <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
                                     onClick={() => setCurrentPage('schedule')}>전체보기</button>
                             </div>
-                            {data.schedules.filter(s => new Date(s.start_date + 'T23:59:59') >= new Date()).sort((a, b) => a.start_date.localeCompare(b.start_date)).slice(0, 5).map(schedule => (
-                                <div key={schedule.id} className="item-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }}
+                            {data.schedules.filter(s => new Date(s.start_date + 'T23:59:59') >= new Date()).sort((a, b) => a.start_date.localeCompare(b.start_date)).slice(0, 5).map(schedule => {
+                                const sd = new Date(schedule.start_date + 'T00:00:00');
+                                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                return (
+                                <div key={schedule.id} className="dash-timeline-item" role="button" tabIndex={0}
                                     onClick={() => {
                                         setSelectedDate(schedule.start_date);
                                         setSelectedSchedule(schedule);
@@ -5015,15 +5156,20 @@
                                             setCurrentPage('schedule');
                                         }
                                     }}>
-                                    <div className="item-title">{schedule.title}</div>
-                                    <div className="item-meta">
-                                        📅 {schedule.start_date}<br/>
-                                        📍 {schedule.location}<br/>
-                                        🏷️ {schedule.category}
-                                        {schedule.subcategory && ` > ${schedule.subcategory}`}
+                                    <div className="dash-date-badge">
+                                        <div className="dash-date-month">{monthNames[sd.getMonth()]}</div>
+                                        <div className="dash-date-day">{String(sd.getDate()).padStart(2, '0')}</div>
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2D2D', marginBottom: 2 }}>{schedule.title}</div>
+                                        <div style={{ fontSize: 12, color: '#9C9690' }}>
+                                            {schedule.location && `📍 ${schedule.location}`}
+                                            {schedule.category && ` · ${schedule.category}`}
+                                        </div>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                             {data.schedules.filter(s => new Date(s.start_date + 'T23:59:59') >= new Date()).length === 0 && (
                                 <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
                                     예정된 일정이 없습니다.
@@ -5032,17 +5178,19 @@
                         </div>
 
                         <div className="card">
-                            <div className="card-header">
-                                <h2 className="card-title">📋 최근 게시글</h2>
+                            <div className="dash-section-header">
+                                <div className="dash-section-icon">📋</div>
+                                <h2>최근 게시글</h2>
                                 <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
                                     onClick={() => setCurrentPage('board')}>전체보기</button>
                             </div>
                             {data.boards.slice(0, 5).map(board => {
                                 const typeInfo = BOARD_TYPE_MAP[board.board_type] || { label: board.board_type, badge: 'badge-info', icon: '📄' };
+                                const dotColors = { notice: '#EF4444', materials: '#3B82F6', report: '#8B5CF6', free: '#6B7280' };
                                 return (
                                     <div
                                         key={board.id}
-                                        className="item-card"
+                                        className="dash-post-item"
                                         onClick={() => {
                                             supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
                                             setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
@@ -5051,20 +5199,13 @@
                                             loadAttachments('board', board.id).then(setDetailAttachments);
                                         }}
                                     >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div className="item-title">{board.title}</div>
-                                                <div className="item-meta">
-                                                    ✍️ {board.author?.name || '관리자'} •
-                                                    📅 {new Date(board.created_at).toLocaleDateString()} •
-                                                    👁️ {board.view_count || 0}회
-                                                </div>
+                                        <div className="dash-post-dot" style={{ background: dotColors[board.board_type] || '#9CA3AF' }} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2D2D', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {board.is_pinned && '📌 '}{board.title}
                                             </div>
-                                            <div style={{ display: 'flex', gap: '4px', marginLeft: '8px', flexShrink: 0 }}>
-                                                {board.is_pinned && (
-                                                    <span className="badge badge-warning">📌</span>
-                                                )}
-                                                <span className={`badge ${typeInfo.badge}`}>{typeInfo.label}</span>
+                                            <div style={{ fontSize: 11, color: '#9C9690', marginTop: 2 }}>
+                                                {typeInfo.label} · {new Date(board.created_at).toLocaleDateString()} · 👁 {board.view_count || 0}
                                             </div>
                                         </div>
                                     </div>
