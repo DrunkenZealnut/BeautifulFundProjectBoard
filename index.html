@@ -4847,7 +4847,7 @@
                         {(() => {
                             const catData = {};
                             (data?.budgetExecutions || []).forEach(ex => {
-                                const cat = ex.category_name || '기타';
+                                const cat = ex.subcategory_name || ex.category_name || '기타';
                                 catData[cat] = (catData[cat] || 0) + (ex.amount || 0);
                             });
                             const cats = Object.entries(catData).sort((a, b) => b[1] - a[1]);
