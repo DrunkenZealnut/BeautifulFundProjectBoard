@@ -4805,7 +4805,7 @@
 
                 return (
                 <div>
-                    {/* 환영 배너 */}
+                    {/* Welcome banner */}
                     <div className="dash-hero">
                         <p className="dash-hero-sub">
                             {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
@@ -4818,7 +4818,7 @@
                             <div className="dash-hero-gauge-bar">
                                 <div style={{ fontSize: 12, opacity: 0.7 }}>예산 집행률</div>
                                 <div className="dash-hero-gauge-bar-track">
-                                    <div className="dash-hero-gauge-bar-fill" style={{ width: `${Math.min(budgetPct, 100)}%` }} />
+                                    <div className="dash-hero-gauge-bar-fill" style={{ width: `${Math.max(0, Math.min(budgetPct, 100))}%` }} />
                                 </div>
                                 <div style={{ fontSize: 11, opacity: 0.55 }}>{fmt(totalSpent)}원 / {fmt(CONFIG.TOTAL_BUDGET)}원</div>
                             </div>
@@ -4838,7 +4838,7 @@
                         </div>
                     )}
 
-                    {/* 카테고리별 집행 현황 */}
+                    {/* Budget execution by subcategory */}
                     <div className="card" style={{ marginBottom: '16px', padding: '16px 20px' }}>
                         <div className="dash-section-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
                             <div className="dash-section-icon">🏷️</div>
@@ -4926,13 +4926,13 @@
                     })()}
 
                     <div className="dash-stats-grid">
-                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #E6F4F0, #D1EDE6)' }} onClick={() => setCurrentPage('budget')}>
+                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #E6F4F0, #D1EDE6)' }} role="button" tabIndex={0} onClick={() => setCurrentPage('budget')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('budget'); } }}>
                             <div className="dash-stat-icon" style={{ background: '#134E42' }}>💰</div>
                             <div className="dash-stat-value" style={{ color: '#134E42' }}>{data.stats.usageRate || 0}%</div>
                             <div className="dash-stat-label" style={{ color: '#1B6B5A' }}>예산 집행률</div>
                             <div className="dash-stat-sub" style={{ color: '#1B6B5A' }}>{fmt(totalSpent)}원 집행</div>
                         </div>
-                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #EBF4FF, #DBEAFE)' }} onClick={() => setCurrentPage('schedule')}>
+                        <div className="dash-stat-card" style={{ background: 'linear-gradient(135deg, #EBF4FF, #DBEAFE)' }} role="button" tabIndex={0} onClick={() => setCurrentPage('schedule')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentPage('schedule'); } }}>
                             <div className="dash-stat-icon" style={{ background: '#2563EB' }}>📅</div>
                             <div className="dash-stat-value" style={{ color: '#1E40AF' }}>{data.stats.upcomingSchedules || 0}</div>
                             <div className="dash-stat-label" style={{ color: '#2563EB' }}>예정된 일정</div>
@@ -5118,7 +5118,7 @@
                             </div>
                             {data.schedules.filter(s => new Date(s.start_date + 'T23:59:59') >= new Date()).sort((a, b) => a.start_date.localeCompare(b.start_date)).slice(0, 5).map(schedule => {
                                 const sd = new Date(schedule.start_date + 'T00:00:00');
-                                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                const monthNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
                                 return (
                                 <div key={schedule.id} className="dash-timeline-item" role="button" tabIndex={0}
                                     onClick={() => {
@@ -5171,6 +5171,9 @@
                                     <div
                                         key={board.id}
                                         className="dash-post-item"
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 }); setBoardView('detail'); setCurrentPage('board'); } }}
                                         onClick={() => {
                                             supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
                                             setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
