@@ -4268,7 +4268,7 @@
             };
             // F-07: 앱 시작 시 Supabase에서 출석 데이터 로딩
             React.useEffect(() => {
-                supabase.from('system_settings').select('setting_value').eq('setting_key', 'attendance_data').single()
+                supabase.from('system_settings').select('setting_value').eq('setting_key', 'attendance_data').maybeSingle()
                     .then(({ data: row }) => {
                         if (row?.setting_value) {
                             try {
@@ -4994,11 +4994,11 @@
                     <div className="grid-2">
                         <div className="card">
                             <div className="card-header">
-                                <h2 className="card-title">📅 최근 일정</h2>
+                                <h2 className="card-title">📅 예정된 일정</h2>
                                 <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 10px' }}
                                     onClick={() => setCurrentPage('schedule')}>전체보기</button>
                             </div>
-                            {data.schedules.slice(0, 5).map(schedule => (
+                            {data.schedules.filter(s => new Date(s.start_date + 'T23:59:59') >= new Date()).sort((a, b) => a.start_date.localeCompare(b.start_date)).slice(0, 5).map(schedule => (
                                 <div key={schedule.id} className="item-card" role="button" tabIndex={0} style={{ cursor: 'pointer' }}
                                     onClick={() => {
                                         setSelectedDate(schedule.start_date);
@@ -5024,9 +5024,9 @@
                                     </div>
                                 </div>
                             ))}
-                            {data.schedules.length === 0 && (
+                            {data.schedules.filter(s => new Date(s.start_date + 'T23:59:59') >= new Date()).length === 0 && (
                                 <div style={{ textAlign: 'center', color: '#9C9690', padding: '20px' }}>
-                                    등록된 일정이 없습니다.
+                                    예정된 일정이 없습니다.
                                 </div>
                             )}
                         </div>
