@@ -282,6 +282,35 @@
         }
         /* ═══ End Dashboard Redesign ═══ */
 
+        /* ═══ School Management (school-*) ═══ */
+        .school-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
+        .school-card { background: #fff; border: 1px solid #EBE8E1; border-radius: 14px; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
+        .school-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+        .school-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .school-card-name { font-size: 17px; font-weight: 700; color: #134E42; }
+        .school-status-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .school-info-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; color: #6B6560; }
+        .school-stat-bar { display: flex; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #F0EDE8; }
+        .school-stat-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4A4540; font-weight: 500; }
+        .school-detail-section { background: #fff; border: 1px solid #EBE8E1; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .school-detail-title { font-size: 15px; font-weight: 600; color: #2D2D2D; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .school-info-grid { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; }
+        .school-info-label { color: #9C9690; font-weight: 500; }
+        .school-info-value { color: #2D2D2D; }
+        .school-dept-tag { display: inline-block; padding: 3px 10px; background: #E6F4F0; color: #134E42; border-radius: 16px; font-size: 12px; font-weight: 500; margin: 2px 4px 2px 0; }
+        .school-textbook-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .school-textbook-table th { background: #F8F6F1; padding: 10px 12px; text-align: left; font-weight: 600; color: #4A4540; border-bottom: 2px solid #EBE8E1; }
+        .school-textbook-table td { padding: 10px 12px; border-bottom: 1px solid #F0EDE8; color: #2D2D2D; }
+        .school-tb-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .school-tb-badge.planned { background: #FEF3C7; color: #92400E; }
+        .school-tb-badge.distributed { background: #DBEAFE; color: #1E40AF; }
+        .school-tb-badge.in_use { background: #D1FAE5; color: #065F46; }
+        .school-neis-result { padding: 10px 14px; border: 1px solid #EBE8E1; border-radius: 8px; margin: 4px 0; cursor: pointer; transition: background 0.15s; }
+        .school-neis-result:hover { background: #E6F4F0; }
+        .school-neis-result.selected { background: #E6F4F0; border-color: #134E42; }
+        @media (max-width: 768px) { .school-grid { grid-template-columns: 1fr; } .school-info-grid { grid-template-columns: 80px 1fr; } }
+        /* ═══ End School Management ═══ */
+
         .section-title {
             font-size: 24px;
             font-weight: 700;
@@ -3559,6 +3588,27 @@
             const [rewrittenContents, setRewrittenContents] = useState({});
             const [rewritingBoardId, setRewritingBoardId] = useState(null);
 
+            // School management state
+            const [schoolsData, setSchoolsData] = useState([]);
+            const [schoolTextbooks, setSchoolTextbooks] = useState([]);
+            const [schoolView, setSchoolView] = useState('list');
+            const [selectedSchool, setSelectedSchool] = useState(null);
+            const [editingSchool, setEditingSchool] = useState(null);
+            const [schoolForm, setSchoolForm] = useState({
+                name: '', short_name: '', address: '', phone: '', fax: '', website: '',
+                education_office: '', neis_code: '', neis_office_code: '',
+                foundation_type: '', coeducation: '', founded_date: '',
+                principal: '', contact_teacher: '', contact_teacher_phone: '',
+                contact_teacher_email: '', departments: [], student_count: 0,
+                student_count_by_grade: { '1학년': 0, '2학년': 0, '3학년': 0 },
+                notice_url: '', memo: '', status: 'active', partnership_date: ''
+            });
+            const [neisSearchQuery, setNeisSearchQuery] = useState('');
+            const [neisSearchResults, setNeisSearchResults] = useState([]);
+            const [neisSearching, setNeisSearching] = useState(false);
+            const [textbookForm, setTextbookForm] = useState({ textbook_name: '', subject: '', publisher: '', year: 2026, is_safety_related: false, our_textbook: false, distribution_status: 'planned', quantity: 0 });
+            const [showTextbookForm, setShowTextbookForm] = useState(false);
+
             // Load board attachment images when newsletter selection changes
             const selectedBoardKey = useMemo(() => Array.from(selectedBoardIds).sort().join(','), [selectedBoardIds]);
             useEffect(() => {
@@ -4612,6 +4662,12 @@
                         });
                         setOrgSettings(merged);
                         setPerfIndicators(perfMerged);
+
+                        // Load schools
+                        const { data: schoolRows } = await supabase.from('schools').select('*').order('name');
+                        if (schoolRows) setSchoolsData(schoolRows);
+                        const { data: tbRows } = await supabase.from('school_textbooks').select('*');
+                        if (tbRows) setSchoolTextbooks(tbRows);
 
                         const stats = calculateStats(schedules, galleries, boards, executions);
 
@@ -11105,6 +11161,358 @@
                 );
             };
 
+            // ===== School management page =====
+            const searchSchoolFromNEIS = async (query) => {
+                if (!query || query.length < 2) return;
+                setNeisSearching(true);
+                try {
+                    const NEIS_KEY = 'aab253d940424f76a2de2bb786524694';
+                    const url = `https://open.neis.go.kr/hub/schoolInfo?KEY=${NEIS_KEY}&Type=json&pIndex=1&pSize=10&SCHUL_NM=${encodeURIComponent(query)}`;
+                    const res = await fetch(url);
+                    const json = await res.json();
+                    if (json.schoolInfo) {
+                        setNeisSearchResults(json.schoolInfo[1].row.map(r => ({
+                            name: r.SCHUL_NM, address: (r.ORG_RDNMA || '') + ' ' + (r.ORG_RDNDA || '').trim(),
+                            phone: r.ORG_TELNO || '', fax: r.ORG_FAXNO || '', website: r.HMPG_ADRES || '',
+                            education_office: r.ATPT_OFCDC_SC_NM || '', neis_code: r.SD_SCHUL_CODE || '',
+                            neis_office_code: r.ATPT_OFCDC_SC_CODE || '', foundation_type: r.FOND_SC_NM || '',
+                            coeducation: r.COEDU_SC_NM || '', founded_date: r.FOND_YMD || '',
+                        })));
+                    } else { setNeisSearchResults([]); }
+                } catch (e) { console.error('NEIS search error:', e); setNeisSearchResults([]); }
+                setNeisSearching(false);
+            };
+
+            const resetSchoolForm = () => {
+                setSchoolForm({ name: '', short_name: '', address: '', phone: '', fax: '', website: '', education_office: '', neis_code: '', neis_office_code: '', foundation_type: '', coeducation: '', founded_date: '', principal: '', contact_teacher: '', contact_teacher_phone: '', contact_teacher_email: '', departments: [], student_count: 0, student_count_by_grade: { '1학년': 0, '2학년': 0, '3학년': 0 }, notice_url: '', memo: '', status: 'active', partnership_date: '' });
+                setNeisSearchQuery(''); setNeisSearchResults([]); setEditingSchool(null);
+            };
+
+            const handleSaveSchool = async () => {
+                if (!schoolForm.name) { alert('학교명을 입력해주세요.'); return; }
+                const grade = schoolForm.student_count_by_grade || {};
+                const total = Object.values(grade).reduce((s, v) => s + (parseInt(v) || 0), 0);
+                const payload = { ...schoolForm, student_count: total, student_count_by_grade: grade };
+                delete payload.id;
+                try {
+                    if (editingSchool) {
+                        await supabase.from('schools').update(payload).eq('id', editingSchool.id);
+                    } else {
+                        await supabase.from('schools').insert([payload]);
+                    }
+                    const { data: rows } = await supabase.from('schools').select('*').order('name');
+                    if (rows) setSchoolsData(rows);
+                    resetSchoolForm(); setSchoolView('list');
+                } catch (e) { alert('저장 실패: ' + e.message); }
+            };
+
+            const handleDeleteSchool = async (id) => {
+                if (!confirm('정말 삭제하시겠습니까? 관련 교과서 정보도 함께 삭제됩니다.')) return;
+                await supabase.from('schools').delete().eq('id', id);
+                const { data: rows } = await supabase.from('schools').select('*').order('name');
+                if (rows) setSchoolsData(rows);
+                setSchoolView('list'); setSelectedSchool(null);
+            };
+
+            const handleSaveTextbook = async (schoolId) => {
+                if (!textbookForm.textbook_name) { alert('교과서명을 입력해주세요.'); return; }
+                await supabase.from('school_textbooks').insert([{ school_id: schoolId, ...textbookForm }]);
+                const { data: tbRows } = await supabase.from('school_textbooks').select('*');
+                if (tbRows) setSchoolTextbooks(tbRows);
+                setTextbookForm({ textbook_name: '', subject: '', publisher: '', year: 2026, is_safety_related: false, our_textbook: false, distribution_status: 'planned', quantity: 0 });
+                setShowTextbookForm(false);
+            };
+
+            const handleDeleteTextbook = async (id) => {
+                if (!confirm('교과서를 삭제하시겠습니까?')) return;
+                await supabase.from('school_textbooks').delete().eq('id', id);
+                const { data: tbRows } = await supabase.from('school_textbooks').select('*');
+                if (tbRows) setSchoolTextbooks(tbRows);
+            };
+
+            const renderSchools = () => {
+                // Write view
+                if (schoolView === 'write') {
+                    return (
+                        <div>
+                            <h1 className="section-title">🏫 {editingSchool ? '학교 수정' : '학교 등록'}</h1>
+                            <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+                                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>🔍 NEIS 학교 검색</h3>
+                                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                                    <input type="text" placeholder="학교명을 입력하세요 (예: 인천전자마이스터)" value={neisSearchQuery}
+                                        onChange={e => setNeisSearchQuery(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') searchSchoolFromNEIS(neisSearchQuery); }}
+                                        style={{ flex: 1, padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14 }} />
+                                    <button className="btn btn-primary" onClick={() => searchSchoolFromNEIS(neisSearchQuery)}
+                                        disabled={neisSearching} style={{ padding: '8px 20px', whiteSpace: 'nowrap' }}>
+                                        {neisSearching ? '검색 중...' : '🔍 NEIS 검색'}
+                                    </button>
+                                </div>
+                                {neisSearchResults.length > 0 && (
+                                    <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
+                                        {neisSearchResults.map((r, i) => (
+                                            <div key={i} className={`school-neis-result ${schoolForm.neis_code === r.neis_code ? 'selected' : ''}`}
+                                                onClick={() => {
+                                                    setSchoolForm(prev => ({ ...prev, ...r, short_name: prev.short_name || r.name.replace(/등학교$/, '') }));
+                                                    setNeisSearchResults([]);
+                                                }}>
+                                                <div style={{ fontWeight: 600, fontSize: 14 }}>{r.name}</div>
+                                                <div style={{ fontSize: 12, color: '#9C9690' }}>{r.address} · {r.education_office} · {r.foundation_type}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+                                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>📋 기본정보</h3>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                    <div className="schedule-form-group"><label>학교명 *</label>
+                                        <input type="text" value={schoolForm.name} onChange={e => setSchoolForm(p => ({...p, name: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>약칭</label>
+                                        <input type="text" value={schoolForm.short_name} onChange={e => setSchoolForm(p => ({...p, short_name: e.target.value}))} /></div>
+                                    <div className="schedule-form-group" style={{ gridColumn: 'span 2' }}><label>주소</label>
+                                        <input type="text" value={schoolForm.address} onChange={e => setSchoolForm(p => ({...p, address: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>전화</label>
+                                        <input type="text" value={schoolForm.phone} onChange={e => setSchoolForm(p => ({...p, phone: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>FAX</label>
+                                        <input type="text" value={schoolForm.fax} onChange={e => setSchoolForm(p => ({...p, fax: e.target.value}))} /></div>
+                                    <div className="schedule-form-group" style={{ gridColumn: 'span 2' }}><label>홈페이지</label>
+                                        <input type="text" value={schoolForm.website} onChange={e => setSchoolForm(p => ({...p, website: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>교육청</label>
+                                        <input type="text" value={schoolForm.education_office} readOnly style={{ background: '#f8f6f1' }} /></div>
+                                    <div className="schedule-form-group"><label>설립구분</label>
+                                        <input type="text" value={schoolForm.foundation_type} readOnly style={{ background: '#f8f6f1' }} /></div>
+                                </div>
+                            </div>
+
+                            <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+                                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>👨‍🏫 담당교사 · 학교정보</h3>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                    <div className="schedule-form-group"><label>교장</label>
+                                        <input type="text" value={schoolForm.principal} onChange={e => setSchoolForm(p => ({...p, principal: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>담당교사</label>
+                                        <input type="text" value={schoolForm.contact_teacher} onChange={e => setSchoolForm(p => ({...p, contact_teacher: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>담당교사 전화</label>
+                                        <input type="text" value={schoolForm.contact_teacher_phone} onChange={e => setSchoolForm(p => ({...p, contact_teacher_phone: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>담당교사 이메일</label>
+                                        <input type="text" value={schoolForm.contact_teacher_email} onChange={e => setSchoolForm(p => ({...p, contact_teacher_email: e.target.value}))} /></div>
+                                </div>
+                                <div className="schedule-form-group" style={{ marginTop: 12 }}>
+                                    <label>전공 (콤마로 구분)</label>
+                                    <input type="text" placeholder="반도체설계, 반도체공정, 반도체장비"
+                                        value={(schoolForm.departments || []).join(', ')}
+                                        onChange={e => setSchoolForm(p => ({...p, departments: e.target.value.split(',').map(s => s.trim()).filter(Boolean)}))} />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 12 }}>
+                                    <div className="schedule-form-group"><label>1학년</label>
+                                        <input type="number" value={schoolForm.student_count_by_grade['1학년'] || 0}
+                                            onChange={e => setSchoolForm(p => ({...p, student_count_by_grade: {...p.student_count_by_grade, '1학년': parseInt(e.target.value) || 0}}))} /></div>
+                                    <div className="schedule-form-group"><label>2학년</label>
+                                        <input type="number" value={schoolForm.student_count_by_grade['2학년'] || 0}
+                                            onChange={e => setSchoolForm(p => ({...p, student_count_by_grade: {...p.student_count_by_grade, '2학년': parseInt(e.target.value) || 0}}))} /></div>
+                                    <div className="schedule-form-group"><label>3학년</label>
+                                        <input type="number" value={schoolForm.student_count_by_grade['3학년'] || 0}
+                                            onChange={e => setSchoolForm(p => ({...p, student_count_by_grade: {...p.student_count_by_grade, '3학년': parseInt(e.target.value) || 0}}))} /></div>
+                                </div>
+                                <div style={{ fontSize: 13, color: '#6B6560', marginTop: 4 }}>
+                                    합계: {Object.values(schoolForm.student_count_by_grade || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)}명
+                                </div>
+                            </div>
+
+                            <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+                                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>📎 기타</h3>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                    <div className="schedule-form-group"><label>공지사항 URL</label>
+                                        <input type="text" placeholder="https://..." value={schoolForm.notice_url} onChange={e => setSchoolForm(p => ({...p, notice_url: e.target.value}))} /></div>
+                                    <div className="schedule-form-group"><label>협력 시작일</label>
+                                        <input type="date" value={schoolForm.partnership_date} onChange={e => setSchoolForm(p => ({...p, partnership_date: e.target.value}))} /></div>
+                                </div>
+                                <div className="schedule-form-group" style={{ marginTop: 12 }}><label>메모</label>
+                                    <textarea rows={3} value={schoolForm.memo} onChange={e => setSchoolForm(p => ({...p, memo: e.target.value}))}
+                                        style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 6, fontSize: 13, resize: 'vertical' }} /></div>
+                                <div style={{ marginTop: 12 }}>
+                                    <label style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <span>상태:</span>
+                                        <select value={schoolForm.status} onChange={e => setSchoolForm(p => ({...p, status: e.target.value}))}
+                                            style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: 6 }}>
+                                            <option value="active">활동</option>
+                                            <option value="inactive">비활동</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button className="btn btn-primary" onClick={handleSaveSchool}>💾 저장</button>
+                                <button className="btn btn-secondary" onClick={() => { resetSchoolForm(); setSchoolView('list'); }}>취소</button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // Detail view
+                if (schoolView === 'detail' && selectedSchool) {
+                    const school = selectedSchool;
+                    const tbs = schoolTextbooks.filter(t => t.school_id === school.id);
+                    const relatedSchedules = (data.schedules || []).filter(s =>
+                        (s.title && school.short_name && s.title.includes(school.short_name)) ||
+                        (s.location && school.short_name && s.location.includes(school.short_name))
+                    );
+                    return (
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <button className="btn btn-secondary" onClick={() => { setSchoolView('list'); setSelectedSchool(null); }}>← 목록으로</button>
+                                {currentUser?.role === 'admin' && (
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button className="btn btn-primary" onClick={() => {
+                                            setSchoolForm({ ...school, student_count_by_grade: school.student_count_by_grade || { '1학년': 0, '2학년': 0, '3학년': 0 }, departments: school.departments || [] });
+                                            setEditingSchool(school); setSchoolView('write');
+                                        }}>✏️ 수정</button>
+                                        <button className="btn" style={{ background: '#EF4444', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                                            onClick={() => handleDeleteSchool(school.id)}>🗑️ 삭제</button>
+                                    </div>
+                                )}
+                            </div>
+                            <h1 className="section-title">🏫 {school.name}</h1>
+
+                            <div className="school-detail-section">
+                                <div className="school-detail-title">📋 기본 정보</div>
+                                <div className="school-info-grid">
+                                    <span className="school-info-label">학교명</span><span className="school-info-value">{school.name}</span>
+                                    {school.short_name && <><span className="school-info-label">약칭</span><span className="school-info-value">{school.short_name}</span></>}
+                                    {school.address && <><span className="school-info-label">주소</span><span className="school-info-value">{school.address}</span></>}
+                                    {school.phone && <><span className="school-info-label">전화</span><span className="school-info-value">{school.phone}</span></>}
+                                    {school.fax && <><span className="school-info-label">FAX</span><span className="school-info-value">{school.fax}</span></>}
+                                    {school.website && <><span className="school-info-label">홈페이지</span><span className="school-info-value"><a href={school.website} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }}>{school.website} ↗</a></span></>}
+                                    {school.education_office && <><span className="school-info-label">교육청</span><span className="school-info-value">{school.education_office}</span></>}
+                                    {school.foundation_type && <><span className="school-info-label">설립구분</span><span className="school-info-value">{school.foundation_type} {school.coeducation && `· ${school.coeducation}`}</span></>}
+                                    {school.principal && <><span className="school-info-label">교장</span><span className="school-info-value">{school.principal}</span></>}
+                                    {school.contact_teacher && <><span className="school-info-label">담당교사</span><span className="school-info-value">{school.contact_teacher} {school.contact_teacher_phone && `(${school.contact_teacher_phone})`} {school.contact_teacher_email && `· ${school.contact_teacher_email}`}</span></>}
+                                    {school.departments && school.departments.length > 0 && <><span className="school-info-label">전공</span><span className="school-info-value">{school.departments.map(d => <span key={d} className="school-dept-tag">{d}</span>)}</span></>}
+                                    <span className="school-info-label">학생수</span>
+                                    <span className="school-info-value">
+                                        {school.student_count || 0}명
+                                        {school.student_count_by_grade && Object.keys(school.student_count_by_grade).length > 0 &&
+                                            ` (${Object.entries(school.student_count_by_grade).map(([k,v]) => `${k} ${v}명`).join(' / ')})`}
+                                    </span>
+                                    {school.partnership_date && <><span className="school-info-label">협력시작</span><span className="school-info-value">{school.partnership_date}</span></>}
+                                    {school.memo && <><span className="school-info-label">메모</span><span className="school-info-value" style={{ whiteSpace: 'pre-line' }}>{school.memo}</span></>}
+                                </div>
+                            </div>
+
+                            <div className="school-detail-section">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div className="school-detail-title">📚 교과서 목록 ({tbs.length}종)</div>
+                                    {currentUser?.role === 'admin' && (
+                                        <button className="btn btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }}
+                                            onClick={() => setShowTextbookForm(!showTextbookForm)}>+ 교과서</button>
+                                    )}
+                                </div>
+                                {showTextbookForm && (
+                                    <div style={{ background: '#F8F6F1', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                                            <input type="text" placeholder="교과서명 *" value={textbookForm.textbook_name} onChange={e => setTextbookForm(p => ({...p, textbook_name: e.target.value}))} style={{ padding: 6, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+                                            <input type="text" placeholder="과목" value={textbookForm.subject} onChange={e => setTextbookForm(p => ({...p, subject: e.target.value}))} style={{ padding: 6, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+                                            <input type="text" placeholder="출판사" value={textbookForm.publisher} onChange={e => setTextbookForm(p => ({...p, publisher: e.target.value}))} style={{ padding: 6, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                                            <select value={textbookForm.distribution_status} onChange={e => setTextbookForm(p => ({...p, distribution_status: e.target.value}))} style={{ padding: 6, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }}>
+                                                <option value="planned">예정</option><option value="distributed">배포</option><option value="in_use">사용중</option>
+                                            </select>
+                                            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><input type="checkbox" checked={textbookForm.is_safety_related} onChange={e => setTextbookForm(p => ({...p, is_safety_related: e.target.checked}))} /> 안전교과서</label>
+                                            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><input type="checkbox" checked={textbookForm.our_textbook} onChange={e => setTextbookForm(p => ({...p, our_textbook: e.target.checked}))} /> 센터 개발</label>
+                                            <button className="btn btn-primary" style={{ fontSize: 12, padding: '4px 12px', marginLeft: 'auto' }} onClick={() => handleSaveTextbook(school.id)}>추가</button>
+                                        </div>
+                                    </div>
+                                )}
+                                {tbs.length > 0 ? (
+                                    <table className="school-textbook-table">
+                                        <thead><tr><th>교과서명</th><th>과목</th><th>출판사</th><th>상태</th><th>구분</th><th></th></tr></thead>
+                                        <tbody>{tbs.map(t => (
+                                            <tr key={t.id}>
+                                                <td style={{ fontWeight: 500 }}>{t.textbook_name}</td>
+                                                <td>{t.subject || '-'}</td>
+                                                <td>{t.publisher || '-'}</td>
+                                                <td><span className={`school-tb-badge ${t.distribution_status}`}>{{planned:'예정',distributed:'배포',in_use:'사용중'}[t.distribution_status] || t.distribution_status}</span></td>
+                                                <td>{t.is_safety_related && <span className="school-tb-badge" style={{ background: '#FEE2E2', color: '#991B1B' }}>⚠️ 안전</span>} {t.our_textbook && <span className="school-tb-badge" style={{ background: '#DBEAFE', color: '#1E40AF' }}>센터</span>}</td>
+                                                <td>{currentUser?.role === 'admin' && <button onClick={() => handleDeleteTextbook(t.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14 }}>🗑️</button>}</td>
+                                            </tr>
+                                        ))}</tbody>
+                                    </table>
+                                ) : <div style={{ textAlign: 'center', color: '#9C9690', padding: 20, fontSize: 13 }}>등록된 교과서가 없습니다.</div>}
+                            </div>
+
+                            {school.notice_url && (
+                                <div className="school-detail-section">
+                                    <div className="school-detail-title">📢 공지사항</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <span style={{ fontSize: 13, color: '#6B6560', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.notice_url}</span>
+                                        <a href={school.notice_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px', whiteSpace: 'nowrap' }}>새 탭 열기 ↗</a>
+                                    </div>
+                                </div>
+                            )}
+
+                            {relatedSchedules.length > 0 && (
+                                <div className="school-detail-section">
+                                    <div className="school-detail-title">📅 관련 활동 ({relatedSchedules.length}건)</div>
+                                    {relatedSchedules.slice(0, 10).map(s => (
+                                        <div key={s.id} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: '1px solid #F0EDE8', fontSize: 13 }}>
+                                            <span style={{ color: '#9C9690', minWidth: 80 }}>{s.start_date}</span>
+                                            <span style={{ fontWeight: 500 }}>{s.title}</span>
+                                            <span style={{ color: '#9C9690', marginLeft: 'auto' }}>{s.category}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+
+                // List view (default)
+                return (
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h1 className="section-title">🏫 학교 관리</h1>
+                            {currentUser?.role === 'admin' && (
+                                <button className="btn btn-primary" onClick={() => { resetSchoolForm(); setSchoolView('write'); }}>+ 학교 등록</button>
+                            )}
+                        </div>
+                        <p className="section-subtitle">파트너 학교 정보를 관리합니다. NEIS API를 통해 학교 기본정보를 자동으로 가져올 수 있습니다.</p>
+
+                        {schoolsData.length === 0 ? (
+                            <div className="card" style={{ textAlign: 'center', padding: 40, color: '#9C9690' }}>
+                                <div style={{ fontSize: 40, marginBottom: 12 }}>🏫</div>
+                                <div style={{ fontSize: 15, marginBottom: 8 }}>등록된 학교가 없습니다.</div>
+                                {currentUser?.role === 'admin' && <button className="btn btn-primary" onClick={() => { resetSchoolForm(); setSchoolView('write'); }}>첫 학교 등록하기</button>}
+                            </div>
+                        ) : (
+                            <div className="school-grid">
+                                {schoolsData.map(school => {
+                                    const tbs = schoolTextbooks.filter(t => t.school_id === school.id);
+                                    return (
+                                        <div key={school.id} className="school-card" onClick={() => { setSelectedSchool(school); setSchoolView('detail'); }}>
+                                            <div className="school-card-header">
+                                                <span className="school-card-name">{school.short_name || school.name}</span>
+                                                <div className="school-status-dot" style={{ background: school.status === 'active' ? '#22C55E' : '#9CA3AF' }} title={school.status === 'active' ? '활동' : '비활동'} />
+                                            </div>
+                                            {school.address && <div className="school-info-row">📍 {school.address}</div>}
+                                            {school.contact_teacher && <div className="school-info-row">👨‍🏫 {school.contact_teacher} {school.contact_teacher_phone && `(${school.contact_teacher_phone})`}</div>}
+                                            {school.phone && <div className="school-info-row">📞 {school.phone}</div>}
+                                            <div className="school-stat-bar">
+                                                <div className="school-stat-item">🎓 {school.student_count || 0}명</div>
+                                                {school.departments && school.departments.length > 0 && <div className="school-stat-item">📚 {school.departments.length}개 전공</div>}
+                                                <div className="school-stat-item">📖 교과서 {tbs.length}종</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
             // 관리자 페이지 렌더링
             const renderAdmin = () => {
                 return (
@@ -11696,6 +12104,7 @@
                     case "board": return renderBoard();
                     case "guide": return renderGuide();
                     case "newsletter": return renderNewsletter();
+                    case "schools": return renderSchools();
                     case "admin": return currentUser?.role === 'admin' ? renderAdmin() : renderDashboard();
                     default: return renderDashboard();
                 }
@@ -11746,6 +12155,7 @@
                                 { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' },
                                 { id: 'guide', label: '📖 회계가이드', description: '회계처리방식 안내' },
                                 { id: 'newsletter', label: '📰 뉴스레터', description: '일정·게시글 뉴스레터 제작' },
+                                { id: 'schools', label: '🏫 학교관리', description: '파트너 학교 정보 관리' },
                                 ...(currentUser.role === 'admin' ? [{ id: 'admin', label: '⚙️ 관리자', description: '사용자 및 시스템 관리' }] : [])
                             ].map(nav => (
                                 <button
