@@ -11162,23 +11162,23 @@
             };
 
             // ===== School management page =====
+            // URL safety check (prevent javascript: XSS)
+            const isSafeUrl = (url) => {
+                if (!url) return false;
+                try { const u = new URL(url); return ['http:', 'https:'].includes(u.protocol); } catch { return false; }
+            };
+
             const searchSchoolFromNEIS = async (query) => {
                 if (!query || query.length < 2) return;
                 setNeisSearching(true);
                 try {
-                    const NEIS_KEY = 'aab253d940424f76a2de2bb786524694';
-                    const url = `https://open.neis.go.kr/hub/schoolInfo?KEY=${NEIS_KEY}&Type=json&pIndex=1&pSize=10&SCHUL_NM=${encodeURIComponent(query)}`;
+                    // Use serverless proxy to keep API key server-side
+                    const apiBase = window.location.hostname === 'localhost' ? '' : '';
+                    const url = `${apiBase}/api/neis?q=${encodeURIComponent(query)}`;
                     const res = await fetch(url);
-                    const json = await res.json();
-                    if (json.schoolInfo) {
-                        setNeisSearchResults(json.schoolInfo[1].row.map(r => ({
-                            name: r.SCHUL_NM, address: (r.ORG_RDNMA || '') + ' ' + (r.ORG_RDNDA || '').trim(),
-                            phone: r.ORG_TELNO || '', fax: r.ORG_FAXNO || '', website: r.HMPG_ADRES || '',
-                            education_office: r.ATPT_OFCDC_SC_NM || '', neis_code: r.SD_SCHUL_CODE || '',
-                            neis_office_code: r.ATPT_OFCDC_SC_CODE || '', foundation_type: r.FOND_SC_NM || '',
-                            coeducation: r.COEDU_SC_NM || '', founded_date: r.FOND_YMD || '',
-                        })));
-                    } else { setNeisSearchResults([]); }
+                    if (!res.ok) { setNeisSearchResults([]); setNeisSearching(false); return; }
+                    const results = await res.json();
+                    setNeisSearchResults(Array.isArray(results) ? results : []);
                 } catch (e) { console.error('NEIS search error:', e); setNeisSearchResults([]); }
                 setNeisSearching(false);
             };
@@ -11257,6 +11257,8 @@
                                     <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
                                         {neisSearchResults.map((r, i) => (
                                             <div key={i} className={`school-neis-result ${schoolForm.neis_code === r.neis_code ? 'selected' : ''}`}
+                                                role="button" tabIndex={0}
+                                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSchoolForm(prev => ({ ...prev, ...r, short_name: prev.short_name || r.name.replace(/등학교$/, '') })); setNeisSearchResults([]); } }}
                                                 onClick={() => {
                                                     setSchoolForm(prev => ({ ...prev, ...r, short_name: prev.short_name || r.name.replace(/등학교$/, '') }));
                                                     setNeisSearchResults([]);
@@ -11360,10 +11362,11 @@
                 if (schoolView === 'detail' && selectedSchool) {
                     const school = selectedSchool;
                     const tbs = schoolTextbooks.filter(t => t.school_id === school.id);
-                    const relatedSchedules = (data.schedules || []).filter(s =>
-                        (s.title && school.short_name && s.title.includes(school.short_name)) ||
-                        (s.location && school.short_name && s.location.includes(school.short_name))
-                    );
+                    const relatedSchedules = (data.schedules || []).filter(s => {
+                        const t = s.title || ''; const l = s.location || '';
+                        const sn = school.short_name || ''; const fn = school.name || '';
+                        return (sn && (t.includes(sn) || l.includes(sn))) || (fn && (t.includes(fn) || l.includes(fn)));
+                    });
                     return (
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -11389,7 +11392,7 @@
                                     {school.address && <><span className="school-info-label">주소</span><span className="school-info-value">{school.address}</span></>}
                                     {school.phone && <><span className="school-info-label">전화</span><span className="school-info-value">{school.phone}</span></>}
                                     {school.fax && <><span className="school-info-label">FAX</span><span className="school-info-value">{school.fax}</span></>}
-                                    {school.website && <><span className="school-info-label">홈페이지</span><span className="school-info-value"><a href={school.website} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }}>{school.website} ↗</a></span></>}
+                                    {school.website && isSafeUrl(school.website) && <><span className="school-info-label">홈페이지</span><span className="school-info-value"><a href={school.website} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6' }}>{school.website} ↗</a></span></>}
                                     {school.education_office && <><span className="school-info-label">교육청</span><span className="school-info-value">{school.education_office}</span></>}
                                     {school.foundation_type && <><span className="school-info-label">설립구분</span><span className="school-info-value">{school.foundation_type} {school.coeducation && `· ${school.coeducation}`}</span></>}
                                     {school.principal && <><span className="school-info-label">교장</span><span className="school-info-value">{school.principal}</span></>}
@@ -11448,7 +11451,7 @@
                                 ) : <div style={{ textAlign: 'center', color: '#9C9690', padding: 20, fontSize: 13 }}>등록된 교과서가 없습니다.</div>}
                             </div>
 
-                            {school.notice_url && (
+                            {school.notice_url && isSafeUrl(school.notice_url) && (
                                 <div className="school-detail-section">
                                     <div className="school-detail-title">📢 공지사항</div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -11496,7 +11499,9 @@
                                 {schoolsData.map(school => {
                                     const tbs = schoolTextbooks.filter(t => t.school_id === school.id);
                                     return (
-                                        <div key={school.id} className="school-card" onClick={() => { setSelectedSchool(school); setSchoolView('detail'); }}>
+                                        <div key={school.id} className="school-card" role="button" tabIndex={0}
+                                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedSchool(school); setSchoolView('detail'); } }}
+                                            onClick={() => { setSelectedSchool(school); setSchoolView('detail'); }}>
                                             <div className="school-card-header">
                                                 <span className="school-card-name">{school.short_name || school.name}</span>
                                                 <div className="school-status-dot" style={{ background: school.status === 'active' ? '#22C55E' : '#9CA3AF' }} title={school.status === 'active' ? '활동' : '비활동'} />
