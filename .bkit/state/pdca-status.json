@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-21T06:39:53.771Z",
+  "lastUpdated": "2026-03-22T00:56:18.641Z",
   "activeFeatures": [
     "학교관리페이지",
     "메인페이지스타일변경",
@@ -87,9 +87,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-19T02:35:27.400Z",
-        "lastUpdated": "2026-03-20T06:05:26.551Z"
+        "lastUpdated": "2026-03-22T00:56:18.641Z"
       },
-      "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/api/rewrite.py"
+      "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/api/neis.py"
     },
     "js": {
       "phase": "do",
@@ -113,7 +113,7 @@
   "session": {
     "startedAt": "2026-03-06T02:05:39.704Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-21T06:39:53.771Z"
+    "lastActivity": "2026-03-22T00:56:18.641Z"
   },
   "history": [
     {
@@ -186,6 +186,12 @@
     {
       "timestamp": "2026-03-21T06:39:53.771Z",
       "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-22T00:56:18.641Z",
+      "feature": "api",
       "phase": "do",
       "action": "updated"
     }
