@@ -1,13 +1,13 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-22T00:56:18.641Z",
+  "lastUpdated": "2026-03-22T23:16:42.844Z",
   "activeFeatures": [
+    "학교시간표조회",
     "학교관리페이지",
     "메인페이지스타일변경",
-    "api",
-    "js"
+    "api"
   ],
-  "primaryFeature": "학교관리페이지",
+  "primaryFeature": "학교시간표조회",
   "features": {
     "BeautifulFundProjectBoard": {
       "phase": "completed",
@@ -87,7 +87,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-19T02:35:27.400Z",
-        "lastUpdated": "2026-03-22T00:56:18.641Z"
+        "lastUpdated": "2026-03-22T23:16:42.843Z"
       },
       "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/api/neis.py"
     },
@@ -113,7 +113,7 @@
   "session": {
     "startedAt": "2026-03-06T02:05:39.704Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-22T00:56:18.641Z"
+    "lastActivity": "2026-03-22T23:16:42.844Z"
   },
   "history": [
     {
@@ -191,6 +191,12 @@
     },
     {
       "timestamp": "2026-03-22T00:56:18.641Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-22T23:16:42.843Z",
       "feature": "api",
       "phase": "do",
       "action": "updated"

@@ -1,54 +1,98 @@
-"""NEIS School Search API Proxy — keeps API key server-side."""
+"""NEIS Open API Proxy — school search + timetable. Keeps API key server-side."""
 import os, json
 from urllib.request import urlopen, Request
-from urllib.parse import quote
+from urllib.parse import quote, urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler
 
 NEIS_KEY = os.environ.get("NEIS_API_KEY", "aab253d940424f76a2de2bb786524694")
+NEIS_BASE = "https://open.neis.go.kr/hub"
+
+def _fetch_neis(endpoint, params):
+    """Fetch from NEIS API and return parsed JSON."""
+    qs = "&".join(f"{k}={quote(str(v))}" for k, v in params.items() if v)
+    url = f"{NEIS_BASE}/{endpoint}?KEY={NEIS_KEY}&Type=json&{qs}"
+    req = Request(url, headers={"User-Agent": "BeautifulFundBoard/1.0"})
+    with urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read().decode())
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
-        school_name = qs.get("q", [""])[0].strip()
+        action = qs.get("action", ["search"])[0]
 
+        try:
+            if action == "timetable":
+                self._handle_timetable(qs)
+            else:
+                self._handle_search(qs)
+        except Exception as e:
+            self._json_response(500, {"error": str(e)})
+
+    def _handle_search(self, qs):
+        school_name = qs.get("q", [""])[0].strip()
         if not school_name or len(school_name) < 2:
-            self.send_response(400)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "q parameter required (min 2 chars)"}).encode())
+            self._json_response(400, {"error": "q parameter required (min 2 chars)"})
             return
 
-        url = f"https://open.neis.go.kr/hub/schoolInfo?KEY={NEIS_KEY}&Type=json&pIndex=1&pSize=10&SCHUL_NM={quote(school_name)}"
-        try:
-            req = Request(url, headers={"User-Agent": "BeautifulFundBoard/1.0"})
-            with urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
+        data = _fetch_neis("schoolInfo", {"pIndex": 1, "pSize": 10, "SCHUL_NM": school_name})
+        results = []
+        if "schoolInfo" in data:
+            for r in data["schoolInfo"][1]["row"]:
+                results.append({
+                    "name": r.get("SCHUL_NM", ""),
+                    "address": (r.get("ORG_RDNMA", "") + " " + r.get("ORG_RDNDA", "")).strip(),
+                    "phone": r.get("ORG_TELNO", ""),
+                    "fax": r.get("ORG_FAXNO", ""),
+                    "website": r.get("HMPG_ADRES", ""),
+                    "education_office": r.get("ATPT_OFCDC_SC_NM", ""),
+                    "neis_code": r.get("SD_SCHUL_CODE", ""),
+                    "neis_office_code": r.get("ATPT_OFCDC_SC_CODE", ""),
+                    "foundation_type": r.get("FOND_SC_NM", ""),
+                    "coeducation": r.get("COEDU_SC_NM", ""),
+                    "founded_date": r.get("FOND_YMD", ""),
+                })
+        self._json_response(200, results)
 
-            results = []
-            if "schoolInfo" in data:
-                for r in data["schoolInfo"][1]["row"]:
-                    results.append({
-                        "name": r.get("SCHUL_NM", ""),
-                        "address": (r.get("ORG_RDNMA", "") + " " + r.get("ORG_RDNDA", "")).strip(),
-                        "phone": r.get("ORG_TELNO", ""),
-                        "fax": r.get("ORG_FAXNO", ""),
-                        "website": r.get("HMPG_ADRES", ""),
-                        "education_office": r.get("ATPT_OFCDC_SC_NM", ""),
-                        "neis_code": r.get("SD_SCHUL_CODE", ""),
-                        "neis_office_code": r.get("ATPT_OFCDC_SC_CODE", ""),
-                        "foundation_type": r.get("FOND_SC_NM", ""),
-                        "coeducation": r.get("COEDU_SC_NM", ""),
-                        "founded_date": r.get("FOND_YMD", ""),
-                    })
+    def _handle_timetable(self, qs):
+        office = qs.get("office", [""])[0]
+        school = qs.get("school", [""])[0]
+        from_ymd = qs.get("from", [""])[0]
+        to_ymd = qs.get("to", [""])[0]
 
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(json.dumps(results, ensure_ascii=False).encode())
-        except Exception as e:
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": str(e)}).encode())
+        if not office or not school or not from_ymd or not to_ymd:
+            self._json_response(400, {"error": "office, school, from, to required"})
+            return
+
+        params = {
+            "pIndex": 1, "pSize": 1000,
+            "ATPT_OFCDC_SC_CODE": office,
+            "SD_SCHUL_CODE": school,
+            "TI_FROM_YMD": from_ymd,
+            "TI_TO_YMD": to_ymd,
+        }
+        # Optional filters
+        grade = qs.get("grade", [""])[0]
+        class_nm = qs.get("class", [""])[0]
+        if grade: params["GRADE"] = grade
+        if class_nm: params["CLASS_NM"] = class_nm
+
+        data = _fetch_neis("hisTimetable", params)
+        results = []
+        if "hisTimetable" in data:
+            for r in data["hisTimetable"][1]["row"]:
+                results.append({
+                    "date": r.get("ALL_TI_YMD", ""),
+                    "grade": r.get("GRADE", ""),
+                    "class": r.get("CLASS_NM", ""),
+                    "period": r.get("PERIO", ""),
+                    "subject": r.get("ITRT_CNTNT", ""),
+                    "department": r.get("DDDEP_NM", ""),
+                })
+        self._json_response(200, results)
+
+    def _json_response(self, status, data):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode())

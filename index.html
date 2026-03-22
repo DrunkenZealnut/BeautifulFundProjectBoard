@@ -309,6 +309,13 @@
         .school-neis-result:hover { background: #E6F4F0; }
         .school-neis-result.selected { background: #E6F4F0; border-color: #134E42; }
         @media (max-width: 768px) { .school-grid { grid-template-columns: 1fr; } .school-info-grid { grid-template-columns: 80px 1fr; } }
+        .tt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .tt-table th { background: #F8F6F1; padding: 8px 6px; text-align: center; font-weight: 600; color: #4A4540; border: 1px solid #EBE8E1; white-space: nowrap; }
+        .tt-table td { padding: 6px; text-align: center; border: 1px solid #EBE8E1; min-width: 80px; vertical-align: top; }
+        .tt-table td.tt-period { background: #F8F6F1; font-weight: 600; color: #6B6560; min-width: 40px; }
+        .tt-safety { background: #FEF2F2 !important; color: #991B1B; font-weight: 600; }
+        .tt-filter-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+        .tt-filter-row select, .tt-filter-row input[type="date"] { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
         /* ═══ End School Management ═══ */
 
         .section-title {
@@ -3608,6 +3615,16 @@
             const [neisSearching, setNeisSearching] = useState(false);
             const [textbookForm, setTextbookForm] = useState({ textbook_name: '', subject: '', publisher: '', year: 2026, is_safety_related: false, our_textbook: false, distribution_status: 'planned', quantity: 0 });
             const [showTextbookForm, setShowTextbookForm] = useState(false);
+            // Timetable state
+            const [timetableData, setTimetableData] = useState([]);
+            const [timetableLoading, setTimetableLoading] = useState(false);
+            const [ttGrade, setTtGrade] = useState('');
+            const [ttClass, setTtClass] = useState('');
+            const [ttWeekStart, setTtWeekStart] = useState(() => {
+                const d = new Date(); const day = d.getDay();
+                d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+                return d.toISOString().split('T')[0];
+            });
 
             // Load board attachment images when newsletter selection changes
             const selectedBoardKey = useMemo(() => Array.from(selectedBoardIds).sort().join(','), [selectedBoardIds]);
@@ -11168,6 +11185,36 @@
                 try { const u = new URL(url); return ['http:', 'https:'].includes(u.protocol); } catch { return false; }
             };
 
+            // Timetable helpers
+            const SAFETY_KEYWORDS = ['안전', '보건', '직업생활', '산업', '화학', '실습', '하드웨어'];
+            const isSafetySubject = (subj) => SAFETY_KEYWORDS.some(k => subj && subj.includes(k));
+
+            const getWeekDates = (baseDate) => {
+                const d = new Date(baseDate + 'T00:00:00');
+                const day = d.getDay();
+                const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+                return Array.from({ length: 5 }, (_, i) => {
+                    const date = new Date(mon); date.setDate(mon.getDate() + i);
+                    return date.toISOString().split('T')[0].replace(/-/g, '');
+                });
+            };
+
+            const loadTimetable = async (school, weekStart, grade, classNm) => {
+                if (!school.neis_code || !school.neis_office_code) return;
+                setTimetableLoading(true);
+                try {
+                    const dates = getWeekDates(weekStart);
+                    const fromYmd = dates[0]; const toYmd = dates[4];
+                    let url = `/api/neis?action=timetable&office=${school.neis_office_code}&school=${school.neis_code}&from=${fromYmd}&to=${toYmd}`;
+                    if (grade) url += `&grade=${grade}`;
+                    if (classNm) url += `&class=${classNm}`;
+                    const res = await fetch(url);
+                    if (res.ok) { const data = await res.json(); setTimetableData(Array.isArray(data) ? data : []); }
+                    else { setTimetableData([]); }
+                } catch (e) { console.error('Timetable load error:', e); setTimetableData([]); }
+                setTimetableLoading(false);
+            };
+
             const searchSchoolFromNEIS = async (query) => {
                 if (!query || query.length < 2) return;
                 setNeisSearching(true);
@@ -11458,6 +11505,90 @@
                                         <span style={{ fontSize: 13, color: '#6B6560', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{school.notice_url}</span>
                                         <a href={school.notice_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px', whiteSpace: 'nowrap' }}>새 탭 열기 ↗</a>
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Timetable section */}
+                            {school.neis_code && school.neis_office_code && (
+                                <div className="school-detail-section">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div className="school-detail-title" style={{ margin: 0 }}>📅 시간표</div>
+                                        <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 14px' }}
+                                            onClick={() => loadTimetable(school, ttWeekStart, ttGrade, ttClass)}
+                                            disabled={timetableLoading}>
+                                            {timetableLoading ? '조회 중...' : '🔍 시간표 조회'}
+                                        </button>
+                                    </div>
+                                    <div className="tt-filter-row">
+                                        <label style={{ fontSize: 12, color: '#6B6560' }}>주간:</label>
+                                        <input type="date" value={ttWeekStart} onChange={e => setTtWeekStart(e.target.value)} />
+                                        <button className="btn btn-secondary" style={{ fontSize: 11, padding: '4px 8px' }}
+                                            onClick={() => { const d = new Date(ttWeekStart + 'T00:00:00'); d.setDate(d.getDate() - 7); setTtWeekStart(d.toISOString().split('T')[0]); }}>◀ 이전</button>
+                                        <button className="btn btn-secondary" style={{ fontSize: 11, padding: '4px 8px' }}
+                                            onClick={() => { const d = new Date(ttWeekStart + 'T00:00:00'); d.setDate(d.getDate() + 7); setTtWeekStart(d.toISOString().split('T')[0]); }}>다음 ▶</button>
+                                        <label style={{ fontSize: 12, color: '#6B6560', marginLeft: 8 }}>학년:</label>
+                                        <select value={ttGrade} onChange={e => setTtGrade(e.target.value)}>
+                                            <option value="">전체</option>
+                                            <option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option>
+                                        </select>
+                                        <label style={{ fontSize: 12, color: '#6B6560' }}>반:</label>
+                                        <select value={ttClass} onChange={e => setTtClass(e.target.value)}>
+                                            <option value="">전체</option>
+                                            {[1,2,3,4,5].map(n => <option key={n} value={String(n)}>{n}반</option>)}
+                                        </select>
+                                    </div>
+
+                                    {timetableData.length > 0 && (() => {
+                                        const weekDates = getWeekDates(ttWeekStart);
+                                        const dayNames = ['월', '화', '수', '목', '금'];
+                                        const periods = [...new Set(timetableData.map(t => t.period))].sort((a, b) => Number(a) - Number(b));
+                                        const safetySubjects = [...new Set(timetableData.filter(t => isSafetySubject(t.subject)).map(t => t.subject))];
+
+                                        return (
+                                            <div>
+                                                <div style={{ overflowX: 'auto' }}>
+                                                    <table className="tt-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>교시</th>
+                                                                {weekDates.map((d, i) => {
+                                                                    const ds = d.slice(4, 6) + '/' + d.slice(6);
+                                                                    return <th key={d}>{dayNames[i]} ({ds})</th>;
+                                                                })}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {periods.map(p => (
+                                                                <tr key={p}>
+                                                                    <td className="tt-period">{p}</td>
+                                                                    {weekDates.map(d => {
+                                                                        const cells = timetableData.filter(t => t.date === d && t.period === p);
+                                                                        const subjects = [...new Set(cells.map(c => c.subject))];
+                                                                        const hasSafety = subjects.some(s => isSafetySubject(s));
+                                                                        return (
+                                                                            <td key={d} className={hasSafety ? 'tt-safety' : ''}>
+                                                                                {subjects.join(', ') || '-'}
+                                                                            </td>
+                                                                        );
+                                                                    })}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                {safetySubjects.length > 0 && (
+                                                    <div style={{ marginTop: 8, fontSize: 12, color: '#991B1B', background: '#FEF2F2', padding: '6px 10px', borderRadius: 6 }}>
+                                                        ⚠️ 안전 관련 과목: {safetySubjects.join(', ')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                    {timetableData.length === 0 && !timetableLoading && (
+                                        <div style={{ textAlign: 'center', color: '#9C9690', padding: 16, fontSize: 13 }}>
+                                            [시간표 조회] 버튼을 클릭하세요.
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
