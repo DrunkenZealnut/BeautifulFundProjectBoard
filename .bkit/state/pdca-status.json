@@ -2,11 +2,12 @@
   "version": "2.0",
   "lastUpdated": "2026-03-21T06:39:53.771Z",
   "activeFeatures": [
+    "학교관리페이지",
     "메인페이지스타일변경",
     "api",
     "js"
   ],
-  "primaryFeature": "메인페이지스타일변경",
+  "primaryFeature": "학교관리페이지",
   "features": {
     "BeautifulFundProjectBoard": {
       "phase": "completed",
@@ -46,6 +47,21 @@
       "startedAt": "2026-03-11T00:00:00.000Z",
       "archivedAt": "2026-03-18T00:00:00.000Z",
       "archivedTo": "docs/archive/2026-03/F-06-pdf-generation/"
+    },
+    "학교관리페이지": {
+      "phase": "design",
+      "phaseNumber": 2,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {
+        "plan": "docs/01-plan/features/학교관리페이지.plan.md",
+        "design": "docs/02-design/features/학교관리페이지.design.md"
+      },
+      "timestamps": {
+        "started": "2026-03-22T00:00:00.000Z",
+        "lastUpdated": "2026-03-22T00:00:00.000Z"
+      }
     },
     "메인페이지스타일변경": {
       "phase": "design",

@@ -7,6 +7,10 @@
     "api/rewrite.py": {
       "runtime": "@vercel/python@4.5.0",
       "maxDuration": 15
+    },
+    "api/neis.py": {
+      "runtime": "@vercel/python@4.5.0",
+      "maxDuration": 10
     }
   },
   "headers": [
