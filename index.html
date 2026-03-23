@@ -11596,12 +11596,16 @@
                                             <div>
                                                 <div style={{ overflowX: 'auto' }}>
                                                     <table className="tt-table">
+                                                        {(() => {
+                                                            const datesWithData = new Set(timetableData.map(t => t.date));
+                                                            return (<>
                                                         <thead>
                                                             <tr>
                                                                 <th>교시</th>
                                                                 {weekDates.map((d, i) => {
                                                                     const ds = d.slice(4, 6) + '/' + d.slice(6);
-                                                                    return <th key={d}>{dayNames[i]} ({ds})</th>;
+                                                                    const hasData = datesWithData.has(d);
+                                                                    return <th key={d} style={!hasData ? { color: '#ccc' } : {}}>{dayNames[i]} ({ds}){!hasData ? ' 🚫' : ''}</th>;
                                                                 })}
                                                             </tr>
                                                         </thead>
@@ -11610,6 +11614,8 @@
                                                                 <tr key={p}>
                                                                     <td className="tt-period">{p}</td>
                                                                     {weekDates.map(d => {
+                                                                        const hasData = datesWithData.has(d);
+                                                                        if (!hasData) return <td key={d} style={{ color: '#ddd', background: '#fafafa' }}>-</td>;
                                                                         const cells = timetableData.filter(t => t.date === d && t.period === p);
                                                                         const subjects = [...new Set(cells.map(c => c.subject))];
                                                                         const hasSafety = subjects.some(s => isSafetySubject(s));
@@ -11622,6 +11628,8 @@
                                                                 </tr>
                                                             ))}
                                                         </tbody>
+                                                            </>);
+                                                        })()}
                                                     </table>
                                                 </div>
                                                 {safetySubjects.length > 0 && (
