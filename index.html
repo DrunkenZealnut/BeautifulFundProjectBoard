@@ -3618,6 +3618,7 @@
             // Timetable state
             const [timetableData, setTimetableData] = useState([]);
             const [timetableLoading, setTimetableLoading] = useState(false);
+            const [timetableError, setTimetableError] = useState('');
             const [ttGrade, setTtGrade] = useState('');
             const [ttClass, setTtClass] = useState('');
             const [ttWeekStart, setTtWeekStart] = useState(() => {
@@ -11202,6 +11203,7 @@
             const loadTimetable = async (school, weekStart, grade, classNm) => {
                 if (!school.neis_code || !school.neis_office_code) return;
                 setTimetableLoading(true);
+                setTimetableError('');
                 try {
                     const dates = getWeekDates(weekStart);
                     const fromYmd = dates[0]; const toYmd = dates[4];
@@ -11209,9 +11211,19 @@
                     if (grade) url += `&grade=${grade}`;
                     if (classNm) url += `&class=${classNm}`;
                     const res = await fetch(url);
-                    if (res.ok) { const data = await res.json(); setTimetableData(Array.isArray(data) ? data : []); }
-                    else { setTimetableData([]); }
-                } catch (e) { console.error('Timetable load error:', e); setTimetableData([]); }
+                    if (res.ok) {
+                        const data = await res.json();
+                        setTimetableData(Array.isArray(data) ? data : []);
+                        if (Array.isArray(data) && data.length === 0) setTimetableError('해당 기간의 시간표 데이터가 없습니다.');
+                    } else {
+                        setTimetableData([]);
+                        setTimetableError('시간표를 불러올 수 없습니다. (응답 코드: ' + res.status + ')');
+                    }
+                } catch (e) {
+                    console.error('Timetable load error:', e);
+                    setTimetableData([]);
+                    setTimetableError('시간표를 불러오는 중 오류가 발생했습니다.');
+                }
                 setTimetableLoading(false);
             };
 
@@ -11584,7 +11596,18 @@
                                             </div>
                                         );
                                     })()}
-                                    {timetableData.length === 0 && !timetableLoading && (
+                                    {timetableLoading && (
+                                        <div style={{ textAlign: 'center', padding: 24 }}>
+                                            <div className="loading-spinner" style={{ margin: '0 auto 8px' }}></div>
+                                            <div style={{ fontSize: 13, color: '#9C9690' }}>시간표를 불러오는 중...</div>
+                                        </div>
+                                    )}
+                                    {timetableError && !timetableLoading && (
+                                        <div style={{ textAlign: 'center', color: '#EF4444', padding: 16, fontSize: 13, background: '#FEF2F2', borderRadius: 8 }}>
+                                            {timetableError}
+                                        </div>
+                                    )}
+                                    {timetableData.length === 0 && !timetableLoading && !timetableError && (
                                         <div style={{ textAlign: 'center', color: '#9C9690', padding: 16, fontSize: 13 }}>
                                             [시간표 조회] 버튼을 클릭하세요.
                                         </div>
