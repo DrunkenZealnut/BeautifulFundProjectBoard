@@ -11200,6 +11200,22 @@
                 });
             };
 
+            // NEIS API: use Vercel proxy, fallback to direct NEIS call for local dev
+            const NEIS_FALLBACK_KEY = 'aab253d940424f76a2de2bb786524694';
+            const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+            const fetchNeisWithFallback = async (proxyUrl, directNeisUrl) => {
+                if (!isLocalDev) {
+                    return await fetch(proxyUrl);
+                }
+                // Local dev: try proxy first, fallback to direct NEIS
+                try {
+                    const res = await fetch(proxyUrl);
+                    if (res.ok) return res;
+                } catch (e) { /* proxy not available, use fallback */ }
+                return await fetch(directNeisUrl);
+            };
+
             const loadTimetable = async (school, weekStart, grade, classNm) => {
                 if (!school.neis_code || !school.neis_office_code) return;
                 setTimetableLoading(true);
@@ -11207,14 +11223,23 @@
                 try {
                     const dates = getWeekDates(weekStart);
                     const fromYmd = dates[0]; const toYmd = dates[4];
-                    let url = `/api/neis?action=timetable&office=${school.neis_office_code}&school=${school.neis_code}&from=${fromYmd}&to=${toYmd}`;
-                    if (grade) url += `&grade=${grade}`;
-                    if (classNm) url += `&class=${classNm}`;
-                    const res = await fetch(url);
+                    const proxyUrl = `/api/neis?action=timetable&office=${school.neis_office_code}&school=${school.neis_code}&from=${fromYmd}&to=${toYmd}${grade ? '&grade=' + grade : ''}${classNm ? '&class=' + classNm : ''}`;
+                    const directUrl = `https://open.neis.go.kr/hub/hisTimetable?KEY=${NEIS_FALLBACK_KEY}&Type=json&pIndex=1&pSize=1000&ATPT_OFCDC_SC_CODE=${school.neis_office_code}&SD_SCHUL_CODE=${school.neis_code}&TI_FROM_YMD=${fromYmd}&TI_TO_YMD=${toYmd}${grade ? '&GRADE=' + grade : ''}${classNm ? '&CLASS_NM=' + classNm : ''}`;
+                    const res = await fetchNeisWithFallback(proxyUrl, directUrl);
                     if (res.ok) {
-                        const data = await res.json();
-                        setTimetableData(Array.isArray(data) ? data : []);
-                        if (Array.isArray(data) && data.length === 0) setTimetableError('해당 기간의 시간표 데이터가 없습니다.');
+                        const json = await res.json();
+                        // Handle both proxy format (array) and direct NEIS format
+                        let data;
+                        if (Array.isArray(json)) {
+                            data = json;
+                        } else if (json.hisTimetable) {
+                            data = json.hisTimetable[1].row.map(r => ({
+                                date: r.ALL_TI_YMD || '', grade: r.GRADE || '', class: r.CLASS_NM || '',
+                                period: r.PERIO || '', subject: r.ITRT_CNTNT || '', department: r.DDDEP_NM || ''
+                            }));
+                        } else { data = []; }
+                        setTimetableData(data);
+                        if (data.length === 0) setTimetableError('해당 기간의 시간표 데이터가 없습니다.');
                     } else {
                         setTimetableData([]);
                         setTimetableError('시간표를 불러올 수 없습니다. (응답 코드: ' + res.status + ')');
@@ -11231,13 +11256,24 @@
                 if (!query || query.length < 2) return;
                 setNeisSearching(true);
                 try {
-                    // Use serverless proxy to keep API key server-side
-                    const apiBase = window.location.hostname === 'localhost' ? '' : '';
-                    const url = `${apiBase}/api/neis?q=${encodeURIComponent(query)}`;
-                    const res = await fetch(url);
+                    const proxyUrl = `/api/neis?q=${encodeURIComponent(query)}`;
+                    const directUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${NEIS_FALLBACK_KEY}&Type=json&pIndex=1&pSize=10&SCHUL_NM=${encodeURIComponent(query)}`;
+                    const res = await fetchNeisWithFallback(proxyUrl, directUrl);
                     if (!res.ok) { setNeisSearchResults([]); setNeisSearching(false); return; }
-                    const results = await res.json();
-                    setNeisSearchResults(Array.isArray(results) ? results : []);
+                    const json = await res.json();
+                    let results;
+                    if (Array.isArray(json)) {
+                        results = json;
+                    } else if (json.schoolInfo) {
+                        results = json.schoolInfo[1].row.map(r => ({
+                            name: r.SCHUL_NM, address: (r.ORG_RDNMA || '') + ' ' + (r.ORG_RDNDA || '').trim(),
+                            phone: r.ORG_TELNO || '', fax: r.ORG_FAXNO || '', website: r.HMPG_ADRES || '',
+                            education_office: r.ATPT_OFCDC_SC_NM || '', neis_code: r.SD_SCHUL_CODE || '',
+                            neis_office_code: r.ATPT_OFCDC_SC_CODE || '', foundation_type: r.FOND_SC_NM || '',
+                            coeducation: r.COEDU_SC_NM || '', founded_date: r.FOND_YMD || '',
+                        }));
+                    } else { results = []; }
+                    setNeisSearchResults(results);
                 } catch (e) { console.error('NEIS search error:', e); setNeisSearchResults([]); }
                 setNeisSearching(false);
             };
