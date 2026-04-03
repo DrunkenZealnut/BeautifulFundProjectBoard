@@ -2340,6 +2340,21 @@
 
         /* ===== F-10: 대량 작업 ===== */
         .bulk-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+
+        /* ===== 대시보드 인쇄 모드 ===== */
+        @media print {
+            body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .sidebar, .tab-navigation, .nav-menu, .alert-dismiss, .btn, button,
+            .offline-banner, .bulk-bar, #offline-banner { display: none !important; }
+            .main-content { margin-left: 0 !important; padding: 0 !important; }
+            .card { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; }
+            .dash-hero { background: #134E42 !important; color: white !important; padding: 20px !important; border-radius: 8px !important; }
+            .dash-hero-gauge-bar-fill { background: #FFD700 !important; }
+            .section-title, .section-subtitle { margin-top: 0 !important; }
+            .alert-banner { margin-bottom: 10px; }
+            .alert-item { border: 1px solid #ddd !important; }
+            canvas { max-width: 100% !important; }
+        }
     </style>
 </head>
 <body>
@@ -4353,7 +4368,7 @@
                 const pendingCount = (data?.budgetExecutions || []).filter(e => e.status === 'pending').length;
                 if (pendingCount > 0 && !dismissedAlerts.includes('pending-execs'))
                     alerts.push({ id: 'pending-execs', level: 'warning', text: `미승인 집행건 ${pendingCount}건 처리 필요`, sort: 2 });
-                [{ date: `${today.getFullYear()}-06-30`, label: '상반기 정산 마감' }, { date: `${today.getFullYear()}-12-31`, label: '하반기 정산 마감' }].forEach(h => {
+                [{ date: `${today.getFullYear()}-06-30`, label: '상반기 정산 마감' }, { date: `${today.getFullYear()}-12-31`, label: '하반기 정산 마감' }, { date: `${today.getFullYear()}-07-15`, label: '중간보고서 제출 마감' }, { date: `${today.getFullYear()}-12-15`, label: '결과보고서 제출 마감' }].forEach(h => {
                     const diff = Math.ceil((new Date(h.date) - today) / 86400000);
                     if (diff >= 0 && diff <= 30 && !dismissedAlerts.includes(`dl-${h.date}`))
                         alerts.push({ id: `dl-${h.date}`, level: diff <= 3 ? 'urgent' : diff <= 7 ? 'warning' : 'info', text: `[D-${diff}] ${h.label} (${h.date})`, sort: diff });
@@ -4898,6 +4913,31 @@
                                 <div style={{ fontSize: 11, opacity: 0.55 }}>{fmt(totalSpent)}원 / {fmt(CONFIG.TOTAL_BUDGET)}원</div>
                             </div>
                         </div>
+                    </div>
+
+                    {/* 대시���드 내보내기 버튼 */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '8px' }}>
+                        <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '5px 12px' }}
+                            onClick={() => window.print()}
+                        >🖨️ 인쇄</button>
+                        <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '5px 12px' }}
+                            onClick={() => {
+                                try {
+                                    const content = document.querySelector('.main-content');
+                                    if (!content) { alert('대시보드를 찾을 수 없습니다.'); return; }
+                                    const clone = content.cloneNode(true);
+                                    clone.querySelectorAll('button, .btn, script, .alert-dismiss').forEach(el => el.remove());
+                                    const styles = Array.from(document.querySelectorAll('style')).map(s => s.outerHTML).join('\n');
+                                    const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>대시보드 스냅샷 — ${new Date().toLocaleDateString('ko-KR')}</title>${styles}<style>body{padding:20px;background:#F8F6F1}.sidebar{display:none!important}.main-content{margin-left:0!important}</style></head><body>${clone.innerHTML}</body></html>`;
+                                    const blob = new Blob([html], { type: 'text/html' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url; a.download = `대시보드_스냅샷_${new Date().toISOString().slice(0,10)}.html`;
+                                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                } catch (err) { console.error('스냅샷 생성 실패:', err); alert('스냅샷 생성 중 오류가 발생했습니다.'); }
+                            }}
+                        >📸 HTML 스냅샷</button>
                     </div>
 
                     {/* F-01: 알림 배너 */}
@@ -9027,7 +9067,8 @@
                                             >📥 PDF</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => {
-                                                    const execs = data?.budgetExecutions || [];
+                                                    const approvedStatuses = ['approved', 'executed', 'completed'];
+                                                    const execs = (data?.budgetExecutions || []).filter(e => approvedStatuses.includes(e.status));
                                                     const totalSpent = execs.reduce((s, e) => s + (e.amount || 0), 0);
                                                     downloadHWPX('정산보고서', [
                                                         { type: 'paragraph', text: '아름다운재단 2026 공익단체 인큐베이팅 지원사업 정산보고서' },
@@ -9047,7 +9088,8 @@
                                             >📥 PDF</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => {
-                                                    const execs = data?.budgetExecutions || [];
+                                                    const approvedStatuses = ['approved', 'executed', 'completed'];
+                                                    const execs = (data?.budgetExecutions || []).filter(e => approvedStatuses.includes(e.status));
                                                     const monthly = {};
                                                     execs.forEach(e => { const m = (e.execution_date || '').slice(0, 7) || '미기재'; if (!monthly[m]) monthly[m] = []; monthly[m].push(e); });
                                                     const secs = [{ type: 'paragraph', text: '월별 집행 명세서' }, { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}` }];
@@ -9061,8 +9103,49 @@
                                                     downloadHWPX('월별명세서', secs, `월별명세서_${formatLocalDate()}.hwpx`, 'report');
                                                 }}
                                             >📄 한글</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px', color: '#6B21A8', borderColor: '#6B21A8' }}
+                                                onClick={async () => {
+                                                    if (!window.JSZip) { alert('JSZip 라이브러리 로딩 중입니다.'); return; }
+                                                    const salaryExecs = (data?.budgetExecutions || []).filter(e => e.type === '운영인건비' && e.recipient);
+                                                    if (salaryExecs.length === 0) { alert('운영인건비 집행건이 없습니다.'); return; }
+                                                    const recipientNames = [...new Set(salaryExecs.map(e => (e.recipient || '').trim()).filter(Boolean))];
+                                                    if (recipientNames.length === 0) { alert('수급자 정보가 없습니다.'); return; }
+                                                    try {
+                                                        const zip = new window.JSZip();
+                                                        recipientNames.forEach(name => {
+                                                            const exec = salaryExecs.find(e => (e.recipient || '').trim() === name);
+                                                            if (!exec) return;
+                                                            const profile = (recipients || []).find(r => r.name === name) || null;
+                                                            const html = generateSalaryStatementHTML(exec, data.budgetExecutions, orgSettings || {}, profile);
+                                                            zip.file(`급여명세서_${name}.html`, html);
+                                                        });
+                                                        const blob = await zip.generateAsync({ type: 'blob' });
+                                                        const url = URL.createObjectURL(blob);
+                                                        const a = document.createElement('a');
+                                                        a.href = url; a.download = `급여명세서_일괄_${formatLocalDate()}.zip`;
+                                                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                                        URL.revokeObjectURL(url);
+                                                    } catch (err) { console.error('일괄 급여명세서 생성 실패:', err); alert('일괄 생성 중 오류가 발생했습니다.'); }
+                                                }}
+                                            >📦 급여명세서 일괄</button>
                                         </div>
                                     </div>
+
+                                    {/* 증빙서류 미비 경고 (docs 로딩 완료 후에만 표시) */}
+                                    {Object.keys(executionDocsMap).length > 0 && (() => {
+                                        const missingDocs = (data?.budgetExecutions || []).filter(e => {
+                                            if (!DOCUMENT_RULES[e.type]) return false;
+                                            const required = getRequiredDocuments(e.type, e.payment_method);
+                                            return required.some(doc => !executionDocsMap[e.id]?.[doc]?.file_name);
+                                        });
+                                        return missingDocs.length > 0 ? (
+                                            <div style={{ background: '#FEF3CD', border: '1px solid #F6E05E', borderRadius: '8px', padding: '10px 16px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                                                <span>⚠️</span>
+                                                <span style={{ fontWeight: '600', color: '#92400E' }}>증빙서류 미비 {missingDocs.length}건</span>
+                                                <span style={{ color: '#92400E' }}>— 보고서 제출 전 증빙서류를 확인하세요</span>
+                                            </div>
+                                        ) : null;
+                                    })()}
 
                                     {/* 검색 */}
                                     <div style={{ marginBottom: '10px' }}>
