@@ -4,166 +4,156 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-아름다운재단 2026 공익단체 인큐베이팅 지원사업 관리시스템 - 청년노동자인권센터용.
-총 사업비 7천만원 예산 집행 관리, 일정, 갤러리, 게시판, 참여자 관리 통합 웹앱.
+아름다운재단 2026 공익단체 인큐베이팅 지원사업 관리시스템 — 청년노동자인권센터용.
+총 사업비 7천만원 예산 집행 관리, 일정, 갤러리, 게시판, 참여자 관리, 학교관리 통합 웹앱.
+**단일 사용자** (대표 1인, 직원 없음). 아름다운재단이 대시보드에 직접 접속하여 집행 현황 확인.
 
 ## Tech Stack
 
 - **Frontend**: React 18 (no-build, CDN via unpkg/jsdelivr) + Babel standalone transpiler
 - **Backend**: Supabase (PostgreSQL + JWT Auth + RLS)
-- **CDN Libraries**: Chart.js, DOMPurify (XSS sanitization), JSZip (gallery ZIP download), SheetJS (Excel export)
-- **Google APIs**: Calendar API + GSI client (Google Calendar sync)
+- **Serverless**: Vercel Python functions (`api/`) — HWPX 생성, NEIS 프록시, AI 재작성
+- **CDN Libraries**: Chart.js, DOMPurify, JSZip, SheetJS, html2pdf.js, Google APIs (Calendar + GSI)
 - **Language**: Korean-first UI, English code comments
 
 ## Running the Application
 
-No build step required. Serve static files:
+No build step. Serve static files:
 
 ```bash
 python -m http.server 8000
-# or: npx http-server
-# or: VS Code Live Server extension
 ```
 
-Open `http://localhost:8000` → loads `index.html`.
-
-No package.json, no npm install, no linting, no test runner configured.
+Open `http://localhost:8000`. No package.json, no npm install, no linter, no test runner.
 
 ## Database Setup
 
-Execute in Supabase SQL Editor in this order:
-1. `supabase-schema-safe.sql` — Creates all 11 tables, indexes, RLS policies, sample data
-2. `supabase-migration-auth.sql` — Users RLS + 로컬 개발용 초기 관리자 계정 생성 (배포 전 반드시 변경)
+Execute in Supabase SQL Editor in order:
+1. `supabase-schema-safe.sql` ��� All tables, indexes, RLS, sample data
+2. `supabase-migration-auth.sql` — Users RLS + 로컬 개발용 초기 관리자 (배포 전 변경 필수)
 
-Additional migrations (run as needed):
-- `supabase-migration-rls-improved.sql` — Improved RLS policies
-- `supabase-migration-gallery-category.sql` — Gallery category additions
-- `supabase-migration-gallery-rls-fix.sql` — Gallery RLS fix
-- `supabase-migration-password-hash.sql` — Password hashing
-- `supabase-migration-recipients.sql` — Recipients table for payroll
-- `supabase-migration-features.sql` — Feature additions
+Additional migrations: `supabase-migration-{rls-improved,gallery-category,gallery-rls-fix,password-hash,recipients,features,rls,schools}.sql`
 
 ## Architecture
 
-### Single-file SPA pattern
+### Single-file SPA
 
-The entire application lives in `index.html` (~11,400 lines). Structure top to bottom:
+The entire app lives in `index.html` (~12,900 lines). Top to bottom:
 
 1. **CDN imports** (React, ReactDOM, Babel, Supabase, Chart.js, DOMPurify, JSZip, SheetJS, Google APIs)
-2. **Inline `<style>` block** (~1200 lines of CSS)
+2. **Inline `<style>` block** (~1300 lines) — includes `@media print` for dashboard printing
 3. **Single `<script type="text/babel">` block** containing:
-   - Supabase client init (line ~2186)
-   - `CONFIG` constant — project-wide settings (budget, tax rates, periods)
-   - Utility functions: `fmt()`, `parseInput()`, `fmtInput()`, `pct()`, `hashPassword()`
-   - `generateSalaryStatementHTML()` — payroll statement generator (line ~2234)
-   - `LoginPage({ onLogin })` — authentication component (line ~3034)
-   - `ProjectManagementSystem()` — root component containing ALL app state and render functions (line ~3143)
-4. **Service worker registration** and offline/online handlers
+   - Supabase client init (~line 2186)
+   - `CONFIG` constant — budget, tax rates, periods (~line 2384)
+   - `EXECUTION_STATUS` — approval workflow states (~line 2398)
+   - `BUDGET_DATA` — budget hierarchy structure (~line 2934)
+   - `DOCUMENT_RULES` — evidence requirements per expense type (~line 3070)
+   - `generateSalaryStatementHTML()` — payroll statement generator (~line 2410)
+   - `LoginPage` — authentication component (~line 3034)
+   - `ProjectManagementSystem` — root component (~line 3165, ~9700 lines)
+4. **Service worker** registration and offline handlers
 
-### Root component internal structure
+### Root component structure
 
-`ProjectManagementSystem` is a single massive function component (~8000 lines) that contains:
-- ~50+ `useState` declarations for all app state
-- Data fetching via `useEffect` + Supabase queries
-- Google Calendar integration (`initGapi`, `initGis`)
-- Sub-components defined as inner functions: `DashboardGalleryThumb`, `LinkPreviewCard`, `BoardTemplateHeader`, `BoardPagination`, `RichEditorToolbar`, `FileUploadArea`, `BoardWriteForm`, `GalleryWriteForm`, `AttachmentListDisplay`, `CommentSection`, `BoardDetailView`, `GalleryDetailView`, `GalleryCardWithThumb`
-- Page render functions: `renderDashboard()`, `renderBudget()`, `renderSchedule()`, `renderBoard()`, `renderGallery()`, `renderAdmin()`, `renderGuide()`, `renderContent()`
-- `renderContent()` dispatches based on `currentPage` state
+`ProjectManagementSystem` contains ALL app state (~148 `useState` declarations) and these page renderers:
 
-### Navigation
+| Function | Page | Key features |
+|----------|------|-------------|
+| `renderDashboard()` | 대시보드 | Budget gauge, alerts (`getDashboardAlerts()`), category breakdown, print/snapshot export |
+| `renderBudget()` | 예산 관리 | 7 sub-tabs (dashboard, breakdown, register, calculator, history, ratio, calendar) |
+| `renderSchedule()` | 일정 관리 | Calendar view, list view, Google Calendar sync |
+| `renderBoard()` | 게시판 | 4 categories (공지/자료/보고서/자유), rich text, comments |
+| `renderGallery()` | 갤러리 | Categorized images, ZIP download, newsletter integration |
+| `renderNewsletter()` | 뉴스레터 | AI rewrite via api/rewrite.py, gallery selection |
+| `renderSchools()` | 학교관리 | NEIS API school search, timetable viewer, textbook management |
+| `renderAdmin()` | 관리자 | Users, recipients, org settings (admin-only) |
+| `renderGuide()` | 회계가이드 | Accounting rules reference |
 
-State-driven (no URL routing) via `currentPage`:
-- `dashboard` → 대시보드 (budget execution rate, stats)
-- `budget` → 예산 관리 (execution tracking, withholding tax calc)
-- `schedule` → 일정 관리 (calendar view, participant tracking)
-- `gallery` → 갤러리 (categorized image management)
-- `board` → 게시판 (공지, 자료, 보고서, 자유)
-- `guide` → 회계가이드 (accounting guide)
-- `admin` → 관리자 (user/recipient/org management, admin-only)
+Navigation is state-driven via `currentPage` (no URL routing).
+
+### Serverless API Functions (`api/`)
+
+| File | Endpoint | Purpose | Timeout |
+|------|----------|---------|---------|
+| `api/neis.py` | `GET /api/neis` | NEIS school search + timetable proxy | 10s |
+| `api/hwpx.py` | `POST /api/hwpx` | HWPX (한글) document generation | 30s |
+| `api/rewrite.py` | `POST /api/rewrite` | AI newsletter rewrite (Claude API) | 15s |
+
+HWPX templates in `api/hwpxskill_templates/{base,gonmun,report,minutes,proposal}/`.
+Build scripts in `api/hwpxskill_scripts/build_hwpx.py`.
+
+**Important:** `hwpx.py` generates new HWPX from scratch (tab-separated text paragraphs). It does NOT support filling existing template forms with merged cells/checkboxes. Foundation report auto-fill will require an unzip-replace-repackage approach.
 
 ### Authentication
-- Login checks `users` table (username + SHA-256 hashed password)
-- Session stored in `localStorage` (`bf_user_session`), 24h expiry
-- Admin page visible only to `role = 'admin'`
-- 초기 관리자 계정은 로컬 개발 전용 — 배포 전 반드시 변경 필수
-
-### File variants
-
-| File | Purpose |
-|------|---------|
-| `index.html` | Primary full-featured application (edit this) |
-| `index-supabase.html` | Supabase integration variant |
-| `index-simple.html` | Lightweight testing version |
-| `budget-management-advanced.html` | Standalone budget module demo |
-| `manifest.json` | PWA manifest |
-| `service-worker.js` | Offline support service worker |
-
-### Archived JSX modules (`_archive/`)
-
-Reference only — not used by the running app:
-- `project-management-system.jsx` — Full component library (84KB)
-- `participant-management.jsx` — Participant module
-- `budget-manager.jsx` — Budget module
+- SHA-256 hashed password check against `users` table
+- Session in `localStorage` (`bf_user_session`), 24h expiry
+- Admin page: `role = 'admin'` only
+- 초기 관리자 계정은 로컬 개발 전용
 
 ## Domain Logic
 
-### Global Config (`CONFIG` constant, line ~2193)
-```javascript
-CONFIG.TOTAL_BUDGET = 70000000          // 총 사업비 7천만원
-CONFIG.WITHHOLDING_THRESHOLD = 125000   // 원천징수 기준액 (이하 면세)
-CONFIG.INCOME_TAX_RATE = 0.08           // 기타소득세율 8%
-CONFIG.LOCAL_TAX_RATE = 0.1             // 지방소득세율 (기타소득세의 10%)
+### Withholding Tax (원천징수)
+```
+Gross > 125,000원 → 소득세 8% + 지방소득세 0.8% (소득세의 10%)
+Gross ≤ 125,000원 → 면세
+Net = Gross - incomeTax - localTax
 ```
 
-### Withholding Tax (원천징수)
-Amounts > 125,000 KRW trigger automatic tax:
-- 소득세 (income tax): 8% of gross
-- 지방소득세 (local tax): 10% of income tax (= 0.8% of gross)
-- Net = Gross - incomeTax - localTax
-
 ### Budget Hierarchy
-Category (사업비/운영비) → Subcategory (교과서, APP, 캠페인, etc.) → Line Item → Executions
+Category (사업비/운영비) → Subcategory → Line Item → Executions
 
 ### Approval Workflow
-Budget executions: `pending` → `approved` → `executed` → `completed`
-(Status labels and badge colors defined in `EXECUTION_STATUS` constant)
+`pending` → `approved` → `executed` → `completed`
 
-### Document Requirements
-Each expense type has required proof documents via `getRequiredDocs()`. Payment method and expense category determine mandatory documents.
+### Report Data Filtering
+`getSettlementReportHTML()` and `getMonthlyReportHTML()` filter to approved/executed/completed only. `handleExportExcel()` exports whatever the user's current filter is (including pending).
 
-### Payroll Statement
-`generateSalaryStatementHTML()` creates a printable HTML salary statement matching the HWP template format, aggregating all 운영인건비 executions for a recipient.
+### Evidence Documents
+`DOCUMENT_RULES` maps each expense type to required proof documents. `getRequiredDocuments(type, paymentMethod)` returns the list. `executionDocsMap` tracks upload status per execution.
+
+### Dashboard Alerts
+`getDashboardAlerts()` generates D-day alerts for: upcoming schedules, pending executions, 정산 마감 (06-30, 12-31), 보고서 마감 (07-15, 12-15), and budget burn warnings (85%+, 95%+).
 
 ## Supabase Patterns
 
 ```javascript
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-const { data, error } = await supabase
-  .from('table_name')
-  .select('*')
-  .order('created_at', { ascending: false });
+const { data, error } = await supabase.from('table').select('*').order('created_at', { ascending: false });
 ```
 
-All 11 tables have RLS enabled. Public anon key is used client-side. UUID primary keys throughout.
+All tables have RLS. Public anon key client-side. UUID primary keys.
 
 ## Code Conventions
 
-- React functional components with hooks (`useState`, `useEffect`, `useCallback`, `useRef`, `useMemo`)
-- Utility functions: `fmt(n)` for Korean number formatting, `pct(spent, budget)` for percentages
-- `parseInput(s)` strips non-numeric chars, `fmtInput(v)` formats input with commas
 - Korean commit messages: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`
-- All inline — styles, components, and logic coexist in the same HTML file
-- Inner components and render functions are defined inside `ProjectManagementSystem`
+- Utility functions: `fmt(n)` (number formatting), `pct(spent, budget)`, `parseInput(s)`, `fmtInput(v)`, `esc(s)` (HTML escape)
+- All code is inline in `index.html` — styles, components, logic coexist
+- New report/export logic should go in `api/` as serverless functions when possible to avoid growing index.html further
+- JSZip pattern for batch downloads: create zip → loop items → add files → `generateAsync({type:'blob'})` → download
 
 ## Deployment
 
-Hosted on Vercel. Push to `main` triggers auto-deploy. `vercel.json` configures security headers (CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
+Vercel auto-deploy on push to `main`. `vercel.json` configures Python runtimes, timeouts, and security headers (CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
+
+When adding new CDN scripts, update the CSP `script-src` in `vercel.json`.
+
+## File Map
+
+| File | Purpose |
+|------|---------|
+| `index.html` | Primary application (edit this) |
+| `api/neis.py` | NEIS school/timetable proxy |
+| `api/hwpx.py` | HWPX document generator |
+| `api/rewrite.py` | AI newsletter rewriter |
+| `vercel.json` | Deployment config + security headers |
+| `supabase-schema-safe.sql` | Database schema |
+| `supabase-migration-*.sql` | Incremental migrations |
+| `manifest.json` + `service-worker.js` | PWA support |
+| `_archive/` | Reference JSX modules (not used by running app) |
 
 ## Claude Code Commands
 
-Custom commands available via `/` in Claude Code:
 - `/commit` — Korean commit message with convention
 - `/deploy` — Push to main for Vercel deploy
 - `/new-migration` — Create Supabase migration file
 - `/find-component` — Locate component/function in index.html
-- `/review-changes` — Review current changes
+- `/review-changes` �� Review current changes
