@@ -4396,6 +4396,12 @@
                 execution_date: new Date().toISOString().split('T')[0],
                 recipient: ''
             });
+            // ===== 은행 엑셀 일괄등록 상태 =====
+            const [bankImportRows, setBankImportRows] = useState([]); // parsed Excel rows
+            const [bankImportStep, setBankImportStep] = useState('upload'); // upload | preview | done
+            const [bankColMap, setBankColMap] = useState({ date: '', amount: '', type: '', name: '' }); // column mapping
+            const [bankHeaders, setBankHeaders] = useState([]); // Excel column headers
+
             const [calculatorAmount, setCalculatorAmount] = useState('');
             const [calculationResult, setCalculationResult] = useState(null);
             const [calcIncomeType, setCalcIncomeType] = useState('강사료');
@@ -8057,6 +8063,12 @@
                                 📝 집행등록
                             </button>
                             <button
+                                className={`tab-btn ${budgetTab === 'import' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('import')}
+                            >
+                                📥 일괄등록
+                            </button>
+                            <button
                                 className={`tab-btn ${budgetTab === 'calculator' ? 'active' : ''}`}
                                 onClick={() => setBudgetTab('calculator')}
                             >
@@ -8849,6 +8861,267 @@
                                             🔄 초기화
                                         </button>
                                     </div>
+                                </div>
+                            )}
+
+                            {budgetTab === 'import' && (
+                                <div>
+                                    <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16 }}>📥 은행 엑셀 일괄등록</h2>
+                                    <p style={{ color: '#666', fontSize: 13, marginBottom: 20 }}>은행에서 다운로드한 거래내역 엑셀 파일을 업로드하여 집행내역을 일괄 등록합니다.</p>
+
+                                    {/* Step 1: Upload */}
+                                    {bankImportStep === 'upload' && (
+                                        <div style={{ textAlign: 'center', padding: '40px 20px', border: '2px dashed #d1d5db', borderRadius: 16, background: '#fafafa' }}>
+                                            <p style={{ fontSize: 40, marginBottom: 12 }}>📄</p>
+                                            <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>엑셀 파일을 선택하세요</p>
+                                            <p style={{ fontSize: 12, color: '#999', marginBottom: 20 }}>은행 거래내역 (.xlsx, .xls, .csv) 파일 지원</p>
+                                            <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} id="bank-excel-input"
+                                                onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if (!file) return;
+                                                    if (!window.XLSX) { alert('Excel 라이브러리 로딩 중입니다.'); return; }
+                                                    const reader = new FileReader();
+                                                    reader.onload = (evt) => {
+                                                        try {
+                                                            const wb = window.XLSX.read(evt.target.result, { type: 'array', cellDates: true });
+                                                            const ws = wb.Sheets[wb.SheetNames[0]];
+                                                            const jsonData = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                                                            if (jsonData.length < 2) { alert('데이터가 없는 파일입니다.'); return; }
+                                                            // Find header row (first row with 3+ non-empty cells)
+                                                            let headerIdx = 0;
+                                                            for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
+                                                                const nonEmpty = jsonData[i].filter(c => c !== '' && c != null).length;
+                                                                if (nonEmpty >= 3) { headerIdx = i; break; }
+                                                            }
+                                                            const headers = jsonData[headerIdx].map(h => String(h || '').trim());
+                                                            setBankHeaders(headers);
+                                                            // Auto-detect column mapping
+                                                            const autoMap = { date: '', amount: '', type: '', name: '' };
+                                                            headers.forEach((h, idx) => {
+                                                                const hl = h.toLowerCase();
+                                                                if (!autoMap.date && (hl.includes('날짜') || hl.includes('거래일') || hl.includes('일자') || hl.includes('date'))) autoMap.date = String(idx);
+                                                                if (!autoMap.amount && (hl.includes('금액') || hl.includes('거래금액') || hl.includes('amount'))) autoMap.amount = String(idx);
+                                                                if (!autoMap.type && (hl.includes('입금') || hl.includes('출금') || hl.includes('구분') || hl.includes('적요') || hl.includes('거래종류') || hl.includes('type'))) autoMap.type = String(idx);
+                                                                if (!autoMap.name && (hl.includes('이름') || hl.includes('입금자') || hl.includes('출금자') || hl.includes('거래처') || hl.includes('상대') || hl.includes('비고') || hl.includes('적요') || hl.includes('name'))) autoMap.name = String(idx);
+                                                            });
+                                                            setBankColMap(autoMap);
+                                                            // Parse data rows
+                                                            const rows = jsonData.slice(headerIdx + 1)
+                                                                .filter(r => r.some(c => c !== '' && c != null))
+                                                                .map((r, i) => ({
+                                                                    _idx: i,
+                                                                    _raw: r,
+                                                                    _selected: true,
+                                                                    subcategory_id: '',
+                                                                    budget_item_id: '',
+                                                                    description: '',
+                                                                    payment_method: '계좌이체',
+                                                                }));
+                                                            setBankImportRows(rows);
+                                                            setBankImportStep('preview');
+                                                        } catch (err) {
+                                                            alert('파일 읽기 오류: ' + err.message);
+                                                        }
+                                                    };
+                                                    reader.readAsArrayBuffer(file);
+                                                    e.target.value = '';
+                                                }} />
+                                            <button className="btn btn-primary" onClick={() => document.getElementById('bank-excel-input').click()}
+                                                style={{ padding: '12px 32px', fontSize: 14 }}>
+                                                파일 선택
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Step 2: Preview & Map */}
+                                    {bankImportStep === 'preview' && bankImportRows.length > 0 && (() => {
+                                        const cm = bankColMap;
+                                        const getVal = (row, key) => {
+                                            const idx = parseInt(cm[key]);
+                                            return (!isNaN(idx) && row._raw[idx] != null) ? row._raw[idx] : '';
+                                        };
+                                        const fmtDate = (v) => {
+                                            if (!v) return '';
+                                            if (v instanceof Date) return v.toISOString().slice(0, 10);
+                                            const s = String(v).replace(/\./g, '-').replace(/\//g, '-').trim();
+                                            const m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+                                            return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : s;
+                                        };
+                                        const parseAmt = (v) => {
+                                            if (typeof v === 'number') return Math.abs(Math.round(v));
+                                            return Math.abs(parseInt(String(v).replace(/[,\s원₩]/g, '')) || 0);
+                                        };
+                                        const allSubcats = getAllSubcategories();
+                                        const selectedCount = bankImportRows.filter(r => r._selected).length;
+
+                                        return (
+                                        <div>
+                                            {/* Column Mapping */}
+                                            <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                                                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>열 매핑 설정</h3>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                                                    {[
+                                                        { key: 'date', label: '날짜' },
+                                                        { key: 'amount', label: '금액' },
+                                                        { key: 'type', label: '입금/출금 구분' },
+                                                        { key: 'name', label: '입금자/출금자' },
+                                                    ].map(f => (
+                                                        <div key={f.key}>
+                                                            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' }}>{f.label}</label>
+                                                            <select value={cm[f.key]} onChange={e => setBankColMap(p => ({...p, [f.key]: e.target.value}))}
+                                                                style={{ width: '100%', padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12 }}>
+                                                                <option value="">-- 선택 --</option>
+                                                                {bankHeaders.map((h, i) => <option key={i} value={String(i)}>{h || `열 ${i+1}`}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Actions Bar */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                                    <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}
+                                                        onClick={() => { setBankImportStep('upload'); setBankImportRows([]); setBankHeaders([]); }}>
+                                                        ← 다시 업로드
+                                                    </button>
+                                                    <span style={{ fontSize: 13, color: '#666' }}>총 {bankImportRows.length}건 중 <strong>{selectedCount}건</strong> 선택</span>
+                                                </div>
+                                                <button className="btn btn-primary" style={{ padding: '10px 24px', fontSize: 14 }}
+                                                    disabled={selectedCount === 0}
+                                                    onClick={async () => {
+                                                        const toInsert = bankImportRows.filter(r => r._selected && r.subcategory_id && r.budget_item_id);
+                                                        if (toInsert.length === 0) { alert('예산항목이 매핑된 건이 없습니다. 소분류와 항목을 선택해주세요.'); return; }
+                                                        if (!confirm(`${toInsert.length}건을 일괄 등록하시겠습니까?`)) return;
+                                                        try {
+                                                            const insertRows = toInsert.map(r => {
+                                                                const sub = allSubcats.find(s => s.id === r.subcategory_id);
+                                                                const item = sub ? sub.items.find(it => it.id === r.budget_item_id) : null;
+                                                                const cat = BUDGET_DATA.categories.find(c => c.subcategories.some(s => s.id === r.subcategory_id));
+                                                                return {
+                                                                    subcategory_id: r.subcategory_id,
+                                                                    subcategory_name: sub?.name || '',
+                                                                    category_name: cat?.name || '',
+                                                                    budget_item_id: r.budget_item_id,
+                                                                    budget_item_name: item?.name || '',
+                                                                    type: item?.type || '',
+                                                                    description: r.description || String(getVal(r, 'name') || '은행 거래'),
+                                                                    amount: parseAmt(getVal(r, 'amount')),
+                                                                    payment_method: r.payment_method,
+                                                                    execution_date: fmtDate(getVal(r, 'date')) || new Date().toISOString().slice(0,10),
+                                                                    recipient: String(getVal(r, 'name') || ''),
+                                                                    status: 'pending',
+                                                                    created_by: '00000000-0000-0000-0000-000000000001'
+                                                                };
+                                                            });
+                                                            const { error } = await supabase.from('budget_executions').insert(insertRows);
+                                                            if (error) throw error;
+                                                            alert(`${insertRows.length}건 일괄 등록 완료!`);
+                                                            setBankImportStep('done');
+                                                            await refreshExecutions();
+                                                        } catch (err) {
+                                                            alert('등록 오류: ' + err.message);
+                                                        }
+                                                    }}>
+                                                    ✅ {selectedCount}건 일괄 등록
+                                                </button>
+                                            </div>
+
+                                            {/* Data Table */}
+                                            <div style={{ overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                                    <thead>
+                                                        <tr style={{ background: '#f8f9fa' }}>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', width: 40 }}>
+                                                                <input type="checkbox" checked={bankImportRows.every(r => r._selected)}
+                                                                    onChange={e => setBankImportRows(prev => prev.map(r => ({...r, _selected: e.target.checked})))} />
+                                                            </th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', width: 90 }}>날짜</th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'right', width: 100 }}>금액</th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', width: 70 }}>구분</th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', width: 100 }}>입출금자</th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>소분류</th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>예산항목</th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', width: 160 }}>설명</th>
+                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', width: 80 }}>결제방법</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {bankImportRows.map((row, ri) => {
+                                                            const dateVal = fmtDate(getVal(row, 'date'));
+                                                            const amtVal = parseAmt(getVal(row, 'amount'));
+                                                            const typeVal = String(getVal(row, 'type'));
+                                                            const nameVal = String(getVal(row, 'name'));
+                                                            const isWithdraw = typeVal.includes('출금') || typeVal.includes('지급') || typeVal.includes('이체') || amtVal < 0;
+                                                            const rowItems = row.subcategory_id ? getAllBudgetItems(row.subcategory_id) : [];
+                                                            return (
+                                                            <tr key={ri} style={{ background: row._selected ? '#fff' : '#f9fafb', opacity: row._selected ? 1 : 0.5, borderBottom: '1px solid #f0f0f0' }}>
+                                                                <td style={{ padding: '8px', textAlign: 'center' }}>
+                                                                    <input type="checkbox" checked={row._selected}
+                                                                        onChange={() => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, _selected: !r._selected} : r))} />
+                                                                </td>
+                                                                <td style={{ padding: '8px', whiteSpace: 'nowrap', color: '#374151' }}>{dateVal}</td>
+                                                                <td style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: isWithdraw ? '#dc2626' : '#059669' }}>{fmt(amtVal)}</td>
+                                                                <td style={{ padding: '8px', textAlign: 'center' }}>
+                                                                    <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                                                                        background: isWithdraw ? '#fef2f2' : '#f0fdf4', color: isWithdraw ? '#dc2626' : '#059669' }}>
+                                                                        {isWithdraw ? '출금' : '입금'}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '8px', color: '#374151' }}>{nameVal}</td>
+                                                                <td style={{ padding: '8px' }}>
+                                                                    <select value={row.subcategory_id} style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
+                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, subcategory_id: e.target.value, budget_item_id: ''} : r))}>
+                                                                        <option value="">-- 선택 --</option>
+                                                                        {allSubcats.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                                    </select>
+                                                                </td>
+                                                                <td style={{ padding: '8px' }}>
+                                                                    <select value={row.budget_item_id} style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
+                                                                        disabled={!row.subcategory_id}
+                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, budget_item_id: e.target.value} : r))}>
+                                                                        <option value="">-- 선택 --</option>
+                                                                        {rowItems.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                                                                    </select>
+                                                                </td>
+                                                                <td style={{ padding: '8px' }}>
+                                                                    <input type="text" placeholder={nameVal || '설명 입력'} value={row.description}
+                                                                        style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
+                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, description: e.target.value} : r))} />
+                                                                </td>
+                                                                <td style={{ padding: '8px', textAlign: 'center' }}>
+                                                                    <select value={row.payment_method} style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
+                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, payment_method: e.target.value} : r))}>
+                                                                        <option value="계좌이체">계좌이체</option>
+                                                                        <option value="카드">카드</option>
+                                                                    </select>
+                                                                </td>
+                                                            </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        );
+                                    })()}
+
+                                    {/* Step 3: Done */}
+                                    {bankImportStep === 'done' && (
+                                        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                                            <p style={{ fontSize: 48, marginBottom: 12 }}>✅</p>
+                                            <p style={{ fontSize: 18, fontWeight: 700, color: '#059669', marginBottom: 8 }}>일괄 등록 완료!</p>
+                                            <p style={{ fontSize: 13, color: '#666', marginBottom: 24 }}>등록된 내역은 집행내역 탭에서 확인할 수 있습니다.</p>
+                                            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                                                <button className="btn btn-secondary" onClick={() => { setBankImportStep('upload'); setBankImportRows([]); setBankHeaders([]); }}>
+                                                    📥 추가 업로드
+                                                </button>
+                                                <button className="btn btn-primary" onClick={() => setBudgetTab('history')}>
+                                                    📋 집행내역 보기
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
