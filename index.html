@@ -3823,6 +3823,7 @@
             const [googleTokenClient, setGoogleTokenClient] = useState(null);
             const gapiInited = useRef(false);
             const gisInited = useRef(false);
+            const initialLoadDone = useRef(false);
 
             // ===== 뉴스레터 상태 =====
             const [newsletterTemplate, setNewsletterTemplate] = useState('modern'); // modern | magazine | classic
@@ -4905,7 +4906,7 @@
             useEffect(() => {
                 const loadAllData = async () => {
                     try {
-                        setLoading(true);
+                        if (!initialLoadDone.current) setLoading(true);
                         setError(null);
 
                         const [schedules, galleries, boards, executions, recipientsData, settingsData] = await Promise.all([
@@ -4972,12 +4973,13 @@
                         console.error('Error loading data:', err);
                     } finally {
                         setLoading(false);
+                        initialLoadDone.current = true;
                     }
                 };
 
                 loadAllData();
                 // F-04: 활동 로그 초기 로딩 (대시보드 위젯용)
-                loadActivityLogs();
+                if (!initialLoadDone.current) loadActivityLogs();
             }, [loadSchedules, loadGalleries, loadBoards, loadBudgetExecutions, calculateStats]);
 
             // ── 대시보드 차트 ─────────────────────────────────────────────
@@ -5177,7 +5179,7 @@
                         <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '5px 12px' }}
                             onClick={() => {
                                 try {
-                                    const content = document.querySelector('.main-content');
+                                    const content = document.querySelector('.content-area');
                                     if (!content) { alert('대시보드를 찾을 수 없습니다.'); return; }
                                     const clone = content.cloneNode(true);
                                     clone.querySelectorAll('button, .btn, script, .alert-dismiss').forEach(el => el.remove());
