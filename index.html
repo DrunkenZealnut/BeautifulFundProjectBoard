@@ -2757,7 +2757,7 @@
             let grandBeforeTotal = 0;
             let grandAfterTotal = 0;
 
-            effectiveBudgetData.categories.forEach(cat => {
+            BUDGET_DATA.categories.forEach(cat => {
                 let catBeforeTotal = 0;
                 let catAfterTotal = 0;
                 const subRows = cat.subcategories.map(sub => {
@@ -4874,7 +4874,7 @@
 
             // 통계 계산
             const calculateStats = useCallback((schedules, galleries, boards, executions) => {
-                const totalBudget = CONFIG.TOTAL_BUDGET;
+                const totalBudget = effectiveBudgetData.totalBudget;
                 const usedBudget = executions.reduce((sum, exec) => sum + (exec.amount || 0), 0);
                 const usageRate = Math.round((usedBudget / totalBudget) * 100);
 
@@ -5134,10 +5134,10 @@
                 const yearEnd = new Date(today.getFullYear(), 11, 31);
                 const periodPct = Math.round(((today - yearStart) / (yearEnd - yearStart)) * 100);
                 const totalSpent = (data?.budgetExecutions || []).reduce((s, e) => s + (e.amount || 0), 0);
-                const budgetPct = Math.round((totalSpent / CONFIG.TOTAL_BUDGET) * 100);
+                const budgetPct = Math.round((totalSpent / effectiveBudgetData.totalBudget) * 100);
                 const burnRatio = periodPct > 0 ? (budgetPct / periodPct).toFixed(1) : 0;
                 const remainingMonths = 12 - today.getMonth();
-                const monthlyAvail = remainingMonths > 0 ? Math.round((CONFIG.TOTAL_BUDGET - totalSpent) / remainingMonths) : 0;
+                const monthlyAvail = remainingMonths > 0 ? Math.round((effectiveBudgetData.totalBudget - totalSpent) / remainingMonths) : 0;
 
                 return (
                 <div>
@@ -5156,7 +5156,7 @@
                                 <div className="dash-hero-gauge-bar-track">
                                     <div className="dash-hero-gauge-bar-fill" style={{ width: `${Math.max(0, Math.min(budgetPct, 100))}%` }} />
                                 </div>
-                                <div style={{ fontSize: 11, opacity: 0.55 }}>{fmt(totalSpent)}원 / {fmt(CONFIG.TOTAL_BUDGET)}원</div>
+                                <div style={{ fontSize: 11, opacity: 0.55 }}>{fmt(totalSpent)}원 / {fmt(effectiveBudgetData.totalBudget)}원</div>
                             </div>
                         </div>
                     </div>
@@ -8034,7 +8034,7 @@
             const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             const formatLocalDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
             const getSettlementReportHTML = () => {
-                const totalBudget = CONFIG.TOTAL_BUDGET;
+                const totalBudget = effectiveBudgetData.totalBudget;
                 const approvedStatuses = ['approved', 'executed', 'completed'];
                 const approvedExecs = (data?.budgetExecutions || []).filter(e => approvedStatuses.includes(e.status));
                 const totalSpent = approvedExecs.reduce((s, e) => s + (e.amount || 0), 0);
@@ -9589,9 +9589,9 @@
                                                     const execs = (data?.budgetExecutions || []).filter(e => approvedStatuses.includes(e.status));
                                                     const totalSpent = execs.reduce((s, e) => s + (e.amount || 0), 0);
                                                     downloadHWPX('정산보고서', [
-                                                        { type: 'paragraph', text: '아름다운재단 2026 공익단체 인큐베이팅 지원사업 정산보고서' },
-                                                        { type: 'paragraph', text: `청년노동자인권센터 • ${new Date().toLocaleDateString('ko-KR')}` },
-                                                        { type: 'paragraph', text: `총 예산: ${fmt(CONFIG.TOTAL_BUDGET)}원 | 총 집행: ${fmt(totalSpent)}원 | 집행률: ${pct(totalSpent, CONFIG.TOTAL_BUDGET)}% | 잔여: ${fmt(CONFIG.TOTAL_BUDGET - totalSpent)}원` },
+                                                        { type: 'paragraph', text: `${effectiveProjectName} 정산보고서` },
+                                                        { type: 'paragraph', text: `${effectiveOrgName} • ${new Date().toLocaleDateString('ko-KR')}` },
+                                                        { type: 'paragraph', text: `총 예산: ${fmt(effectiveBudgetData.totalBudget)}원 | 총 집행: ${fmt(totalSpent)}원 | 집행률: ${pct(totalSpent, effectiveBudgetData.totalBudget)}% | 잔여: ${fmt(effectiveBudgetData.totalBudget - totalSpent)}원` },
                                                         { type: 'table', headers: ['집행일', '카테고리', '소분류', '항목', '금액', '결제방법', '수취인', '상태'],
                                                           rows: execs.map(e => [e.execution_date||'', e.category_name||'', e.subcategory_name||'', e.budget_item_name||'', fmt(e.amount||0)+'원', e.payment_method||'', e.recipient||'', EXECUTION_STATUS[e.status]?.label||e.status||'']) },
                                                         { type: 'paragraph', text: `합계: ${fmt(totalSpent)}원` }
@@ -11407,7 +11407,7 @@
                         alert('뉴스레터에 포함할 항목을 선택해주세요.');
                         return;
                     }
-                    const html = generateNewsletterHTML(newsletterTemplate, newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
+                    const html = generateNewsletterHTML(newsletterTemplate, newsletterConfig, selSchedules, selBoards, effectiveOrgName, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
                     const pw = window.open('', '_blank', 'width=900,height=700');
                     if (!pw) { alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.'); return; }
                     pw.document.write(html);
@@ -11422,7 +11422,7 @@
                         alert('뉴스레터에 포함할 항목을 선택해주세요.');
                         return;
                     }
-                    const fullHtml = generateNewsletterHTML(newsletterTemplate, newsletterConfig, selSchedules, selBoards, DEFAULT_ORG_NAME, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
+                    const fullHtml = generateNewsletterHTML(newsletterTemplate, newsletterConfig, selSchedules, selBoards, effectiveOrgName, boardImageUrls, rewrittenContents, (data.galleries || []).filter(g => selectedGalleryNewsletterIds.has(g.id)), galleryThumbUrls);
                     // Extract body content only (between <body> and </body>)
                     const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
                     const bodyHtml = bodyMatch ? bodyMatch[1] : fullHtml;
@@ -11654,7 +11654,7 @@
                                                 const selBoards = (data.boards || []).filter(b => selectedBoardIds.has(b.id));
                                                 if (selSchedules.length === 0 && selBoards.length === 0) { alert('뉴스레터에 포함할 항목을 선택해주세요.'); return; }
                                                 const secs = [{ type: 'paragraph', text: newsletterConfig.title || '뉴스레터' },
-                                                    { type: 'paragraph', text: `${DEFAULT_ORG_NAME}${newsletterConfig.issueNumber ? ' | ' + newsletterConfig.issueNumber : ''} | ${newsletterConfig.publishDate}` }];
+                                                    { type: 'paragraph', text: `${effectiveOrgName}${newsletterConfig.issueNumber ? ' | ' + newsletterConfig.issueNumber : ''} | ${newsletterConfig.publishDate}` }];
                                                 if (newsletterConfig.greeting) secs.push({ type: 'paragraph', text: newsletterConfig.greeting });
                                                 if (selSchedules.length > 0) {
                                                     secs.push({ type: 'paragraph', text: '주요 일정' });
@@ -11720,7 +11720,7 @@
                                     <div style={{ borderRadius: 16, overflow: 'hidden', background: '#f5f5f5', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
                                         {/* Header */}
                                         <div style={NL_STYLES.header[T]}>
-                                            <div style={NL_STYLES.orgName[T]}>{DEFAULT_ORG_NAME}</div>
+                                            <div style={NL_STYLES.orgName[T]}>{effectiveOrgName}</div>
                                             {NL_STYLES.subName[T] && <div style={NL_STYLES.subName[T]}>YOUTH WORKERS' RIGHTS CENTER</div>}
                                             {T === 'classic' ? (
                                                 <div style={{ borderTop: '3px double #b8860b', marginTop: 10, paddingTop: 6 }}>
@@ -11928,14 +11928,14 @@
                                         <div style={NL_STYLES.footer[T]}>
                                             {NL_STYLES.footerOrg[T] ? (
                                                 <>
-                                                <div style={NL_STYLES.footerOrg[T]}>{DEFAULT_ORG_NAME}</div>
+                                                <div style={NL_STYLES.footerOrg[T]}>{effectiveOrgName}</div>
                                                 <div style={{ fontSize: 10, color: T === 'magazine' ? '#94a3b8' : '#9ca3af', marginTop: T === 'classic' ? 6 : 4, fontStyle: T === 'classic' ? 'italic' : 'normal' }}>
                                                     {T === 'classic' ? '본 뉴스레터는 아름다운재단 2026 공익단체 인큐베이팅 지원사업으로 제작되었습니다.' : '아름다운재단 2026 공익단체 인큐베이팅 지원사업'}
                                                 </div>
                                                 </>
                                             ) : (
                                                 <div style={{ fontSize: 11, color: '#aaa', padding: '0 20px 12px' }}>
-                                                    {DEFAULT_ORG_NAME} · 아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                                                    {effectiveOrgName} · 아름다운재단 2026 공익단체 인큐베이팅 지원사업
                                                 </div>
                                             )}
                                         </div>
