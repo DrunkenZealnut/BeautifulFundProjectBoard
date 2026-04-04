@@ -4853,18 +4853,24 @@
 
             const loadBudgetExecutions = useCallback(async () => {
                 try {
-                    const { data: executions, error } = await supabase
+                    let query = supabase
                         .from('budget_executions')
                         .select('*')
                         .order('created_at', { ascending: false });
 
+                    // Filter by active project if available
+                    if (activeProject?.id) {
+                        query = query.or(`project_id.eq.${activeProject.id},project_id.is.null`);
+                    }
+
+                    const { data: executions, error } = await query;
                     if (error) throw error;
                     return executions || [];
                 } catch (err) {
                     console.error('Error loading budget executions:', err);
                     return [];
                 }
-            }, []);
+            }, [activeProject]);
 
             // 통계 계산
             const calculateStats = useCallback((schedules, galleries, boards, executions) => {
@@ -8775,6 +8781,7 @@
                                                     }
 
                                                     // 삽입할 데이터 준비
+                                                    const _session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
                                                     const insertData = {
                                                         subcategory_id: formData.subcategory_id,
                                                         subcategory_name: formData.subcategory_name,
@@ -8788,7 +8795,8 @@
                                                         execution_date: formData.execution_date,
                                                         recipient: formData.recipient,
                                                         status: 'pending',
-                                                        created_by: '00000000-0000-0000-0000-000000000001'
+                                                        created_by: _session.id || null,
+                                                        project_id: activeProject?.id || null
                                                     };
 
                                                     console.log('📊 삽입할 데이터:', insertData);
@@ -9056,7 +9064,8 @@
                                                                     execution_date: fmtDate(getVal(r, 'date')) || new Date().toISOString().slice(0,10),
                                                                     recipient: String(getVal(r, 'name') || ''),
                                                                     status: 'pending',
-                                                                    created_by: session.id || null
+                                                                    created_by: session.id || null,
+                                                                    project_id: activeProject?.id || null
                                                                 };
                                                             });
                                                             const { error } = await supabase.from('budget_executions').insert(insertRows);
