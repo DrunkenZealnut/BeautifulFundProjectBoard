@@ -2378,7 +2378,9 @@
         const supabaseKey = 'sb_publishable_6EjqM_6qP_wFQGD54P2M9Q_eULAJHnJ';
 
         // Supabase 클라이언트 초기화
-        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey, {
+            db: { schema: 'bf' }
+        });
 
         // ===== 프로젝트 전역 설정 상수 =====
         const CONFIG = {
@@ -4936,27 +4938,31 @@
                             if (row.setting_key in merged) merged[row.setting_key] = row.setting_value || '';
                             if (row.setting_key in perfMerged) perfMerged[row.setting_key] = row.setting_value || '0';
                         });
-                        setOrgSettings(merged);
-                        setPerfIndicators(perfMerged);
+                        if (!initialLoadDone.current) {
+                            setOrgSettings(merged);
+                            setPerfIndicators(perfMerged);
+                        }
 
-                        // Load active project
-                        try {
-                            const { data: projRows } = await supabase.from('projects').select('*').order('year', { ascending: false });
-                            if (projRows && projRows.length > 0) {
-                                setProjectsList(projRows);
-                                const active = projRows.find(p => p.is_active);
-                                if (active) {
-                                    setActiveProject(active);
-                                    if (active.budget_data) setActiveBudgetData(active.budget_data);
+                        // Load active project (초기 로딩에서만 — 재실행 시 setActiveProject가 무한 루프 유발)
+                        if (!initialLoadDone.current) {
+                            try {
+                                const { data: projRows } = await supabase.from('projects').select('*').order('year', { ascending: false });
+                                if (projRows && projRows.length > 0) {
+                                    setProjectsList(projRows);
+                                    const active = projRows.find(p => p.is_active);
+                                    if (active) {
+                                        setActiveProject(active);
+                                        if (active.budget_data) setActiveBudgetData(active.budget_data);
+                                    }
                                 }
-                            }
-                        } catch (e) { console.log('projects table not ready:', e.message); }
+                            } catch (e) { console.log('projects table not ready:', e.message); }
 
-                        // Load schools
-                        const { data: schoolRows } = await supabase.from('schools').select('*').order('name');
-                        if (schoolRows) setSchoolsData(schoolRows);
-                        const { data: tbRows } = await supabase.from('school_textbooks').select('*');
-                        if (tbRows) setSchoolTextbooks(tbRows);
+                            // Load schools
+                            const { data: schoolRows } = await supabase.from('schools').select('*').order('name');
+                            if (schoolRows) setSchoolsData(schoolRows);
+                            const { data: tbRows } = await supabase.from('school_textbooks').select('*');
+                            if (tbRows) setSchoolTextbooks(tbRows);
+                        }
 
                         const stats = calculateStats(schedules, galleries, boards, executions);
 
