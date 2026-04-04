@@ -3747,6 +3747,7 @@
             const [projectsList, setProjectsList] = useState([]);
             const [activeBudgetData, setActiveBudgetData] = useState(null); // null = use hardcoded BUDGET_DATA
             const [projectSwitching, setProjectSwitching] = useState(false);
+            const [projectCreating, setProjectCreating] = useState(false);
             const [projectCreateModal, setProjectCreateModal] = useState(null); // null | { mode: 'save'|'excel', budgetData? }
 
             // Effective budget data: from active project or hardcoded fallback
@@ -13092,6 +13093,7 @@
                             const handleSubmitProjectCreate = async () => {
                                 const f = projectCreateForm;
                                 if (!f.name || !f.organization) { alert('프로젝트 이름과 단체명을 입력해주세요.'); return; }
+                                setProjectCreating(true);
                                 try {
                                     const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
                                     const bd = projectCreateModal.budgetData;
@@ -13109,6 +13111,7 @@
                                     setProjectCreateModal(null);
                                     alert('프로젝트가 생성되었습니다!');
                                 } catch (err) { alert('저장 오류: ' + err.message); }
+                                finally { setProjectCreating(false); }
                             };
                             const handleCloneProject = async (proj) => {
                                 const newYear = parseInt(prompt('새 사업년도:', String(proj.year + 1)));
@@ -13274,7 +13277,9 @@
 
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
                                                 <button className="btn btn-secondary" onClick={() => setProjectCreateModal(null)} style={{ padding: '10px 20px' }}>취소</button>
-                                                <button className="btn btn-primary" onClick={handleSubmitProjectCreate} style={{ padding: '10px 24px' }}>프로젝트 생성</button>
+                                                <button className="btn btn-primary" onClick={handleSubmitProjectCreate} disabled={projectCreating} style={{ padding: '10px 24px' }}>
+                                                    {projectCreating ? '생성 중...' : '프로젝트 생성'}
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
