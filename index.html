@@ -8945,7 +8945,7 @@
                                             if (v instanceof Date) return v.toISOString().slice(0, 10);
                                             const s = String(v).replace(/\./g, '-').replace(/\//g, '-').trim();
                                             const m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-                                            return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : s;
+                                            return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : '';
                                         };
                                         const parseAmt = (v) => {
                                             if (typeof v === 'number') return Math.abs(Math.round(v));
