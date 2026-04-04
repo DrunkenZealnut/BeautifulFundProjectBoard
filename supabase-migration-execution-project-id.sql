@@ -5,6 +5,9 @@
 ALTER TABLE public.budget_executions
     ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES public.projects(id);
 
+-- 1.1 Ensure RLS is enabled
+ALTER TABLE public.budget_executions ENABLE ROW LEVEL SECURITY;
+
 -- 2. Index for project-scoped queries
 CREATE INDEX IF NOT EXISTS idx_executions_project ON public.budget_executions (project_id);
 
