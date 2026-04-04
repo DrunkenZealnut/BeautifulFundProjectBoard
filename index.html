@@ -8998,20 +8998,22 @@
                                                                 const sub = allSubcats.find(s => s.id === r.subcategory_id);
                                                                 const item = sub ? sub.items.find(it => it.id === r.budget_item_id) : null;
                                                                 const cat = BUDGET_DATA.categories.find(c => c.subcategories.some(s => s.id === r.subcategory_id));
+                                                                if (!sub || !cat || !item) throw new Error(`행 ${r._idx + 1}: 필수 항목 매핑이 누락되었습니다.`);
+                                                                const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
                                                                 return {
                                                                     subcategory_id: r.subcategory_id,
-                                                                    subcategory_name: sub?.name || '',
-                                                                    category_name: cat?.name || '',
+                                                                    subcategory_name: sub.name,
+                                                                    category_name: cat.name,
                                                                     budget_item_id: r.budget_item_id,
-                                                                    budget_item_name: item?.name || '',
-                                                                    type: item?.type || '',
+                                                                    budget_item_name: item.name,
+                                                                    type: item.type || '일반지출',
                                                                     description: r.description || String(getVal(r, 'name') || '은행 거래'),
                                                                     amount: parseAmt(getVal(r, 'amount')),
                                                                     payment_method: r.payment_method,
                                                                     execution_date: fmtDate(getVal(r, 'date')) || new Date().toISOString().slice(0,10),
                                                                     recipient: String(getVal(r, 'name') || ''),
                                                                     status: 'pending',
-                                                                    created_by: '00000000-0000-0000-0000-000000000001'
+                                                                    created_by: session.id || null
                                                                 };
                                                             });
                                                             const { error } = await supabase.from('budget_executions').insert(insertRows);
@@ -9052,7 +9054,7 @@
                                                             const amtVal = parseAmt(getVal(row, 'amount'));
                                                             const typeVal = String(getVal(row, 'type'));
                                                             const nameVal = String(getVal(row, 'name'));
-                                                            const isWithdraw = typeVal.includes('출금') || typeVal.includes('지급') || typeVal.includes('이체') || amtVal < 0;
+                                                            const isWithdraw = typeVal.includes('출금') || typeVal.includes('지급') || typeVal.includes('이체');
                                                             const rowItems = row.subcategory_id ? getAllBudgetItems(row.subcategory_id) : [];
                                                             return (
                                                             <tr key={ri} style={{ background: row._selected ? '#fff' : '#f9fafb', opacity: row._selected ? 1 : 0.5, borderBottom: '1px solid #f0f0f0' }}>
