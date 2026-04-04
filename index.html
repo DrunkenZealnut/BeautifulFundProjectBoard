@@ -3742,6 +3742,36 @@
                 stats: {}
             });
 
+            // ===== 프로젝트 관리 상태 =====
+            const [activeProject, setActiveProject] = useState(null);
+            const [projectsList, setProjectsList] = useState([]);
+            const [activeBudgetData, setActiveBudgetData] = useState(null); // null = use hardcoded BUDGET_DATA
+
+            // Effective budget data: from active project or hardcoded fallback
+            const effectiveBudgetData = useMemo(() => {
+                if (activeBudgetData && activeBudgetData.categories) return activeBudgetData;
+                return BUDGET_DATA;
+            }, [activeBudgetData]);
+
+            const effectiveOrgName = activeProject?.organization || DEFAULT_ORG_NAME;
+            const effectiveProjectName = activeProject?.name || BUDGET_DATA.projectName;
+
+            // Module system: which nav items to show
+            const COMMON_MODULES = [
+                { id: 'dashboard', label: '🏠 대시보드', description: '전체 현황 보기' },
+                { id: 'budget', label: '💰 예산관리', description: '고급 예산 집행 시스템' },
+                { id: 'schedule', label: '📅 일정관리', description: '사업 일정 및 참여자 관리' },
+                { id: 'gallery', label: '📸 갤러리', description: '현장 사진 및 결과물' },
+                { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' },
+                { id: 'guide', label: '📖 회계가이드', description: '회계처리방식 안내' },
+                { id: 'newsletter', label: '📰 뉴스레터', description: '일정·게시글 뉴스레터 제작' },
+            ];
+            const CUSTOM_MODULES = [
+                { id: 'schools', label: '🏫 학교관리', description: '파트너 학교 정보 관리' },
+            ];
+            const activeModuleIds = activeProject?.modules || [...COMMON_MODULES.map(m => m.id), ...CUSTOM_MODULES.map(m => m.id)];
+            const visibleNavModules = [...COMMON_MODULES, ...CUSTOM_MODULES].filter(m => activeModuleIds.includes(m.id));
+
             // 게시판 공통 상태
             const [boardView, setBoardView] = useState('list'); // list | detail | write
             const [boardCategory, setBoardCategory] = useState('all');
@@ -4893,6 +4923,19 @@
                         });
                         setOrgSettings(merged);
                         setPerfIndicators(perfMerged);
+
+                        // Load active project
+                        try {
+                            const { data: projRows } = await supabase.from('projects').select('*').order('year', { ascending: false });
+                            if (projRows && projRows.length > 0) {
+                                setProjectsList(projRows);
+                                const active = projRows.find(p => p.is_active);
+                                if (active) {
+                                    setActiveProject(active);
+                                    if (active.budget_data) setActiveBudgetData(active.budget_data);
+                                }
+                            }
+                        } catch (e) { console.log('projects table not ready:', e.message); }
 
                         // Load schools
                         const { data: schoolRows } = await supabase.from('schools').select('*').order('name');
@@ -12452,6 +12495,7 @@
                                 { key: 'users', label: '👤 사용자 관리' },
                                 { key: 'recipients', label: '📋 수급자 관리' },
                                 { key: 'orgSettings', label: '🏢 기관 정보' },
+                                { key: 'projects', label: '📂 프로젝트 관리' },
                                 { key: 'logs', label: '📜 활동 로그' }
                             ].map(tab => (
                                 <button
@@ -12935,6 +12979,243 @@
                         )}
                         </div>)}
 
+                        {/* ── 프로젝트 관리 탭 ─────────────────────────────────────── */}
+                        {adminTab === 'projects' && (() => {
+                            const allSubcats = getAllSubcategories();
+                            const handleActivateProject = async (projId) => {
+                                if (!confirm('이 프로젝트로 전환하시겠습니까?\n예산 구조와 네비게이션이 변경됩니다.')) return;
+                                try {
+                                    await supabase.from('projects').update({ is_active: false }).eq('is_active', true);
+                                    await supabase.from('projects').update({ is_active: true }).eq('id', projId);
+                                    const proj = projectsList.find(p => p.id === projId);
+                                    setActiveProject(proj);
+                                    if (proj?.budget_data) setActiveBudgetData(proj.budget_data);
+                                    setProjectsList(prev => prev.map(p => ({...p, is_active: p.id === projId})));
+                                    alert('프로젝트가 전환되었습니다.');
+                                } catch (err) { alert('전환 오류: ' + err.message); }
+                            };
+                            const handleDeleteProject = async (projId) => {
+                                if (!confirm('이 프로젝트를 삭제하시겠습니까? 복구할 수 없습니다.')) return;
+                                try {
+                                    await supabase.from('projects').delete().eq('id', projId);
+                                    setProjectsList(prev => prev.filter(p => p.id !== projId));
+                                    if (activeProject?.id === projId) { setActiveProject(null); setActiveBudgetData(null); }
+                                } catch (err) { alert('삭제 오류: ' + err.message); }
+                            };
+                            const handleSaveCurrentAsProject = async () => {
+                                const name = prompt('프로젝트 이름:', BUDGET_DATA.projectName);
+                                if (!name) return;
+                                try {
+                                    const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
+                                    const { data: inserted, error } = await supabase.from('projects').insert([{
+                                        name,
+                                        organization: DEFAULT_ORG_NAME,
+                                        year: 2026,
+                                        period: BUDGET_DATA.period,
+                                        total_budget: BUDGET_DATA.totalBudget,
+                                        budget_data: BUDGET_DATA,
+                                        config: CONFIG,
+                                        modules: [...COMMON_MODULES.map(m => m.id), ...CUSTOM_MODULES.map(m => m.id)],
+                                        module_config: { schools: { label: '학교관리', icon: '🏫' } },
+                                        is_active: projectsList.length === 0,
+                                        created_by: session.id || null
+                                    }]).select().single();
+                                    if (error) throw error;
+                                    setProjectsList(prev => [inserted, ...prev]);
+                                    if (projectsList.length === 0) { setActiveProject(inserted); setActiveBudgetData(inserted.budget_data); }
+                                    alert('현재 예산구조가 프로젝트로 저장되었습니다.');
+                                } catch (err) { alert('저장 오류: ' + err.message); }
+                            };
+                            const handleExcelProjectUpload = (e) => {
+                                const file = e.target.files[0];
+                                if (!file || !window.XLSX) { alert('엑셀 라이브러리 로딩 중입니다.'); return; }
+                                const reader = new FileReader();
+                                reader.onload = (evt) => {
+                                    try {
+                                        const wb = window.XLSX.read(evt.target.result, { type: 'array' });
+                                        const ws = wb.Sheets[wb.SheetNames[0]];
+                                        const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                                        // Find header row
+                                        let hIdx = 0;
+                                        for (let i = 0; i < Math.min(rows.length, 10); i++) {
+                                            const nonEmpty = rows[i].filter(c => c !== '' && c != null).length;
+                                            if (nonEmpty >= 4) { hIdx = i; break; }
+                                        }
+                                        const headers = rows[hIdx].map(h => String(h || '').trim());
+                                        const dataRows = rows.slice(hIdx + 1).filter(r => r.some(c => c !== '' && c != null));
+                                        // Auto-detect columns
+                                        const colIdx = { cat: -1, sub: -1, item: -1, type: -1, budget: -1, h1: -1, h2: -1, detail: -1 };
+                                        headers.forEach((h, i) => {
+                                            const hl = h.toLowerCase();
+                                            if (hl.includes('대분류') || hl === '분류') colIdx.cat = i;
+                                            else if (hl.includes('소분류') || hl.includes('세부')) colIdx.sub = i;
+                                            else if (hl.includes('항목') || hl.includes('내역')) colIdx.item = i;
+                                            else if (hl.includes('유형') || hl.includes('과목')) colIdx.type = i;
+                                            else if (hl.includes('총') && hl.includes('예산') || hl === '예산액') colIdx.budget = i;
+                                            else if (hl.includes('상반기') || hl.includes('1차')) colIdx.h1 = i;
+                                            else if (hl.includes('하반기') || hl.includes('2차')) colIdx.h2 = i;
+                                            else if (hl.includes('산출') || hl.includes('내역') || hl.includes('비고')) colIdx.detail = i;
+                                        });
+                                        // Build tree
+                                        const catMap = {};
+                                        let lastCat = '', lastSub = '';
+                                        const toNum = (v) => parseInt(String(v).replace(/[,\s원₩]/g, '')) || 0;
+                                        dataRows.forEach(r => {
+                                            const cat = String(r[colIdx.cat] || '').trim() || lastCat;
+                                            const sub = String(r[colIdx.sub] || '').trim() || lastSub;
+                                            const item = String(r[colIdx.item] || '').trim();
+                                            if (cat) lastCat = cat;
+                                            if (sub) lastSub = sub;
+                                            if (!item) return;
+                                            if (!catMap[cat]) catMap[cat] = { name: cat, subs: {} };
+                                            if (!catMap[cat].subs[sub]) catMap[cat].subs[sub] = { name: sub, items: [] };
+                                            catMap[cat].subs[sub].items.push({
+                                                name: item,
+                                                type: String(r[colIdx.type] || '').trim() || '일반지출',
+                                                budget: toNum(r[colIdx.budget]),
+                                                h1: colIdx.h1 >= 0 ? toNum(r[colIdx.h1]) : 0,
+                                                h2: colIdx.h2 >= 0 ? toNum(r[colIdx.h2]) : 0,
+                                                detail: colIdx.detail >= 0 ? String(r[colIdx.detail] || '') : ''
+                                            });
+                                        });
+                                        // Convert to BUDGET_DATA format
+                                        const categories = Object.entries(catMap).map(([_, cv], ci) => {
+                                            const subcategories = Object.entries(cv.subs).map(([__, sv], si) => {
+                                                const items = sv.items.map((it, ii) => ({
+                                                    id: `item-${ci}-${si}-${ii}`,
+                                                    name: it.name, type: it.type, budget: it.budget, h1: it.h1, h2: it.h2, detail: it.detail
+                                                }));
+                                                const subBudget = items.reduce((s, i) => s + i.budget, 0);
+                                                return { id: `sub-${ci}-${si}`, name: sv.name, budget: subBudget, h1: items.reduce((s, i) => s + i.h1, 0), h2: items.reduce((s, i) => s + i.h2, 0), description: '', items };
+                                            });
+                                            const catBudget = subcategories.reduce((s, sc) => s + sc.budget, 0);
+                                            return { id: `cat-${ci}`, name: cv.name, budget: catBudget, h1: subcategories.reduce((s, sc) => s + sc.h1, 0), h2: subcategories.reduce((s, sc) => s + sc.h2, 0), description: '', subcategories };
+                                        });
+                                        const totalBudget = categories.reduce((s, c) => s + c.budget, 0);
+                                        // Prompt for project info
+                                        const pName = prompt('프로젝트 이름:', file.name.replace(/\.[^.]+$/, ''));
+                                        if (!pName) return;
+                                        const pOrg = prompt('단체명:', '');
+                                        if (!pOrg) return;
+                                        const pYear = parseInt(prompt('사업년도:', String(new Date().getFullYear()))) || new Date().getFullYear();
+                                        const budgetData = {
+                                            projectName: pName, organization: pOrg, totalBudget,
+                                            period: `${pYear}.01 ~ ${pYear}.12`,
+                                            periods: { total: { label: `${pYear}년도 전체`, budget: totalBudget }, h1: { label: '상반기', budget: categories.reduce((s, c) => s + c.h1, 0) }, h2: { label: '하반기', budget: categories.reduce((s, c) => s + c.h2, 0) } },
+                                            categories
+                                        };
+                                        // Save to Supabase
+                                        const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
+                                        const modules = COMMON_MODULES.map(m => m.id);
+                                        supabase.from('projects').insert([{
+                                            name: pName, organization: pOrg, year: pYear,
+                                            period: budgetData.period, total_budget: totalBudget,
+                                            budget_data: budgetData, config: CONFIG, modules,
+                                            module_config: {}, is_active: false, created_by: session.id || null
+                                        }]).select().single().then(({ data: ins, error }) => {
+                                            if (error) { alert('저장 오류: ' + error.message); return; }
+                                            setProjectsList(prev => [ins, ...prev]);
+                                            alert(`프로젝트 "${pName}" 생성 완료!\n카테고리 ${categories.length}개, 항목 ${categories.reduce((s, c) => s + c.subcategories.reduce((ss, sc) => ss + sc.items.length, 0), 0)}개 파싱됨.`);
+                                        });
+                                    } catch (err) { alert('파싱 오류: ' + err.message); }
+                                };
+                                reader.readAsArrayBuffer(file);
+                                e.target.value = '';
+                            };
+                            const handleCloneProject = async (proj) => {
+                                const newYear = parseInt(prompt('새 사업년도:', String(proj.year + 1)));
+                                if (!newYear) return;
+                                try {
+                                    const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
+                                    const newBudget = {...proj.budget_data, period: `${newYear}.01 ~ ${newYear}.12`,
+                                        periods: {...proj.budget_data.periods, total: {...proj.budget_data.periods.total, label: `${newYear}년도 전체`}}};
+                                    const { data: ins, error } = await supabase.from('projects').insert([{
+                                        name: proj.name.replace(String(proj.year), String(newYear)),
+                                        organization: proj.organization, year: newYear,
+                                        period: `${newYear}.01 ~ ${newYear}.12`, total_budget: proj.total_budget,
+                                        budget_data: newBudget, config: proj.config,
+                                        modules: proj.modules, module_config: proj.module_config,
+                                        is_active: false, created_by: session.id || null
+                                    }]).select().single();
+                                    if (error) throw error;
+                                    setProjectsList(prev => [ins, ...prev]);
+                                    alert(`${newYear}년도 프로젝트가 복제되었습니다.`);
+                                } catch (err) { alert('복제 오류: ' + err.message); }
+                            };
+                            return (
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                                    <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>📂 프로젝트 관리</h3>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={handleSaveCurrentAsProject}>
+                                            💾 현재 구조 저장
+                                        </button>
+                                        <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} id="project-excel-input" onChange={handleExcelProjectUpload} />
+                                        <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => document.getElementById('project-excel-input').click()}>
+                                            📥 엑셀 업로드
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Active project info */}
+                                {activeProject && (
+                                    <div style={{ padding: 16, background: 'linear-gradient(135deg,#f0fdf4,#ecfdf5)', borderRadius: 12, border: '1px solid #bbf7d0', marginBottom: 20 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                            <span style={{ padding: '2px 10px', background: '#059669', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>활성</span>
+                                            <span style={{ fontSize: 16, fontWeight: 700, color: '#065f46' }}>{activeProject.name}</span>
+                                        </div>
+                                        <div style={{ fontSize: 13, color: '#047857' }}>{activeProject.organization} · {activeProject.year}년 · 총 예산 {fmt(activeProject.total_budget)}원</div>
+                                        <div style={{ fontSize: 12, color: '#6ee7b7', marginTop: 4 }}>모듈: {(activeProject.modules || []).join(', ')}</div>
+                                    </div>
+                                )}
+
+                                {/* Project list */}
+                                {projectsList.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#999' }}>
+                                        <p style={{ fontSize: 32, marginBottom: 8 }}>📂</p>
+                                        <p style={{ fontSize: 14, marginBottom: 4 }}>등록된 프로젝트가 없습니다.</p>
+                                        <p style={{ fontSize: 12 }}>"현재 구조 저장" 또는 "엑셀 업로드"로 첫 프로젝트를 만드세요.</p>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                        {projectsList.map(proj => (
+                                            <div key={proj.id} style={{
+                                                padding: 16, borderRadius: 12, border: proj.is_active ? '2px solid #059669' : '1px solid #e5e7eb',
+                                                background: proj.is_active ? '#f0fdf4' : '#fff', display: 'flex', alignItems: 'center', gap: 16
+                                            }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1e293b', marginBottom: 4 }}>
+                                                        {proj.is_active && <span style={{ marginRight: 6 }}>✅</span>}
+                                                        {proj.name}
+                                                    </div>
+                                                    <div style={{ fontSize: 12, color: '#6b7280' }}>
+                                                        {proj.organization} · {proj.year}년 · {fmt(proj.total_budget)}원
+                                                        {proj.budget_data?.categories && ` · ${proj.budget_data.categories.length}개 카테고리`}
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 6 }}>
+                                                    {!proj.is_active && (
+                                                        <button className="btn btn-primary" style={{ fontSize: 11, padding: '5px 12px' }} onClick={() => handleActivateProject(proj.id)}>
+                                                            활성화
+                                                        </button>
+                                                    )}
+                                                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: '5px 10px' }} onClick={() => handleCloneProject(proj)}>
+                                                        📋 복제
+                                                    </button>
+                                                    {!proj.is_active && (
+                                                        <button style={{ fontSize: 11, padding: '5px 10px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fff', color: '#dc2626', cursor: 'pointer' }} onClick={() => handleDeleteProject(proj.id)}>
+                                                            삭제
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            );
+                        })()}
+
                         {/* ── F-04: 활동 로그 탭 ─────────────────────────────────────── */}
                         {adminTab === 'logs' && (
                                 <div>
@@ -13048,10 +13329,10 @@
                         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
-                                    아름다운재단 2026 공익단체 인큐베이팅 지원사업
+                                    {effectiveProjectName}
                                 </h1>
                                 <p style={{ margin: '8px 0 0 0', fontSize: '15px', opacity: 0.9 }}>
-                                    청년노동자인권센터 • 총 예산 7천만원
+                                    {effectiveOrgName} • 총 예산 {fmt(effectiveBudgetData.totalBudget)}원
                                 </p>
                             </div>
                             <div className="header-user-info">
@@ -13070,18 +13351,7 @@
                         {/* Navigation */}
                         <div className="navigation">
                             {[
-                                { id: 'dashboard', label: '🏠 대시보드', description: '전체 현황 보기' },
-                                {
-                                    id: 'budget',
-                                    label: '💰 예산관리',
-                                    description: '고급 예산 집행 시스템'
-                                },
-                                { id: 'schedule', label: '📅 일정관리', description: '사업 일정 및 참여자 관리' },
-                                { id: 'gallery', label: '📸 갤러리', description: '현장 사진 및 결과물' },
-                                { id: 'board', label: '📋 게시판', description: '공지사항 및 자료실' },
-                                { id: 'guide', label: '📖 회계가이드', description: '회계처리방식 안내' },
-                                { id: 'newsletter', label: '📰 뉴스레터', description: '일정·게시글 뉴스레터 제작' },
-                                { id: 'schools', label: '🏫 학교관리', description: '파트너 학교 정보 관리' },
+                                ...visibleNavModules,
                                 ...(currentUser.role === 'admin' ? [{ id: 'admin', label: '⚙️ 관리자', description: '사용자 및 시스템 관리' }] : [])
                             ].map(nav => (
                                 <button
