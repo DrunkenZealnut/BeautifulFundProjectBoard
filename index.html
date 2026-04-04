@@ -2757,7 +2757,7 @@
             let grandBeforeTotal = 0;
             let grandAfterTotal = 0;
 
-            BUDGET_DATA.categories.forEach(cat => {
+            effectiveBudgetData.categories.forEach(cat => {
                 let catBeforeTotal = 0;
                 let catAfterTotal = 0;
                 const subRows = cat.subcategories.map(sub => {
@@ -4524,7 +4524,7 @@
 
             const getAllSubcategories = () => {
                 const subcategories = [];
-                BUDGET_DATA.categories.forEach(category => {
+                effectiveBudgetData.categories.forEach(category => {
                     category.subcategories.forEach(subcategory => {
                         subcategories.push({
                             ...subcategory,
@@ -4600,7 +4600,7 @@
                     if (diff >= 0 && diff <= 30 && !dismissedAlerts.includes(`dl-${h.date}`))
                         alerts.push({ id: `dl-${h.date}`, level: diff <= 3 ? 'urgent' : diff <= 7 ? 'warning' : 'info', text: `[D-${diff}] ${h.label} (${h.date})`, sort: diff });
                 });
-                BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sub => {
+                effectiveBudgetData.categories.forEach(cat => cat.subcategories.forEach(sub => {
                     const totalBudget = sub.items.reduce((s, i) => s + i.amount, 0);
                     const spent = (data?.budgetExecutions || []).filter(e => e.subcategory_id === sub.id).reduce((s, e) => s + (e.amount || 0), 0);
                     const rate = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
@@ -5202,7 +5202,7 @@
                         {(() => {
                             // subcategory별 예산 맵 구축
                             const subcatBudgets = {};
-                            BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sc => {
+                            effectiveBudgetData.categories.forEach(cat => cat.subcategories.forEach(sc => {
                                 subcatBudgets[sc.name] = (subcatBudgets[sc.name] || 0) + sc.budget;
                             }));
                             // subcategory별 집행액 합산
@@ -5239,7 +5239,7 @@
                         if (execs.length === 0) return null;
                         // Build subcategory budget from BUDGET_DATA
                         const subcatBudgets = {};
-                        BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sc => {
+                        effectiveBudgetData.categories.forEach(cat => cat.subcategories.forEach(sc => {
                             const budget = sc.items.reduce((s, i) => s + i.amount, 0);
                             subcatBudgets[sc.name] = (subcatBudgets[sc.name] || 0) + budget;
                         }));
@@ -8066,7 +8066,7 @@
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                             <button className="btn btn-secondary" onClick={() => {
                                 const initialBudgetChanges = {};
-                                BUDGET_DATA.categories.forEach(cat => {
+                                effectiveBudgetData.categories.forEach(cat => {
                                     cat.subcategories.forEach(sub => {
                                         initialBudgetChanges[sub.id] = { before: sub.budget, after: sub.budget };
                                     });
@@ -8147,7 +8147,7 @@
                                         </h2>
                                         {/* 시기 필터 */}
                                         <div style={{ display: 'flex', gap: '6px' }}>
-                                            {Object.entries(BUDGET_DATA.periods).map(([key, p]) => (
+                                            {Object.entries(effectiveBudgetData.periods).map(([key, p]) => (
                                                 <button
                                                     key={key}
                                                     className={`btn ${budgetPeriod === key ? 'btn-primary' : 'btn-secondary'}`}
@@ -8162,7 +8162,7 @@
 
                                     {/* Period budget summary cards (3 items) - includes actual execution amounts */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
-                                        {Object.entries(BUDGET_DATA.periods).map(([key, p]) => {
+                                        {Object.entries(effectiveBudgetData.periods).map(([key, p]) => {
                                             const periodUsed = getPeriodUsed(data.budgetExecutions, key);
                                             const periodExecRate = pct(periodUsed, p.budget);
                                             const isActive = budgetPeriod === key;
@@ -8193,7 +8193,7 @@
 
                                     {/* Total execution rate for selected period */}
                                     {(() => {
-                                        const selectedPeriod = BUDGET_DATA.periods[budgetPeriod];
+                                        const selectedPeriod = effectiveBudgetData.periods[budgetPeriod];
                                         const selectedUsed = getPeriodUsed(data.budgetExecutions, budgetPeriod);
                                         const selectedRate = pct(selectedUsed, selectedPeriod.budget);
                                         return (
@@ -8257,7 +8257,7 @@
                                             execBySubcat[id] = (execBySubcat[id] || 0) + (ex.amount || 0);
                                         });
 
-                                        return BUDGET_DATA.categories.map(category => {
+                                        return effectiveBudgetData.categories.map(category => {
                                             const catBudget = getBudgetByPeriod(category, budgetPeriod);
 
                                             // Actual category execution (sum of subcategories)
@@ -8374,7 +8374,7 @@
                                             📋 예산편성표
                                         </h2>
                                         <div style={{ display: 'flex', gap: '6px' }}>
-                                            {Object.entries(BUDGET_DATA.periods).map(([key, p]) => (
+                                            {Object.entries(effectiveBudgetData.periods).map(([key, p]) => (
                                                 <button
                                                     key={key}
                                                     className={`btn ${budgetPeriod === key ? 'btn-primary' : 'btn-secondary'}`}
@@ -8401,7 +8401,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {BUDGET_DATA.categories.map(cat => (
+                                                {effectiveBudgetData.categories.map(cat => (
                                                     <React.Fragment key={cat.id}>
                                                         <tr style={{ background: '#E8F5E9', fontWeight: '700' }}>
                                                             <td style={{ padding: '10px 12px' }}>{cat.name}</td>
@@ -8425,11 +8425,11 @@
                                                 ))}
                                                 <tr style={{ background: '#134E42', color: 'white', fontWeight: '700' }}>
                                                     <td style={{ padding: '10px 12px' }}>합계</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.totalBudget.toLocaleString()}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.periods.h1.budget.toLocaleString()}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{BUDGET_DATA.periods.h2.budget.toLocaleString()}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(BUDGET_DATA.periods.h1.budget / BUDGET_DATA.totalBudget * 100)}%</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(BUDGET_DATA.periods.h2.budget / BUDGET_DATA.totalBudget * 100)}%</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{effectiveBudgetData.totalBudget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{effectiveBudgetData.periods.h1.budget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{effectiveBudgetData.periods.h2.budget.toLocaleString()}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(effectiveBudgetData.periods.h1.budget / effectiveBudgetData.totalBudget * 100)}%</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{Math.round(effectiveBudgetData.periods.h2.budget / effectiveBudgetData.totalBudget * 100)}%</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -8437,13 +8437,13 @@
 
                                     {/* 선택 시기 상세 편성표 */}
                                     <h3 style={{ marginBottom: '16px' }}>
-                                        {BUDGET_DATA.periods[budgetPeriod].label} 상세 편성표
+                                        {effectiveBudgetData.periods[budgetPeriod].label} 상세 편성표
                                         <span style={{ fontSize: '14px', fontWeight: '400', color: '#6B6560', marginLeft: '12px' }}>
-                                            총 {BUDGET_DATA.periods[budgetPeriod].budget.toLocaleString()}원
+                                            총 {effectiveBudgetData.periods[budgetPeriod].budget.toLocaleString()}원
                                         </span>
                                     </h3>
 
-                                    {BUDGET_DATA.categories.map(category => {
+                                    {effectiveBudgetData.categories.map(category => {
                                         const catBudget = getBudgetByPeriod(category, budgetPeriod);
                                         return (
                                             <div key={category.id} style={{ marginBottom: '28px' }}>
@@ -8554,8 +8554,8 @@
                                         fontSize: '18px',
                                         fontWeight: '700'
                                     }}>
-                                        <span>{BUDGET_DATA.periods[budgetPeriod].label} 총계</span>
-                                        <span style={{ fontSize: '24px' }}>{BUDGET_DATA.periods[budgetPeriod].budget.toLocaleString()}원</span>
+                                        <span>{effectiveBudgetData.periods[budgetPeriod].label} 총계</span>
+                                        <span style={{ fontSize: '24px' }}>{effectiveBudgetData.periods[budgetPeriod].budget.toLocaleString()}원</span>
                                     </div>
                                 </div>
                             )}
@@ -9040,7 +9040,7 @@
                                                             const insertRows = toInsert.map(r => {
                                                                 const sub = allSubcats.find(s => s.id === r.subcategory_id);
                                                                 const item = sub ? sub.items.find(it => it.id === r.budget_item_id) : null;
-                                                                const cat = BUDGET_DATA.categories.find(c => c.subcategories.some(s => s.id === r.subcategory_id));
+                                                                const cat = effectiveBudgetData.categories.find(c => c.subcategories.some(s => s.id === r.subcategory_id));
                                                                 if (!sub || !cat || !item) throw new Error(`행 ${r._idx + 1}: 필수 항목 매핑이 누락되었습니다.`);
                                                                 const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
                                                                 return {
@@ -9671,7 +9671,7 @@
                                             value={execFilterCategory}
                                             onChange={e => { setExecFilterCategory(e.target.value); setExecFilterSubcategory(''); }}>
                                             <option value="">카테고리 전체</option>
-                                            {BUDGET_DATA.categories.map(c => (
+                                            {effectiveBudgetData.categories.map(c => (
                                                 <option key={c.id} value={c.name}>{c.name}</option>
                                             ))}
                                         </select>
@@ -9680,7 +9680,7 @@
                                             onChange={e => setExecFilterSubcategory(e.target.value)}
                                             disabled={!execFilterCategory}>
                                             <option value="">소분류 전체</option>
-                                            {execFilterCategory && BUDGET_DATA.categories
+                                            {execFilterCategory && effectiveBudgetData.categories
                                                 .find(c => c.name === execFilterCategory)
                                                 ?.subcategories.map(s => (
                                                     <option key={s.id} value={s.name}>{s.name}</option>
@@ -10172,7 +10172,7 @@
                                     if (ex.budget_item_id) execByItem[ex.budget_item_id] = (execByItem[ex.budget_item_id] || 0) + (ex.amount || 0);
                                 });
                                 const categoryName = ratioTab === 'project' ? '사업비' : '운영비';
-                                const category = BUDGET_DATA.categories.find(c => c.name === categoryName);
+                                const category = effectiveBudgetData.categories.find(c => c.name === categoryName);
                                 const catBudget = category ? getBudgetByPeriod(category, budgetPeriod) : 0;
                                 const catExecuted = category
                                     ? category.subcategories.reduce((sum, sub) => sum + (execBySubcat[sub.id] || 0), 0)
@@ -12985,8 +12985,12 @@
                             const handleActivateProject = async (projId) => {
                                 if (!confirm('이 프로젝트로 전환하시겠습니까?\n예산 구조와 네비게이션이 변경됩니다.')) return;
                                 try {
-                                    await supabase.from('projects').update({ is_active: false }).eq('is_active', true);
-                                    await supabase.from('projects').update({ is_active: true }).eq('id', projId);
+                                    // Deactivate all + activate selected in parallel for atomicity
+                                    const [r1, r2] = await Promise.all([
+                                        supabase.from('projects').update({ is_active: false }).neq('id', projId),
+                                        supabase.from('projects').update({ is_active: true }).eq('id', projId)
+                                    ]);
+                                    if (r2.error) throw r2.error;
                                     const proj = projectsList.find(p => p.id === projId);
                                     setActiveProject(proj);
                                     if (proj?.budget_data) setActiveBudgetData(proj.budget_data);
@@ -13592,7 +13596,7 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {BUDGET_DATA.categories.map(cat => {
+                                                    {effectiveBudgetData.categories.map(cat => {
                                                         let catBeforeTotal = 0;
                                                         let catAfterTotal = 0;
                                                         const subRows = cat.subcategories.map(sub => {
@@ -13643,7 +13647,7 @@
                                                     })}
                                                     {(() => {
                                                         let totalBefore = 0, totalAfter = 0;
-                                                        BUDGET_DATA.categories.forEach(cat => cat.subcategories.forEach(sub => {
+                                                        effectiveBudgetData.categories.forEach(cat => cat.subcategories.forEach(sub => {
                                                             const bc = changeApplicationForm.budgetChanges[sub.id] || { before: sub.budget, after: sub.budget };
                                                             totalBefore += bc.before;
                                                             totalAfter += bc.after;
