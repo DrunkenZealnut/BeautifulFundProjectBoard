@@ -3746,6 +3746,9 @@
             const [activeProject, setActiveProject] = useState(null);
             const [projectsList, setProjectsList] = useState([]);
             const [activeBudgetData, setActiveBudgetData] = useState(null); // null = use hardcoded BUDGET_DATA
+            const [projectSwitching, setProjectSwitching] = useState(false);
+            const [projectCreating, setProjectCreating] = useState(false);
+            const [projectCreateModal, setProjectCreateModal] = useState(null); // null | { mode: 'save'|'excel', budgetData? }
 
             // Effective budget data: from active project or hardcoded fallback
             const effectiveBudgetData = useMemo(() => {
@@ -3771,6 +3774,11 @@
             ];
             const activeModuleIds = activeProject?.modules || [...COMMON_MODULES.map(m => m.id), ...CUSTOM_MODULES.map(m => m.id)];
             const visibleNavModules = [...COMMON_MODULES, ...CUSTOM_MODULES].filter(m => activeModuleIds.includes(m.id));
+            const ALL_MODULE_IDS = [...COMMON_MODULES.map(m => m.id), ...CUSTOM_MODULES.map(m => m.id)];
+            const [projectCreateForm, setProjectCreateForm] = useState({
+                name: '', organization: '', year: new Date().getFullYear(), period: '',
+                modules: ALL_MODULE_IDS
+            });
 
             // 게시판 공통 상태
             const [boardView, setBoardView] = useState('list'); // list | detail | write
@@ -12993,8 +13001,8 @@
                             const allSubcats = getAllSubcategories();
                             const handleActivateProject = async (projId) => {
                                 if (!confirm('이 프로젝트로 전환하시겠습니까?\n예산 구조와 네비게이션이 변경됩니다.')) return;
+                                setProjectSwitching(true);
                                 try {
-                                    // Deactivate all + activate selected in parallel for atomicity
                                     const [r1, r2] = await Promise.all([
                                         supabase.from('projects').update({ is_active: false }).neq('id', projId),
                                         supabase.from('projects').update({ is_active: true }).eq('id', projId)
@@ -13004,8 +13012,8 @@
                                     setActiveProject(proj);
                                     if (proj?.budget_data) setActiveBudgetData(proj.budget_data);
                                     setProjectsList(prev => prev.map(p => ({...p, is_active: p.id === projId})));
-                                    alert('프로젝트가 전환되었습니다.');
                                 } catch (err) { alert('전환 오류: ' + err.message); }
+                                finally { setProjectSwitching(false); }
                             };
                             const handleDeleteProject = async (projId) => {
                                 if (!confirm('이 프로젝트를 삭제하시겠습니까? 복구할 수 없습니다.')) return;
@@ -13015,29 +13023,9 @@
                                     if (activeProject?.id === projId) { setActiveProject(null); setActiveBudgetData(null); }
                                 } catch (err) { alert('삭제 오류: ' + err.message); }
                             };
-                            const handleSaveCurrentAsProject = async () => {
-                                const name = prompt('프로젝트 이름:', BUDGET_DATA.projectName);
-                                if (!name) return;
-                                try {
-                                    const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
-                                    const { data: inserted, error } = await supabase.from('projects').insert([{
-                                        name,
-                                        organization: DEFAULT_ORG_NAME,
-                                        year: 2026,
-                                        period: BUDGET_DATA.period,
-                                        total_budget: BUDGET_DATA.totalBudget,
-                                        budget_data: BUDGET_DATA,
-                                        config: CONFIG,
-                                        modules: [...COMMON_MODULES.map(m => m.id), ...CUSTOM_MODULES.map(m => m.id)],
-                                        module_config: { schools: { label: '학교관리', icon: '🏫' } },
-                                        is_active: projectsList.length === 0,
-                                        created_by: session.id || null
-                                    }]).select().single();
-                                    if (error) throw error;
-                                    setProjectsList(prev => [inserted, ...prev]);
-                                    if (projectsList.length === 0) { setActiveProject(inserted); setActiveBudgetData(inserted.budget_data); }
-                                    alert('현재 예산구조가 프로젝트로 저장되었습니다.');
-                                } catch (err) { alert('저장 오류: ' + err.message); }
+                            const handleSaveCurrentAsProject = () => {
+                                setProjectCreateForm({ name: BUDGET_DATA.projectName, organization: DEFAULT_ORG_NAME, year: 2026, period: BUDGET_DATA.period, modules: ALL_MODULE_IDS });
+                                setProjectCreateModal({ mode: 'save', budgetData: BUDGET_DATA });
                             };
                             const handleExcelProjectUpload = (e) => {
                                 const file = e.target.files[0];
@@ -13048,15 +13036,12 @@
                                         const wb = window.XLSX.read(evt.target.result, { type: 'array' });
                                         const ws = wb.Sheets[wb.SheetNames[0]];
                                         const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-                                        // Find header row
                                         let hIdx = 0;
                                         for (let i = 0; i < Math.min(rows.length, 10); i++) {
-                                            const nonEmpty = rows[i].filter(c => c !== '' && c != null).length;
-                                            if (nonEmpty >= 4) { hIdx = i; break; }
+                                            if (rows[i].filter(c => c !== '' && c != null).length >= 4) { hIdx = i; break; }
                                         }
                                         const headers = rows[hIdx].map(h => String(h || '').trim());
                                         const dataRows = rows.slice(hIdx + 1).filter(r => r.some(c => c !== '' && c != null));
-                                        // Auto-detect columns
                                         const colIdx = { cat: -1, sub: -1, item: -1, type: -1, budget: -1, h1: -1, h2: -1, detail: -1 };
                                         headers.forEach((h, i) => {
                                             const hl = h.toLowerCase();
@@ -13069,7 +13054,6 @@
                                             else if (hl.includes('하반기') || hl.includes('2차')) colIdx.h2 = i;
                                             else if (hl.includes('산출') || hl.includes('내역') || hl.includes('비고')) colIdx.detail = i;
                                         });
-                                        // Build tree
                                         const catMap = {};
                                         let lastCat = '', lastSub = '';
                                         const toNum = (v) => parseInt(String(v).replace(/[,\s원₩]/g, '')) || 0;
@@ -13082,22 +13066,11 @@
                                             if (!item) return;
                                             if (!catMap[cat]) catMap[cat] = { name: cat, subs: {} };
                                             if (!catMap[cat].subs[sub]) catMap[cat].subs[sub] = { name: sub, items: [] };
-                                            catMap[cat].subs[sub].items.push({
-                                                name: item,
-                                                type: String(r[colIdx.type] || '').trim() || '일반지출',
-                                                budget: toNum(r[colIdx.budget]),
-                                                h1: colIdx.h1 >= 0 ? toNum(r[colIdx.h1]) : 0,
-                                                h2: colIdx.h2 >= 0 ? toNum(r[colIdx.h2]) : 0,
-                                                detail: colIdx.detail >= 0 ? String(r[colIdx.detail] || '') : ''
-                                            });
+                                            catMap[cat].subs[sub].items.push({ name: item, type: String(r[colIdx.type] || '').trim() || '일반지출', budget: toNum(r[colIdx.budget]), h1: colIdx.h1 >= 0 ? toNum(r[colIdx.h1]) : 0, h2: colIdx.h2 >= 0 ? toNum(r[colIdx.h2]) : 0, detail: colIdx.detail >= 0 ? String(r[colIdx.detail] || '') : '' });
                                         });
-                                        // Convert to BUDGET_DATA format
                                         const categories = Object.entries(catMap).map(([_, cv], ci) => {
                                             const subcategories = Object.entries(cv.subs).map(([__, sv], si) => {
-                                                const items = sv.items.map((it, ii) => ({
-                                                    id: `item-${ci}-${si}-${ii}`,
-                                                    name: it.name, type: it.type, budget: it.budget, h1: it.h1, h2: it.h2, detail: it.detail
-                                                }));
+                                                const items = sv.items.map((it, ii) => ({ id: `item-${ci}-${si}-${ii}`, ...it }));
                                                 const subBudget = items.reduce((s, i) => s + i.budget, 0);
                                                 return { id: `sub-${ci}-${si}`, name: sv.name, budget: subBudget, h1: items.reduce((s, i) => s + i.h1, 0), h2: items.reduce((s, i) => s + i.h2, 0), description: '', items };
                                             });
@@ -13105,35 +13078,40 @@
                                             return { id: `cat-${ci}`, name: cv.name, budget: catBudget, h1: subcategories.reduce((s, sc) => s + sc.h1, 0), h2: subcategories.reduce((s, sc) => s + sc.h2, 0), description: '', subcategories };
                                         });
                                         const totalBudget = categories.reduce((s, c) => s + c.budget, 0);
-                                        // Prompt for project info
-                                        const pName = prompt('프로젝트 이름:', file.name.replace(/\.[^.]+$/, ''));
-                                        if (!pName) return;
-                                        const pOrg = prompt('단체명:', '');
-                                        if (!pOrg) return;
-                                        const pYear = parseInt(prompt('사업년도:', String(new Date().getFullYear()))) || new Date().getFullYear();
-                                        const budgetData = {
-                                            projectName: pName, organization: pOrg, totalBudget,
-                                            period: `${pYear}.01 ~ ${pYear}.12`,
-                                            periods: { total: { label: `${pYear}년도 전체`, budget: totalBudget }, h1: { label: '상반기', budget: categories.reduce((s, c) => s + c.h1, 0) }, h2: { label: '하반기', budget: categories.reduce((s, c) => s + c.h2, 0) } },
-                                            categories
-                                        };
-                                        // Save to Supabase
-                                        const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
-                                        const modules = COMMON_MODULES.map(m => m.id);
-                                        supabase.from('projects').insert([{
-                                            name: pName, organization: pOrg, year: pYear,
-                                            period: budgetData.period, total_budget: totalBudget,
-                                            budget_data: budgetData, config: CONFIG, modules,
-                                            module_config: {}, is_active: false, created_by: session.id || null
-                                        }]).select().single().then(({ data: ins, error }) => {
-                                            if (error) { alert('저장 오류: ' + error.message); return; }
-                                            setProjectsList(prev => [ins, ...prev]);
-                                            alert(`프로젝트 "${pName}" 생성 완료!\n카테고리 ${categories.length}개, 항목 ${categories.reduce((s, c) => s + c.subcategories.reduce((ss, sc) => ss + sc.items.length, 0), 0)}개 파싱됨.`);
-                                        });
+                                        const yr = new Date().getFullYear();
+                                        const budgetData = { projectName: file.name.replace(/\.[^.]+$/, ''), organization: '', totalBudget,
+                                            period: `${yr}.01 ~ ${yr}.12`,
+                                            periods: { total: { label: `${yr}년도 전체`, budget: totalBudget }, h1: { label: '상반기', budget: categories.reduce((s, c) => s + c.h1, 0) }, h2: { label: '하반기', budget: categories.reduce((s, c) => s + c.h2, 0) } },
+                                            categories };
+                                        setProjectCreateForm({ name: file.name.replace(/\.[^.]+$/, ''), organization: '', year: yr, period: `${yr}.01 ~ ${yr}.12`, modules: COMMON_MODULES.map(m => m.id) });
+                                        setProjectCreateModal({ mode: 'excel', budgetData, parseSummary: `카테고리 ${categories.length}개, 항목 ${categories.reduce((s, c) => s + c.subcategories.reduce((ss, sc) => ss + sc.items.length, 0), 0)}개` });
                                     } catch (err) { alert('파싱 오류: ' + err.message); }
                                 };
                                 reader.readAsArrayBuffer(file);
                                 e.target.value = '';
+                            };
+                            const handleSubmitProjectCreate = async () => {
+                                const f = projectCreateForm;
+                                if (!f.name || !f.organization) { alert('프로젝트 이름과 단체명을 입력해주세요.'); return; }
+                                setProjectCreating(true);
+                                try {
+                                    const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
+                                    const bd = projectCreateModal.budgetData;
+                                    const finalBudget = { ...bd, projectName: f.name, organization: f.organization, period: f.period || `${f.year}.01 ~ ${f.year}.12` };
+                                    const { data: inserted, error } = await supabase.from('projects').insert([{
+                                        name: f.name, organization: f.organization, year: f.year,
+                                        period: finalBudget.period, total_budget: bd.totalBudget,
+                                        budget_data: finalBudget, config: CONFIG,
+                                        modules: f.modules, module_config: {},
+                                        is_active: projectsList.length === 0, created_by: session.id || null
+                                    }]).select().single();
+                                    if (error) throw error;
+                                    setProjectsList(prev => [inserted, ...prev]);
+                                    if (projectsList.length === 0) { setActiveProject(inserted); setActiveBudgetData(inserted.budget_data); }
+                                    setProjectCreateModal(null);
+                                    alert('프로젝트가 생성되었습니다!');
+                                } catch (err) { alert('저장 오류: ' + err.message); }
+                                finally { setProjectCreating(false); }
                             };
                             const handleCloneProject = async (proj) => {
                                 const newYear = parseInt(prompt('새 사업년도:', String(proj.year + 1)));
@@ -13223,6 +13201,87 @@
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+                                {/* Loading overlay */}
+                                {projectSwitching && (
+                                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+                                        <div style={{ background: '#fff', borderRadius: 16, padding: '32px 40px', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+                                            <div style={{ fontSize: 32, marginBottom: 12 }}>🔄</div>
+                                            <div style={{ fontSize: 15, fontWeight: 600, color: '#374151' }}>프로젝트 전환 중...</div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Project create modal */}
+                                {projectCreateModal && (
+                                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+                                        <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: '90%', maxWidth: 520, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                                                <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                                                    {projectCreateModal.mode === 'save' ? '💾 현재 구조로 프로젝트 생성' : '📥 엑셀 사업계획서로 프로젝트 생성'}
+                                                </h3>
+                                                <button onClick={() => setProjectCreateModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
+                                            </div>
+
+                                            {projectCreateModal.parseSummary && (
+                                                <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#065f46' }}>
+                                                    ✅ 파싱 완료: {projectCreateModal.parseSummary} · 총 예산 {fmt(projectCreateModal.budgetData?.totalBudget || 0)}원
+                                                </div>
+                                            )}
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                                <div>
+                                                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' }}>프로젝트 이름 *</label>
+                                                    <input type="text" value={projectCreateForm.name} onChange={e => setProjectCreateForm(p => ({...p, name: e.target.value}))}
+                                                        placeholder="예: 2026 공익단체 인큐베이팅 지원사업"
+                                                        style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }} />
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                    <div>
+                                                        <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' }}>단체명 *</label>
+                                                        <input type="text" value={projectCreateForm.organization} onChange={e => setProjectCreateForm(p => ({...p, organization: e.target.value}))}
+                                                            placeholder="예: 청년노동자인권센터"
+                                                            style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }} />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' }}>사업년도</label>
+                                                        <input type="number" value={projectCreateForm.year} onChange={e => setProjectCreateForm(p => ({...p, year: parseInt(e.target.value) || new Date().getFullYear()}))}
+                                                            style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 }} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Module selection */}
+                                                <div>
+                                                    <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8, display: 'block' }}>활성 모듈 선택</label>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                        {[...COMMON_MODULES, ...CUSTOM_MODULES].map(m => {
+                                                            const checked = projectCreateForm.modules.includes(m.id);
+                                                            return (
+                                                                <label key={m.id} style={{
+                                                                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                                                                    borderRadius: 8, border: checked ? '2px solid #059669' : '1px solid #e5e7eb',
+                                                                    background: checked ? '#f0fdf4' : '#fff', cursor: 'pointer', fontSize: 13
+                                                                }}>
+                                                                    <input type="checkbox" checked={checked}
+                                                                        onChange={() => setProjectCreateForm(p => ({
+                                                                            ...p, modules: checked ? p.modules.filter(mid => mid !== m.id) : [...p.modules, m.id]
+                                                                        }))} />
+                                                                    {m.label}
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
+                                                <button className="btn btn-secondary" onClick={() => setProjectCreateModal(null)} style={{ padding: '10px 20px' }}>취소</button>
+                                                <button className="btn btn-primary" onClick={handleSubmitProjectCreate} disabled={projectCreating} style={{ padding: '10px 24px' }}>
+                                                    {projectCreating ? '생성 중...' : '프로젝트 생성'}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
