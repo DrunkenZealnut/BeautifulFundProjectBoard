@@ -3276,7 +3276,7 @@
         // Newsletter HTML generator
         // Newsletter template generators — 3 distinct styles
         // ────────────────────────────────────────────────────────────
-        const _nlEsc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const _nlEsc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         const _nlSanitize = (content) => typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(content || '') : _nlEsc(String(content || '').replace(/<[^>]*>/g, ''));
         const _nlTypeLabels = { notice: '공지', materials: '자료', report: '보고서', free: '자유' };
 
@@ -11343,50 +11343,83 @@
                                             }}>📄 한글</button>
                                     </div>
 
+                                    {/* Template style constants */}
+                                    {(() => {
+                                    const T = newsletterTemplate;
+                                    const NL_STYLES = {
+                                        header: {
+                                            modern: { padding: '16px 20px', textAlign: 'center' },
+                                            magazine: { background: '#1e293b', padding: '24px 20px', textAlign: 'center' },
+                                            classic: { padding: '20px 24px 12px' },
+                                        },
+                                        orgName: {
+                                            modern: { fontSize: 13, fontWeight: 600, color: '#1a1a1a' },
+                                            magazine: { fontSize: 16, fontWeight: 800, color: '#fff' },
+                                            classic: { fontSize: 17, fontWeight: 800, color: '#1e3a5f' },
+                                        },
+                                        subName: {
+                                            modern: null,
+                                            magazine: { fontSize: 9, color: '#94a3b8', letterSpacing: 2, marginTop: 2 },
+                                            classic: { fontSize: 9, color: '#6b7280', letterSpacing: 1.5, marginTop: 1 },
+                                        },
+                                        title: {
+                                            modern: { fontSize: 18, fontWeight: 800, color: '#1a1a1a', margin: 0, letterSpacing: -0.5, lineHeight: 1.3 },
+                                            magazine: { fontSize: 18, fontWeight: 700, color: '#1e293b', margin: 0, letterSpacing: -0.5, lineHeight: 1.3 },
+                                            classic: { fontSize: 16, fontWeight: 800, color: '#111827', margin: 0, letterSpacing: -0.5, lineHeight: 1.3 },
+                                        },
+                                        greeting: {
+                                            modern: { margin: '0 0 16px', fontSize: 12, whiteSpace: 'pre-line', color: '#374151', lineHeight: 1.9 },
+                                            magazine: { margin: '0 0 16px', padding: '14px 16px', background: '#fff', borderRadius: 10, borderLeft: '3px solid #e85d3a', whiteSpace: 'pre-line', fontSize: 12 },
+                                            classic: { margin: '0 0 16px', padding: '14px 16px', background: '#f0f4f8', border: '1px solid #93a3b8', borderRadius: 4, whiteSpace: 'pre-line', fontSize: 12 },
+                                        },
+                                        closing: {
+                                            modern: { margin: '16px 0 0', whiteSpace: 'pre-line', fontSize: 12, color: '#374151', lineHeight: 1.9 },
+                                            magazine: { margin: '16px 0 0', padding: '14px 16px', background: '#fff5f3', borderLeft: '3px solid #e85d3a', borderRadius: '0 10px 10px 0', whiteSpace: 'pre-line', fontSize: 12, fontStyle: 'italic' },
+                                            classic: { margin: '16px 0 0', padding: '14px 16px', background: '#f8f9fa', borderRadius: 4, whiteSpace: 'pre-line', fontSize: 12 },
+                                        },
+                                        footer: {
+                                            modern: { marginTop: 20, paddingTop: 12, borderTop: '1px solid #ddd', textAlign: 'center' },
+                                            magazine: { background: '#1e293b', padding: '14px 20px', textAlign: 'center' },
+                                            classic: { margin: '0 20px', borderTop: '3px double #b8860b', padding: '12px 0', textAlign: 'left' },
+                                        },
+                                        footerOrg: {
+                                            modern: null,
+                                            magazine: { fontSize: 12, fontWeight: 700, color: '#fff' },
+                                            classic: { fontSize: 12, fontWeight: 700, color: '#1e3a5f' },
+                                        },
+                                    };
+                                    const issueDate = (newsletterConfig.issueNumber ? `${newsletterConfig.issueNumber} · ` : '') + newsletterConfig.publishDate;
+                                    return (
                                     <div style={{ borderRadius: 16, overflow: 'hidden', background: '#f5f5f5', minHeight: 400, fontSize: 13, lineHeight: 1.7 }}>
-                                        {/* Template-aware header */}
-                                        {newsletterTemplate === 'magazine' ? (
-                                            <div style={{ background: '#1e293b', padding: '24px 20px', textAlign: 'center' }}>
-                                                <div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>{DEFAULT_ORG_NAME}</div>
-                                                <div style={{ fontSize: 9, color: '#94a3b8', letterSpacing: 2, marginTop: 2 }}>YOUTH WORKERS' RIGHTS CENTER</div>
-                                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>{newsletterConfig.issueNumber ? `${newsletterConfig.issueNumber} · ` : ''}{newsletterConfig.publishDate}</div>
-                                            </div>
-                                        ) : newsletterTemplate === 'classic' ? (
-                                            <div style={{ padding: '20px 24px 12px' }}>
-                                                <div style={{ fontSize: 17, fontWeight: 800, color: '#1e3a5f' }}>{DEFAULT_ORG_NAME}</div>
-                                                <div style={{ fontSize: 9, color: '#6b7280', letterSpacing: 1.5, marginTop: 1 }}>YOUTH WORKERS' RIGHTS CENTER</div>
+                                        {/* Header */}
+                                        <div style={NL_STYLES.header[T]}>
+                                            <div style={NL_STYLES.orgName[T]}>{DEFAULT_ORG_NAME}</div>
+                                            {NL_STYLES.subName[T] && <div style={NL_STYLES.subName[T]}>YOUTH WORKERS' RIGHTS CENTER</div>}
+                                            {T === 'classic' ? (
                                                 <div style={{ borderTop: '3px double #b8860b', marginTop: 10, paddingTop: 6 }}>
-                                                    <span style={{ fontSize: 11, color: '#6b7280' }}>{newsletterConfig.issueNumber ? `${newsletterConfig.issueNumber} · ` : ''}{newsletterConfig.publishDate}</span>
+                                                    <span style={{ fontSize: 11, color: '#6b7280' }}>{issueDate}</span>
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            <div style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                                <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>{DEFAULT_ORG_NAME}</div>
-                                                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{newsletterConfig.issueNumber ? `${newsletterConfig.issueNumber} · ` : ''}{newsletterConfig.publishDate}</div>
+                                            ) : T === 'modern' ? (
+                                                <>
+                                                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{issueDate}</div>
                                                 <div style={{ height: 2, background: 'linear-gradient(90deg,#0d9488,#06b6d4)', margin: '12px 0 0' }}></div>
-                                            </div>
-                                        )}
+                                                </>
+                                            ) : (
+                                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>{issueDate}</div>
+                                            )}
+                                        </div>
 
                                         {/* Title */}
                                         {newsletterConfig.title && (
-                                            <div style={{ padding: '16px 20px 0', textAlign: newsletterTemplate === 'classic' ? 'left' : 'center' }}>
-                                                <h2 style={{
-                                                    fontSize: newsletterTemplate === 'magazine' ? 18 : newsletterTemplate === 'classic' ? 16 : 18,
-                                                    fontWeight: newsletterTemplate === 'magazine' ? 700 : 800,
-                                                    color: newsletterTemplate === 'classic' ? '#111827' : newsletterTemplate === 'magazine' ? '#1e293b' : '#1a1a1a',
-                                                    margin: 0, letterSpacing: -0.5, lineHeight: 1.3
-                                                }}>{newsletterConfig.title}</h2>
+                                            <div style={{ padding: '16px 20px 0', textAlign: T === 'classic' ? 'left' : 'center' }}>
+                                                <h2 style={NL_STYLES.title[T]}>{newsletterConfig.title}</h2>
                                             </div>
                                         )}
 
                                         <div style={{ padding: '16px 20px' }}>
                                         {/* Greeting */}
                                         {newsletterConfig.greeting && (
-                                            <div style={
-                                                newsletterTemplate === 'magazine' ? { margin: '0 0 16px', padding: '14px 16px', background: '#fff', borderRadius: 10, borderLeft: '3px solid #e85d3a', whiteSpace: 'pre-line', fontSize: 12 }
-                                                : newsletterTemplate === 'classic' ? { margin: '0 0 16px', padding: '14px 16px', background: '#f0f4f8', border: '1px solid #93a3b8', borderRadius: 4, whiteSpace: 'pre-line', fontSize: 12 }
-                                                : { margin: '0 0 16px', fontSize: 12, whiteSpace: 'pre-line', color: '#374151', lineHeight: 1.9 }
-                                            }>
+                                            <div style={NL_STYLES.greeting[T]}>
                                                 {newsletterConfig.greeting}
                                             </div>
                                         )}
@@ -11550,11 +11583,7 @@
 
                                         {/* Closing */}
                                         {newsletterConfig.closing && (
-                                            <div style={
-                                                newsletterTemplate === 'magazine' ? { margin: '16px 0 0', padding: '14px 16px', background: '#fff5f3', borderLeft: '3px solid #e85d3a', borderRadius: '0 10px 10px 0', whiteSpace: 'pre-line', fontSize: 12, fontStyle: 'italic' }
-                                                : newsletterTemplate === 'classic' ? { margin: '16px 0 0', padding: '14px 16px', background: '#f8f9fa', borderRadius: 4, whiteSpace: 'pre-line', fontSize: 12 }
-                                                : { margin: '16px 0 0', whiteSpace: 'pre-line', fontSize: 12, color: '#374151', lineHeight: 1.9 }
-                                            }>
+                                            <div style={NL_STYLES.closing[T]}>
                                                 {newsletterConfig.closing}
                                             </div>
                                         )}
@@ -11568,21 +11597,14 @@
                                             </div>
                                         )}
 
-                                        {/* Template-aware footer */}
-                                        <div style={
-                                            newsletterTemplate === 'magazine' ? { background: '#1e293b', padding: '14px 20px', textAlign: 'center' }
-                                            : newsletterTemplate === 'classic' ? { margin: '0 20px', borderTop: '3px double #b8860b', padding: '12px 0', textAlign: 'left' }
-                                            : { marginTop: 20, paddingTop: 12, borderTop: '1px solid #ddd', textAlign: 'center' }
-                                        }>
-                                            {newsletterTemplate === 'magazine' ? (
+                                        {/* Footer */}
+                                        <div style={NL_STYLES.footer[T]}>
+                                            {NL_STYLES.footerOrg[T] ? (
                                                 <>
-                                                <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{DEFAULT_ORG_NAME}</div>
-                                                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>아름다운재단 2026 공익단체 인큐베이팅 지원사업</div>
-                                                </>
-                                            ) : newsletterTemplate === 'classic' ? (
-                                                <>
-                                                <div style={{ fontSize: 12, fontWeight: 700, color: '#1e3a5f' }}>{DEFAULT_ORG_NAME}</div>
-                                                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6, fontStyle: 'italic' }}>본 뉴스레터는 아름다운재단 2026 공익단체 인큐베이팅 지원사업으로 제작되었습니다.</div>
+                                                <div style={NL_STYLES.footerOrg[T]}>{DEFAULT_ORG_NAME}</div>
+                                                <div style={{ fontSize: 10, color: T === 'magazine' ? '#94a3b8' : '#9ca3af', marginTop: T === 'classic' ? 6 : 4, fontStyle: T === 'classic' ? 'italic' : 'normal' }}>
+                                                    {T === 'classic' ? '본 뉴스레터는 아름다운재단 2026 공익단체 인큐베이팅 지원사업으로 제작되었습니다.' : '아름다운재단 2026 공익단체 인큐베이팅 지원사업'}
+                                                </div>
                                                 </>
                                             ) : (
                                                 <div style={{ fontSize: 11, color: '#aaa', padding: '0 20px 12px' }}>
@@ -11591,6 +11613,7 @@
                                             )}
                                         </div>
                                     </div>
+                                    ); })()}
                                 </div>
                             </div>
                         </div>
