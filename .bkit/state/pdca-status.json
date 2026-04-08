@@ -1,13 +1,14 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-22T23:16:42.844Z",
+  "lastUpdated": "2026-04-04T14:05:44.621Z",
   "activeFeatures": [
+    "뉴스레터-리뉴얼",
     "학교시간표조회",
     "학교관리페이지",
     "메인페이지스타일변경",
     "api"
   ],
-  "primaryFeature": "학교시간표조회",
+  "primaryFeature": "뉴스레터-리뉴얼",
   "features": {
     "BeautifulFundProjectBoard": {
       "phase": "completed",
@@ -87,9 +88,24 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-19T02:35:27.400Z",
-        "lastUpdated": "2026-03-22T23:16:42.843Z"
+        "lastUpdated": "2026-04-04T14:05:44.621Z"
       },
-      "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/api/neis.py"
+      "lastFile": "/Users/zealnutkim/Documents/DEV/BeautifulFundProjectBoard/api/supabase-admin.py"
+    },
+    "뉴스레터-리뉴얼": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {
+        "plan": "docs/01-plan/features/뉴스레터-리뉴얼.plan.md",
+        "design": "docs/02-design/features/뉴스레터-리뉴얼.design.md"
+      },
+      "timestamps": {
+        "started": "2026-04-06T00:00:00.000Z",
+        "lastUpdated": "2026-04-06T00:00:00.000Z"
+      }
     },
     "js": {
       "phase": "do",
@@ -113,7 +129,7 @@
   "session": {
     "startedAt": "2026-03-06T02:05:39.704Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-22T23:16:42.844Z"
+    "lastActivity": "2026-04-04T14:05:44.621Z"
   },
   "history": [
     {
@@ -197,6 +213,12 @@
     },
     {
       "timestamp": "2026-03-22T23:16:42.843Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-04T14:05:44.621Z",
       "feature": "api",
       "phase": "do",
       "action": "updated"
