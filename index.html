@@ -2721,6 +2721,129 @@
         };
 
         // ────────────────────────────────────────────────────────────
+        // F-13: HWPX 서식 채우기 문서 빌더 (POST /api/hwpx-fill)
+        // 서버는 placeholder 치환·패키징만 수행 — 매핑·포맷·문서 분할은 여기서 처리
+        // 격자 한도: 급여명세서 지급내역 12건, 영수증빙 2건, 회의일지 참석자 6명
+        // ────────────────────────────────────────────────────────────
+        const HWPX_FILL_LABELS = {
+            r_name: '성명', r_birth: '생년월일', r_addr: '주소',
+            org_name: '기관명', org_regno: '사업자등록번호', org_rep: '대표자명', org_addr: '기관주소',
+            total_fund: '지급 합계(지원금)', issue_date: '발급일',
+            m_title: '회의제목', m_datetime: '일시', m_place: '장소', m_content: '내용'
+        };
+
+        const hwpxFillDateStr = () => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+
+        // 미리보기 테이블용 [라벨, 값] 목록 — 지급내역은 일자·금액을 한 행으로 축약
+        const hwpxFillPreviewRows = (fields) => {
+            const rows = [];
+            Object.entries(fields).forEach(([k, v]) => {
+                if (k === 'org_name_footer' || k === 'total_self' || v === '') return;
+                let m = k.match(/^pay(\d+)_date$/);
+                if (m) { rows.push([`지급 ${m[1]}`, `${v} · ${fields[`pay${m[1]}_fund`] || ''}원`]); return; }
+                if (/^pay\d+_(fund|self)$/.test(k)) return;
+                m = k.match(/^att(\d+)$/);
+                if (m) { rows.push([`참석자 ${m[1]}`, v]); return; }
+                m = k.match(/^no(\d+)$/);
+                if (m) { rows.push([`영수번호 ${m[1]}`, v]); return; }
+                m = k.match(/^reason(\d+)$/);
+                if (m) { rows.push([`지출사유 ${m[1]}`, v]); return; }
+                rows.push([HWPX_FILL_LABELS[k] || k, v]);
+            });
+            return rows;
+        };
+
+        // 배열을 size개씩 묶되 최소 1개 청크 보장 (빈 배열 → [[]], 서식 1장은 항상 생성)
+        const chunkForFill = (arr, size) => {
+            const out = [];
+            for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+            return out.length ? out : [[]];
+        };
+
+        const buildSalaryFillDocs = (execution, allExecutions, orgSettings = {}, recipientProfile = null) => {
+            const recipientName = (execution.recipient || '').trim();
+            // generateSalaryStatementHTML과 동일한 필터·중복 제거·정렬 규칙
+            const seenIds = new Set();
+            const seenDateAmount = new Set();
+            const recipientExecutions = allExecutions
+                .filter(e => {
+                    if (e.recipient !== execution.recipient || e.type !== '운영인건비') return false;
+                    if (seenIds.has(e.id)) return false;
+                    seenIds.add(e.id);
+                    const key = `${e.execution_date}|${e.amount}`;
+                    if (seenDateAmount.has(key)) return false;
+                    seenDateAmount.add(key);
+                    return true;
+                })
+                .sort((a, b) => a.execution_date.localeCompare(b.execution_date));
+
+            const today = new Date();
+            const issueDate = `${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, '0')}월 ${String(today.getDate()).padStart(2, '0')}일`;
+            const orgName = orgSettings.org_name || DEFAULT_ORG_NAME;
+
+            const chunks = chunkForFill(recipientExecutions, 12);
+
+            return chunks.map((chunk, ci) => {
+                const fields = {
+                    r_name: recipientName,
+                    r_birth: recipientProfile?.birth_date || '',
+                    r_addr: recipientProfile?.address || '',
+                    org_name: orgName,
+                    org_regno: orgSettings.org_registration_number || '',
+                    org_rep: orgSettings.org_representative || '',
+                    org_addr: orgSettings.org_address || '',
+                    total_fund: fmt(chunk.reduce((s, e) => s + (e.amount || 0), 0)),
+                    total_self: '0',
+                    issue_date: issueDate,
+                    org_name_footer: orgName
+                };
+                chunk.forEach((e, i) => {
+                    fields[`pay${i + 1}_date`] = e.execution_date;
+                    fields[`pay${i + 1}_fund`] = fmt(e.amount || 0);
+                    fields[`pay${i + 1}_self`] = '0';
+                });
+                const suffix = chunks.length > 1 ? `_${ci + 1}` : '';
+                return { filename: `급여지급명세서_${recipientName}_${hwpxFillDateStr()}${suffix}.hwpx`, fields };
+            });
+        };
+
+        const buildReceiptFillDocs = (executions, startNo = 1) => {
+            const sorted = [...executions].sort((a, b) => (a.execution_date || '').localeCompare(b.execution_date || ''));
+            const reason = (e) => [e.execution_date, e.budget_item_name, e.description, `${fmt(e.amount || 0)}원 (${e.payment_method || ''})`]
+                .filter(Boolean).join(' · ');
+            const docs = [];
+            for (let i = 0; i < sorted.length; i += 2) {
+                const no1 = startNo + i;
+                const fields = { no1: String(no1), reason1: reason(sorted[i]) };
+                if (sorted[i + 1]) { fields.no2 = String(no1 + 1); fields.reason2 = reason(sorted[i + 1]); }
+                const range = sorted[i + 1] ? `${no1}-${no1 + 1}` : `${no1}`;
+                docs.push({ filename: `영수증빙_${range}_${hwpxFillDateStr()}.hwpx`, fields });
+            }
+            return docs;
+        };
+
+        const buildMinutesFillDocs = (formData, orgSettings = {}) => {
+            const names = (formData.participants || []).map(s => String(s).trim()).filter(Boolean);
+            const chunks = chunkForFill(names, 6);
+            const safeTitle = (formData.title || '회의').replace(/[/\\]/g, ' ').slice(0, 40);
+            return chunks.map((chunk, ci) => {
+                const fields = {
+                    m_title: formData.title || '',
+                    m_datetime: formData.date || '',
+                    m_place: formData.location || '',
+                    m_content: formData.content || '',
+                    org_name_footer: orgSettings.org_name || DEFAULT_ORG_NAME
+                };
+                chunk.forEach((n, i) => { fields[`att${i + 1}`] = n; });
+                const suffix = chunks.length > 1 ? `_${ci + 1}` : '';
+                return { filename: `회의진행일지_${safeTitle}_${hwpxFillDateStr()}${suffix}.hwpx`, fields };
+            });
+        };
+
+        // ────────────────────────────────────────────────────────────
         // Change Application (사업변경신청서) HTML generator
         // Reflects the structure of HWP template 0[서식]_사업변경신청서.hwp
         // ────────────────────────────────────────────────────────────
@@ -3250,13 +3373,15 @@
             });
         };
 
+        // Shared serverless API base — same origin in prod, Vercel host when served locally
+        const API_BASE = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'https://beautifulfundboard.vercel.app' : '';
+
         // ────────────────────────────────────────────────────────────
         // HWPX download via server API (/api/hwpx)
         // ────────────────────────────────────────────────────────────
         const downloadHWPX = async (title, sections, filename, template = 'base') => {
             try {
-                const apiBase = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'https://beautifulfundboard.vercel.app' : '';
-                const resp = await fetch(apiBase + '/api/hwpx', {
+                const resp = await fetch(API_BASE + '/api/hwpx', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, template, sections })
@@ -3271,6 +3396,37 @@
                 URL.revokeObjectURL(url);
             } catch (err) {
                 alert('HWPX 서버 연결 실패. 잠시 후 다시 시도해주세요.');
+            }
+        };
+
+        // ────────────────────────────────────────────────────────────
+        // F-13: HWPX 서식 채우기 다운로드 (/api/hwpx-fill)
+        // 1건 → .hwpx / 다건 → .zip 응답
+        // ────────────────────────────────────────────────────────────
+        const HWPX_FILL_TEMPLATE_LABELS = { salary: '급여지급명세서', receipt: '영수증빙', minutes: '회의진행일지' };
+
+        const downloadHwpxFill = async (template, documents) => {
+            try {
+                const resp = await fetch(API_BASE + '/api/hwpx-fill', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ template, documents })
+                });
+                if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || '서식 생성 실패'); return false; }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = documents.length === 1
+                    ? documents[0].filename
+                    : `${HWPX_FILL_TEMPLATE_LABELS[template] || template}_일괄_${hwpxFillDateStr()}.zip`;
+                document.body.appendChild(a); a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                return true;
+            } catch (err) {
+                alert('서식 생성 서버 연결 실패. 잠시 후 다시 시도해주세요.');
+                return false;
             }
         };
 
@@ -4274,8 +4430,7 @@
             const handleRewriteBoard = async (boardId, originalText) => {
                 setRewritingBoardId(boardId);
                 try {
-                    const apiBase = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'https://beautifulfundboard.vercel.app' : '';
-                    const resp = await fetch(apiBase + '/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    const resp = await fetch(API_BASE + '/api/rewrite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ text: (originalText || '').replace(/<[^>]*>/g, '') }) });
                     if (!resp.ok) { const e = await resp.json().catch(() => ({})); alert(e.error || `AI 재가공 실패 (${resp.status})`); return; }
                     const d = await resp.json();
@@ -10131,6 +10286,12 @@
                                                 <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => bulkChangeStatus('executed')}>일괄 집행</button>
                                                 <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => bulkChangeStatus('completed')}>일괄 완료</button>
                                                 <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => handleExportExcel(true)}>📥 선택 내보내기</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px', color: '#7C4DBE', borderColor: '#7C4DBE' }} onClick={() => {
+                                                    const execs = filteredExecutions.filter(e => selectedExecIds.has(e.id) && ['approved', 'executed', 'completed'].includes(e.status));
+                                                    if (execs.length === 0) { alert('영수증빙은 승인/집행/완료 상태의 집행 건만 대상입니다. 해당 상태의 건을 선택하세요.'); return; }
+                                                    setReceiptStartNo(1);
+                                                    setHwpxFillPreview({ template: 'receipt', execs });
+                                                }}>🧾 영수증빙 HWPX</button>
                                                 <button className="btn" style={{ fontSize: '12px', padding: '4px 12px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '6px' }} onClick={bulkDelete}>일괄 삭제</button>
                                                 <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => setSelectedExecIds(new Set())}>선택 해제</button>
                                             </div>
@@ -10311,6 +10472,14 @@
                                                             generatePDF(html, `급여지급명세서_${execution.recipient || ''}_${execution.execution_date || ''}.pdf`);
                                                         }}
                                                     >📥 PDF</button>
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        style={{ fontSize: '12px', padding: '4px 12px', color: '#7C4DBE', borderColor: '#7C4DBE' }}
+                                                        onClick={() => {
+                                                            const profile = recipients.find(r => r.name === (execution.recipient || '').trim()) || null;
+                                                            setHwpxFillPreview({ template: 'salary', docs: buildSalaryFillDocs(execution, data.budgetExecutions, orgSettings, profile) });
+                                                        }}
+                                                    >📝 HWPX</button>
                                                 </div>
                                             )}
                                             {!isEditing && ['사업인건비', '사업회의비', '교육훈련비'].includes(execution.type) && (
@@ -10764,6 +10933,11 @@
             const [meetingMinutesForm, setMeetingMinutesForm] = useState({
                 title: '', date: '', location: '', content: '', participants: ''
             });
+
+            // ── F-13: HWPX 서식 채우기 미리보기 모달 ───────────────────────
+            // null | { template: 'salary'|'minutes', docs } | { template: 'receipt', execs }
+            const [hwpxFillPreview, setHwpxFillPreview] = useState(null);
+            const [receiptStartNo, setReceiptStartNo] = useState(1);
 
             // ── 사업변경신청서 입력 모달 ─────────────────────────────────────
             const [changeApplicationModal, setChangeApplicationModal] = useState(false);
@@ -13666,6 +13840,18 @@
                                         onClick={() => setMeetingMinutesModal(null)}>
                                         취소
                                     </button>
+                                    <button className="btn btn-secondary" style={{ padding: '8px 16px', borderRadius: 8, cursor: 'pointer', color: '#7C4DBE', borderColor: '#7C4DBE' }}
+                                        onClick={async () => {
+                                            const participantList = meetingMinutesForm.participants
+                                                .split('\n')
+                                                .map(s => s.trim())
+                                                .filter(Boolean);
+                                            const docs = buildMinutesFillDocs({ ...meetingMinutesForm, participants: participantList }, orgSettings);
+                                            const ok = await downloadHwpxFill('minutes', docs);
+                                            if (ok) setMeetingMinutesModal(null);
+                                        }}>
+                                        📝 HWPX 다운로드
+                                    </button>
                                     <button className="btn btn-primary"
                                         onClick={() => {
                                             const participantList = meetingMinutesForm.participants
@@ -13687,6 +13873,84 @@
                             </div>
                         </div>
                     )}
+
+                    {/* F-13: HWPX 서식 채우기 미리보기 모달 */}
+                    {hwpxFillPreview && (() => {
+                        const tpl = hwpxFillPreview.template;
+                        const tplLabel = HWPX_FILL_TEMPLATE_LABELS[tpl] || tpl;
+                        const docs = tpl === 'receipt'
+                            ? buildReceiptFillDocs(hwpxFillPreview.execs, receiptStartNo)
+                            : hwpxFillPreview.docs;
+                        const orgMissing = !orgSettings.org_name || (tpl === 'salary' && !orgSettings.org_representative);
+                        const profileMissing = tpl === 'salary' && docs.length > 0 && !docs[0].fields.r_birth && !docs[0].fields.r_addr;
+                        return (
+                            <div className="schedule-modal-overlay" onClick={() => setHwpxFillPreview(null)}>
+                                <div className="schedule-modal" style={{ maxWidth: 640, maxHeight: '85vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+                                    <div className="schedule-modal-header">
+                                        <h3>📝 {tplLabel} HWPX 생성 — {docs.length}개 문서</h3>
+                                        <button className="schedule-modal-close" onClick={() => setHwpxFillPreview(null)}>&times;</button>
+                                    </div>
+                                    <div className="schedule-modal-body">
+                                        {orgMissing && (
+                                            <div style={{ background: '#FFF3CD', border: '1px solid #FFE69C', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>
+                                                ⚠️ 기관정보가 비어 있어 해당 칸이 빈칸으로 출력됩니다.
+                                                <button style={{ marginLeft: 8, fontSize: 12, cursor: 'pointer', border: '1px solid #D4A017', background: 'transparent', borderRadius: 6, padding: '2px 8px' }}
+                                                    onClick={() => { setHwpxFillPreview(null); setCurrentPage('admin'); setAdminTab('orgSettings'); }}>
+                                                    기관정보 설정으로 이동
+                                                </button>
+                                            </div>
+                                        )}
+                                        {profileMissing && (
+                                            <div style={{ background: '#FFF3CD', border: '1px solid #FFE69C', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>
+                                                ⚠️ 수령자 프로필(생년월일·주소)이 등록되지 않아 해당 칸이 빈칸으로 출력됩니다.
+                                                <button style={{ marginLeft: 8, fontSize: 12, cursor: 'pointer', border: '1px solid #D4A017', background: 'transparent', borderRadius: 6, padding: '2px 8px' }}
+                                                    onClick={() => { setHwpxFillPreview(null); setCurrentPage('admin'); setAdminTab('recipients'); }}>
+                                                    수급자 관리로 이동
+                                                </button>
+                                            </div>
+                                        )}
+                                        {tpl === 'receipt' && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13, flexWrap: 'wrap' }}>
+                                                <label style={{ fontWeight: 600 }}>시작 영수번호</label>
+                                                <input type="number" min="1" value={receiptStartNo}
+                                                    onChange={e => setReceiptStartNo(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                                    style={{ width: 80, padding: '4px 8px', border: '1px solid #EBE8E1', borderRadius: 6 }} />
+                                                <span style={{ color: '#9C9690', fontSize: 12 }}>기존 제출분 다음 번호부터 이어서 부여할 수 있습니다.</span>
+                                            </div>
+                                        )}
+                                        {docs.map((doc, di) => (
+                                            <div key={di} style={{ marginBottom: 14 }}>
+                                                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>📄 {doc.filename}</div>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                                    <tbody>
+                                                        {hwpxFillPreviewRows(doc.fields).map(([label, value], ri) => (
+                                                            <tr key={ri}>
+                                                                <td style={{ border: '1px solid #EBE8E1', padding: '3px 8px', background: '#F8F6F1', width: 130, whiteSpace: 'nowrap' }}>{label}</td>
+                                                                <td style={{ border: '1px solid #EBE8E1', padding: '3px 8px', wordBreak: 'break-all' }}>{value}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="schedule-modal-footer">
+                                        <button className="btn" style={{ background: '#F8F6F1', border: '1px solid #EBE8E1', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' }}
+                                            onClick={() => setHwpxFillPreview(null)}>
+                                            취소
+                                        </button>
+                                        <button className="btn btn-primary"
+                                            onClick={async () => {
+                                                const ok = await downloadHwpxFill(tpl, docs);
+                                                if (ok) setHwpxFillPreview(null);
+                                            }}>
+                                            📥 생성 및 다운로드
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* 사업변경신청서 입력 모달 */}
                     {changeApplicationModal && (

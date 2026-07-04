@@ -38,12 +38,14 @@ Additional migrations (apply in order): `supabase-migration-{rls-improved,galler
 
 ### Single-file SPA
 
-The entire app lives in `index.html` (~14,000 lines). Top to bottom:
+The entire app lives in `index.html` (~14,000 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
+
+Top to bottom, `index.html` is:
 
 1. **CDN imports** (React, ReactDOM, Babel, Supabase, Chart.js, DOMPurify, JSZip, SheetJS, Google APIs)
 2. **Inline `<style>` block** (~1300 lines) — includes `@media print` for dashboard printing
 3. **Single `<script type="text/babel">` block** containing:
-   - Supabase client init (~line 2186)
+   - Supabase client init (~line 2381)
    - `CONFIG` constant — budget, tax rates, periods (~line 2384)
    - `EXECUTION_STATUS` — approval workflow states (~line 2398)
    - `BUDGET_DATA` — budget hierarchy structure (~line 2934)
@@ -97,12 +99,17 @@ To add a new themed template: add an entry to `NL_THEMES` with the required rend
 |------|----------|---------|---------|
 | `api/neis.py` | `GET /api/neis` | NEIS school search + timetable proxy | 10s |
 | `api/hwpx.py` | `POST /api/hwpx` | HWPX (한글) document generation | 30s |
+| `api/hwpx-fill.py` | `POST /api/hwpx-fill` | HWPX 서식 채우기 (급여명세서·영수증빙·회의일지) | 30s |
 | `api/rewrite.py` | `POST /api/rewrite` | AI newsletter rewrite (Claude API) | 15s |
 | `api/supabase-admin.py` | `POST /api/supabase-admin` | Admin SQL operations (bf schema) | 15s |
 
-HWPX templates in `api/hwpxskill_templates/{base,gonmun,report,minutes,proposal}/`.
+HWPX templates in `api/hwpxskill_templates/{base,gonmun,report,minutes,proposal}/`; HWPX build/validation helpers in `api/hwpxskill_scripts/`. Python deps are in `requirements.txt` (`lxml`) — used by the serverless functions only, not the static frontend.
 
-**Important:** `hwpx.py` generates new HWPX from scratch (tab-separated text paragraphs). It does NOT support filling existing template forms with merged cells/checkboxes. Foundation report auto-fill will require an unzip-replace-repackage approach.
+**Important:** `hwpx.py` generates new HWPX from scratch (tab-separated text paragraphs). It does NOT support filling existing template forms with merged cells/checkboxes.
+
+### HWPX Template Fill (F-13)
+
+`api/hwpx-fill.py` fills foundation form templates via the unzip-replace-repackage approach: preprocessed templates in `api/hwpxfill_templates/{salary,receipt,minutes}/` contain `{{placeholder}}` markers in `Contents/section0.xml`; the server only substitutes placeholders (XML-escaped) and zips — data collection, formatting, and document splitting happen client-side in `buildSalaryFillDocs`/`buildReceiptFillDocs`/`buildMinutesFillDocs` + `downloadHwpxFill`. Grid limits per document: salary 12 payment rows, receipt 2 entries, minutes 6 attendees (excess splits into multiple documents; multiple documents return a ZIP). Templates are regenerated from `templates/*.hwpx` originals by `scripts/preprocess_templates.py` — never edit `hwpxfill_templates` with the Hancom editor (it splits placeholder runs).
 
 ### Authentication
 - SHA-256 hashed password check against `users` table
@@ -169,7 +176,12 @@ When adding new CDN scripts, update the CSP `script-src` in `vercel.json`.
 | `vercel.json` | Deployment config + security headers |
 | `supabase-schema-safe.sql` | Database schema (bf schema) |
 | `supabase-migration-*.sql` | Incremental migrations |
+| `api/hwpx-fill.py` | HWPX 서식 채우기 (F-13) |
+| `api/hwpxfill_templates/` | Placeholder-preprocessed HWPX form templates (generated, do not hand-edit) |
+| `templates/` | 재단 서식 원본 (무수정 보존) |
+| `scripts/preprocess_templates.py` | templates/ → hwpxfill_templates/ 전처리 (재실행 가능) |
 | `manifest.json` + `service-worker.js` | PWA support |
+| `docs/` | bkit PDCA docs — `01-plan/`, `02-design/`, `03-analysis/`, `archive/` |
 | `_archive/` | Reference JSX modules (not used by running app) |
 
 ## Claude Code Commands
@@ -179,3 +191,23 @@ When adding new CDN scripts, update the CSP `script-src` in `vercel.json`.
 - `/new-migration` — Create Supabase migration file
 - `/find-component` — Locate component/function in index.html
 - `/review-changes` — Review current changes
+
+## Skill routing
+
+When the user's request matches an available skill, ALWAYS invoke it using the Skill
+tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
+The skill has specialized workflows that produce better results than ad-hoc answers.
+
+Key routing rules:
+- Product ideas, "is this worth building", brainstorming → invoke office-hours
+- Bugs, errors, "why is this broken", 500 errors → invoke investigate
+- Ship, deploy, push, create PR → invoke ship
+- QA, test the site, find bugs → invoke qa
+- Code review, check my diff → invoke review
+- Update docs after shipping → invoke document-release
+- Weekly retro → invoke retro
+- Design system, brand → invoke design-consultation
+- Visual audit, design polish → invoke design-review
+- Architecture review → invoke plan-eng-review
+- Save progress, checkpoint, resume → invoke checkpoint
+- Code quality, health check → invoke health

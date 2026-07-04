@@ -21,3 +21,13 @@ Thumbs.db
 node_modules/
 .vercel
 .env*.local
+
+# Python
+__pycache__/
+*.pyc
+
+# Test / tooling artifacts
+.playwright-mcp/
+
+# Private working data (accounting ledgers, not for repo)
+account/
