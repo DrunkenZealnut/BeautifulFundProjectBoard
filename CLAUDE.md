@@ -32,13 +32,15 @@ Execute in Supabase SQL Editor in order:
 1. `supabase-schema-safe.sql` — All tables, indexes, RLS, sample data
 2. `supabase-migration-auth.sql` — Users RLS + 로컬 개발용 초기 관리자 (배포 전 변경 필수)
 
-Additional migrations (apply in order): `supabase-migration-{rls-improved,gallery-category,gallery-rls-fix,password-hash,recipients,features,rls,schools,projects,execution-project-id,admin-sql}.sql`
+Additional migrations (apply in order): `supabase-migration-{rls-improved,gallery-category,gallery-rls-fix,password-hash,recipients,features,rls,schools,projects,execution-project-id,admin-sql,newsletters}.sql`
+
+Note: migrations before the bf-schema switch (commit 014b8bb) target `public.`; `newsletters` onward target `bf.` directly.
 
 ## Architecture
 
 ### Single-file SPA
 
-The entire app lives in `index.html` (~14,000 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
+The entire app lives in `index.html` (~14,200 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
 
 Top to bottom, `index.html` is:
 
@@ -46,13 +48,15 @@ Top to bottom, `index.html` is:
 2. **Inline `<style>` block** (~1300 lines) — includes `@media print` for dashboard printing
 3. **Single `<script type="text/babel">` block** containing:
    - Supabase client init (~line 2381)
-   - `CONFIG` constant — budget, tax rates, periods (~line 2384)
-   - `EXECUTION_STATUS` — approval workflow states (~line 2398)
-   - `BUDGET_DATA` — budget hierarchy structure (~line 2934)
-   - `DOCUMENT_RULES` — evidence requirements per expense type (~line 3070)
-   - Newsletter template system (`NL_THEMES`, `_nlRenderSections`, `generateNewsletterHTML`) (~line 3281)
-   - `LoginPage` — authentication component (~line 3960)
-   - `ProjectManagementSystem` — root component (~line 4070, ~9900 lines)
+   - `CONFIG` constant — budget, tax rates, periods (~line 2386)
+   - `EXECUTION_STATUS` — approval workflow states (~line 2400)
+   - HWPX fill builders (`buildSalaryFillDocs`/`buildReceiptFillDocs`/`buildMinutesFillDocs`) (~line 2766)
+   - `BUDGET_DATA` — budget hierarchy structure (~line 3059)
+   - `DOCUMENT_RULES` — evidence requirements per expense type (~line 3195)
+   - `downloadHwpxFill` — HWPX fill download dispatcher (~line 3408)
+   - Newsletter template system (`NL_THEMES` ~line 3465, `generateNewsletterHTML` ~line 3653)
+   - `LoginPage` — authentication component (~line 4122)
+   - `ProjectManagementSystem` — root component (~line 4231, ~10,000 lines)
 4. **Service worker** registration and offline handlers
 
 ### Critical constraint: Babel standalone
@@ -63,7 +67,7 @@ Code is transpiled by Babel standalone in the browser. This means:
 
 ### Root component structure
 
-`ProjectManagementSystem` contains ALL app state (~150 `useState` declarations) and these page renderers:
+`ProjectManagementSystem` contains ALL app state (~165 `useState` declarations) and these page renderers:
 
 | Function | Page | Key features |
 |----------|------|-------------|
@@ -72,7 +76,7 @@ Code is transpiled by Babel standalone in the browser. This means:
 | `renderSchedule()` | 일정 관리 | Calendar view, list view, Google Calendar sync |
 | `renderBoard()` | 게시판 | 4 categories (공지/자료/보고서/자유), rich text, comments |
 | `renderGallery()` | 갤러리 | Categorized images, ZIP download, newsletter integration |
-| `renderNewsletter()` | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 5 templates, AI rewrite, iframe preview |
+| `renderNewsletter()` | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 6 templates, AI rewrite, iframe preview (desktop/mobile), save/load drafts (`bf.newsletters`), color/font customization, inline editing |
 | `renderSchools()` | 학교관리 | NEIS API school search, timetable viewer, textbook management |
 | `renderAdmin()` | 관리자 | Users, recipients, org settings, project management (admin-only) |
 | `renderGuide()` | 회계가이드 | Accounting rules, withholding tax calculator, FAQ |
@@ -81,17 +85,21 @@ Navigation is state-driven via `currentPage` (no URL routing).
 
 ### Newsletter Template System
 
-5 templates using a unified theme architecture:
+6 templates using a unified theme architecture:
 
-- **Modern/Magazine/Classic**: Rendered via `NL_THEMES` theme objects → `_nlGenerateThemed()` shared renderer. Each theme defines `header`, `title`, `greeting`, `closing`, `footer`, `sectionLabel`, `scheduleItem`, `boardItem`, `galleryItem` as functions returning HTML strings.
+- **Modern/Magazine/Classic/Bold**: Rendered via `NL_THEMES` theme objects → `_nlGenerateThemed()` shared renderer. Each theme defines `header`, `title`, `greeting`, `closing`, `footer`, `sectionLabel`, `scheduleItem`, `boardItem`, `galleryItem` as functions returning HTML strings.
 - **Email**: `generateNewsletterEmail()` — table-based layout for Gmail/Outlook compatibility
 - **Grid**: `generateNewsletterGrid()` — Hoom-style 3-column card grid with featured center
 
 `generateNewsletterHTML(template, config, sections, orgName, assets)` is the unified dispatcher.
-- `sections`: `[{ type: 'boards'|'schedules'|'gallery', label, items }]` — ordering controlled by user in Step 3
-- `assets`: `{ boardImageUrls, rewrittenContents, galleryThumbUrls }`
+- `sections`: `[{ type: 'boards'|'schedules'|'gallery', label, items }]` — ordering AND labels controlled by user in Step 3 (`sec.label` flows into `sectionLabel()`; email/grid take a `labels` param)
+- `assets`: `{ boardImageUrls, rewrittenContents, galleryThumbUrls, itemLinks }`
 
 To add a new themed template: add an entry to `NL_THEMES` with the required render functions. For custom layouts (like email/grid), add a standalone generate function and a layout check in the dispatcher.
+
+**Color/font customization** works by post-processing the generated HTML (`applyCustomDesign` in `renderNewsletter`): the theme's declared `accent`/`accent2` hex strings are string-replaced with user-picked colors, and font stacks likewise (`NL_FONTS`, `NL_EMAIL_FONT`). Theme render functions hardcode hex values — keep each theme's declared `accent`/`accent2` in sync with the hex actually used in its render functions, or replacement silently stops working.
+
+**Save/load** (`bf.newsletters`): full snapshot serialization — `config` (+`custom`), `sections` (orderedSections verbatim), `assets` (incl. `editedItems`), `selection` (Step 1 checkbox IDs). Inline title edits live in `editedItems` state; body edits reuse `rewrittenContents` (same override slot as AI rewrite). `syncSections()` merges fresh selection into existing sections on Step 3 entry — do not revert to rebuild-on-entry or user ordering/labels are lost.
 
 ### Serverless API Functions (`api/`)
 

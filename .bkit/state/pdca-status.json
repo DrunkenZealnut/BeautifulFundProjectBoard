@@ -1,15 +1,39 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-04-04T14:05:44.621Z",
+  "lastUpdated": "2026-07-05T03:01:29.463Z",
   "activeFeatures": [
+    "뉴스레터-생성모듈-업데이트",
     "뉴스레터-리뉴얼",
     "학교시간표조회",
     "학교관리페이지",
     "메인페이지스타일변경",
     "api"
   ],
-  "primaryFeature": "뉴스레터-리뉴얼",
+  "primaryFeature": "뉴스레터-생성모듈-업데이트",
   "features": {
+    "뉴스레터-생성모듈-업데이트": {
+      "phase": "completed",
+      "phaseNumber": 6,
+      "matchRate": 98.2,
+      "iterationCount": 0,
+      "requirements": [
+        "저장·불러오기 (bf.newsletters)",
+        "템플릿·디자인 커스터마이징",
+        "편집 UX 개선"
+      ],
+      "documents": {
+        "plan": "docs/01-plan/features/뉴스레터-생성모듈-업데이트.plan.md",
+        "design": "docs/02-design/features/뉴스레터-생성모듈-업데이트.design.md",
+        "analysis": "docs/03-analysis/뉴스레터-생성모듈-업데이트.analysis.md",
+        "report": "docs/04-report/뉴스레터-생성모듈-업데이트.report.md"
+      },
+      "timestamps": {
+        "started": "2026-07-05T00:00:00.000Z",
+        "lastUpdated": "2026-07-05T03:30:00.000Z"
+      },
+      "previousPhase": "check",
+      "autoAdvanced": true
+    },
     "BeautifulFundProjectBoard": {
       "phase": "completed",
       "phaseNumber": 5,
@@ -129,7 +153,7 @@
   "session": {
     "startedAt": "2026-03-06T02:05:39.704Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-04-04T14:05:44.621Z"
+    "lastActivity": "2026-07-05T03:01:29.463Z"
   },
   "history": [
     {
@@ -222,6 +246,36 @@
       "feature": "api",
       "phase": "do",
       "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-05T00:00:00.000Z",
+      "feature": "뉴스레터-생성모듈-업데이트",
+      "phase": "plan",
+      "action": "created"
+    },
+    {
+      "timestamp": "2026-07-05T01:00:00.000Z",
+      "feature": "뉴스레터-생성모듈-업데이트",
+      "phase": "design",
+      "action": "created"
+    },
+    {
+      "timestamp": "2026-07-05T03:00:00.000Z",
+      "feature": "뉴스레터-생성모듈-업데이트",
+      "phase": "do",
+      "action": "implemented"
+    },
+    {
+      "timestamp": "2026-07-05T03:01:29.463Z",
+      "feature": "뉴스레터-생성모듈-업데이트",
+      "phase": "report",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-05T03:30:00.000Z",
+      "feature": "뉴스레터-생성모듈-업데이트",
+      "phase": "completed",
+      "action": "completed"
     }
   ]
 }
