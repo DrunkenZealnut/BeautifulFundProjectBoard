@@ -3462,6 +3462,15 @@
 </html>`;
 
         // ── Newsletter Template System (Unified) ──
+        // Font presets for newsletter customization (id=null → template default)
+        const NL_FONTS = [
+            { id: null, name: '템플릿 기본 (고딕)', stack: null },
+            { id: 'serif', name: '명조', stack: "'Noto Serif KR', 'Nanum Myeongjo', 'Batang', serif" },
+            { id: 'system', name: '시스템 고딕', stack: "-apple-system, 'Malgun Gothic', sans-serif" },
+        ];
+        // Exact font stack literal used inside email generator (double-quoted variant)
+        const NL_EMAIL_FONT = '"Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+
         const NL_THEMES = {
             modern: {
                 name: '모던 / 미니멀', accent: '#0d9488', accent2: '#06b6d4', bg: '#f5f5f5',
@@ -3579,6 +3588,37 @@
                 galleryGrid: 'display:grid;grid-template-columns:repeat(3,1fr);gap:12px;',
                 contentPad: 'padding:24px 32px;',
             },
+            bold: {
+                name: '볼드 / 포스터', accent: '#7c3aed', accent2: '#fbbf24', bg: '#0f0f11',
+                font: "'Pretendard', -apple-system, sans-serif",
+                wrap: 'max-width:600px;margin:0 auto;background:#18181b;color:#fafafa;',
+                header: (org, issue, esc) => `<div style="padding:28px 28px 20px;background:linear-gradient(135deg,#7c3aed,#4c1d95);">
+                    <div style="font-size:12px;font-weight:700;color:#fbbf24;letter-spacing:3px;text-transform:uppercase;">NEWSLETTER</div>
+                    <div style="font-size:18px;font-weight:800;color:#fff;margin-top:6px;">${esc(org)}</div>
+                    <div style="font-size:12px;color:#ddd6fe;margin-top:4px;">${issue}</div></div>`,
+                title: (t, esc) => `<h1 style="font-size:24pt;font-weight:900;color:#fff;margin-bottom:28px;letter-spacing:-1px;line-height:1.25;">${esc(t)}</h1>`,
+                greeting: (g, esc) => `<div style="margin-bottom:28px;padding:18px 20px;background:#27272a;border-left:4px solid #fbbf24;border-radius:6px;font-size:10.5pt;line-height:1.85;color:#d4d4d8;white-space:pre-line;">${esc(g)}</div>`,
+                closing: (c, esc) => `<div style="margin-top:28px;padding:18px 20px;background:#27272a;border-radius:6px;font-size:10.5pt;line-height:1.85;color:#d4d4d8;white-space:pre-line;">${esc(c)}</div>`,
+                footer: (org, esc) => `<div style="padding:20px 28px;background:#0f0f11;text-align:center;">
+                    <p style="font-size:9pt;color:#71717a;">${esc(org)}</p>
+                    <p style="font-size:8pt;color:#3f3f46;margin-top:4px;">아름다운재단 2026 공익단체 인큐베이팅 지원사업</p></div>`,
+                sectionLabel: (label) => `<div style="display:inline-block;padding:6px 14px;background:#7c3aed;border-radius:999px;margin-bottom:18px;">
+                    <span style="font-size:10pt;font-weight:800;color:#fff;letter-spacing:0.5px;">${label}</span></div>`,
+                scheduleItem: (s, esc, wl) => `<div style="display:flex;gap:14px;align-items:baseline;padding:12px 0;border-bottom:1px solid #27272a;">
+                    <span style="font-size:11pt;font-weight:800;color:#fbbf24;white-space:nowrap;">${esc((s.start_date||'').slice(5))}</span>
+                    <span style="font-size:10.5pt;font-weight:600;color:#fafafa;flex:1;">${wl ? wl(s.id, esc(s.title)) : esc(s.title)}</span>
+                    <span style="font-size:9pt;color:#71717a;">${esc(s.category||'')}</span></div>`,
+                boardItem: (b, content, images, esc, idx, total, wl) => `<div style="margin-bottom:24px;background:#27272a;border-radius:12px;overflow:hidden;">
+                    ${images.length > 0 ? '<img src="'+esc(images[0])+'" alt="" style="width:100%;max-height:280px;object-fit:cover;display:block;" />' : ''}
+                    <div style="padding:18px 20px;">
+                        <div style="font-size:12pt;font-weight:800;color:#fff;margin-bottom:10px;">${wl ? wl(b.id, esc(b.title)) : esc(b.title)}</div>
+                        <div style="font-size:10pt;line-height:1.8;color:#a1a1aa;">${content}</div></div></div>`,
+                galleryItem: (g, url, esc, wl) => `<div>
+                    ${url ? (wl ? wl(g.id, '<img src="'+esc(url)+'" alt="" style="width:100%;height:110px;object-fit:cover;border-radius:8px;display:block;" />') : '<img src="'+esc(url)+'" alt="" style="width:100%;height:110px;object-fit:cover;border-radius:8px;display:block;" />') : '<div style="width:100%;height:110px;background:#27272a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#3f3f46;font-size:22pt;">📷</div>'}
+                    <div style="font-size:8.5pt;color:#a1a1aa;margin-top:6px;text-align:center;">${wl ? wl(g.id, esc(g.title)) : esc(g.title)}</div></div>`,
+                galleryGrid: 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;',
+                contentPad: 'padding:28px;',
+            },
             email: {
                 name: '이메일 뉴스레터', accent: '#27ae60', accent2: '#2c3e50', bg: '#e6e5e7', layout: 'email',
                 font: "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
@@ -3601,7 +3641,7 @@
                     } else {
                         inner = sec.items.map(s => theme.scheduleItem(s, esc, _wrapLink)).join('');
                     }
-                    const wrap = theme.schedulesWrap ? `<div style="${theme.schedulesWrap}">${theme.sectionLabel('주요 일정')}${inner}</div>` : `${theme.sectionLabel('주요 일정')}${inner}`;
+                    const wrap = theme.schedulesWrap ? `<div style="${theme.schedulesWrap}">${theme.sectionLabel(esc(sec.label || '주요 일정'))}${inner}</div>` : `${theme.sectionLabel(esc(sec.label || '주요 일정'))}${inner}`;
                     return `<section style="margin-bottom:36px;">${wrap}</section>`;
                 }
                 if (sec.type === 'boards' && sec.items.length > 0) {
@@ -3617,11 +3657,11 @@
                     } else {
                         inner = boardsHtml.join('');
                     }
-                    return `<section style="margin-bottom:36px;">${theme.sectionLabel('주요 소식')}${inner}</section>`;
+                    return `<section style="margin-bottom:36px;">${theme.sectionLabel(esc(sec.label || '주요 소식'))}${inner}</section>`;
                 }
                 if (sec.type === 'gallery' && sec.items.length > 0) {
                     const inner = sec.items.map(g => theme.galleryItem(g, galleryThumbUrls[g.id], esc, _wrapLink)).join('');
-                    return `<section style="margin-bottom:36px;">${theme.sectionLabel(theme.galleryLabel || '갤러리')}
+                    return `<section style="margin-bottom:36px;">${theme.sectionLabel(esc(sec.label || theme.galleryLabel || '갤러리'))}
                         <div style="${theme.galleryGrid}">${inner}</div></section>`;
                 }
                 return '';
@@ -3653,22 +3693,18 @@
         const generateNewsletterHTML = (template, config, sections, orgName, assets) => {
             const theme = NL_THEMES[template] || NL_THEMES.modern;
             // Email and Grid have custom layouts — delegate to legacy generators
-            if (theme.layout === 'email') {
+            if (theme.layout === 'email' || theme.layout === 'grid') {
                 const s = sections.find(x => x.type === 'schedules');
                 const b = sections.find(x => x.type === 'boards');
                 const g = sections.find(x => x.type === 'gallery');
-                return generateNewsletterEmail(config, s ? s.items : [], b ? b.items : [], orgName, assets.boardImageUrls, assets.rewrittenContents, g ? g.items : [], assets.galleryThumbUrls);
-            }
-            if (theme.layout === 'grid') {
-                const s = sections.find(x => x.type === 'schedules');
-                const b = sections.find(x => x.type === 'boards');
-                const g = sections.find(x => x.type === 'gallery');
-                return generateNewsletterGrid(config, s ? s.items : [], b ? b.items : [], orgName, assets.boardImageUrls, assets.rewrittenContents, g ? g.items : [], assets.galleryThumbUrls);
+                const labels = { schedules: s?.label, boards: b?.label, gallery: g?.label };
+                const gen = theme.layout === 'email' ? generateNewsletterEmail : generateNewsletterGrid;
+                return gen(config, s ? s.items : [], b ? b.items : [], orgName, assets.boardImageUrls, assets.rewrittenContents, g ? g.items : [], assets.galleryThumbUrls, labels);
             }
             return _nlGenerateThemed(theme, config, sections, orgName, assets);
         };
         // ── Template 4: Email Newsletter (table-based, email-client compatible) ──
-        const generateNewsletterEmail = (config, selectedSchedules, selectedBoards, orgName, boardImageUrls = {}, rewrittenContents = {}, selectedGalleries = [], galleryThumbUrls = {}) => {
+        const generateNewsletterEmail = (config, selectedSchedules, selectedBoards, orgName, boardImageUrls = {}, rewrittenContents = {}, selectedGalleries = [], galleryThumbUrls = {}, labels = {}) => {
             const esc = _nlEsc;
             const accentColor = '#27ae60';
             const darkColor = '#2c3e50';
@@ -3694,7 +3730,7 @@
                     <tbody>
                         <tr><td height="50">&nbsp;</td></tr>
                         <tr>
-                            <td style="${tdStyle} font-size:15px; color:${darkColor}; font-weight:bold;" align="left">주요 일정</td>
+                            <td style="${tdStyle} font-size:15px; color:${darkColor}; font-weight:bold;" align="left">${esc(labels.schedules || '주요 일정')}</td>
                         </tr>
                         <tr>
                             <td height="12" align="left"><div style="width:30px;height:2px;background:${accentColor};"></div></td>
@@ -3740,7 +3776,7 @@
                     <tbody>
                         <tr><td height="50">&nbsp;</td></tr>
                         <tr>
-                            <td style="${tdStyle} font-size:15px; color:${darkColor}; font-weight:bold;" align="left">주요 소식</td>
+                            <td style="${tdStyle} font-size:15px; color:${darkColor}; font-weight:bold;" align="left">${esc(labels.boards || '주요 소식')}</td>
                         </tr>
                         <tr>
                             <td height="12" align="left"><div style="width:30px;height:2px;background:${accentColor};"></div></td>
@@ -3760,7 +3796,7 @@
                     <tbody>
                         <tr><td height="50">&nbsp;</td></tr>
                         <tr>
-                            <td style="${tdStyle} font-size:15px; color:${darkColor}; font-weight:bold;" align="left">활동 갤러리</td>
+                            <td style="${tdStyle} font-size:15px; color:${darkColor}; font-weight:bold;" align="left">${esc(labels.gallery || '활동 갤러리')}</td>
                         </tr>
                         <tr>
                             <td height="12" align="left"><div style="width:30px;height:2px;background:${accentColor};"></div></td>
@@ -3929,7 +3965,7 @@
         };
 
         // ── Template 5: Grid / Magazine Blog (Hoom-style 3-column grid) ──
-        const generateNewsletterGrid = (config, selectedSchedules, selectedBoards, orgName, boardImageUrls = {}, rewrittenContents = {}, selectedGalleries = [], galleryThumbUrls = {}) => {
+        const generateNewsletterGrid = (config, selectedSchedules, selectedBoards, orgName, boardImageUrls = {}, rewrittenContents = {}, selectedGalleries = [], galleryThumbUrls = {}, labels = {}) => {
             const esc = _nlEsc;
             const typeColors = { notice: '#e74c3c', materials: '#3498db', report: '#9b59b6', free: '#7f8c8d' };
             const catColors = { '교육': '#e74c3c', '캠페인': '#e67e22', '회의': '#3498db', '평가': '#9b59b6', '기타': '#7f8c8d' };
@@ -3961,7 +3997,7 @@
             selectedGalleries.forEach(g => {
                 allCards.push({
                     type: 'gallery', title: esc(g.title),
-                    badge: '갤러리',
+                    badge: esc(labels.gallery || '갤러리'),
                     badgeColor: '#27ae60',
                     date: g.taken_date || (g.created_at ? g.created_at.split('T')[0] : ''),
                     image: galleryThumbUrls[g.id] || null,
@@ -4355,6 +4391,18 @@
             const [newsletterStep, setNewsletterStep] = useState(1); // 1: 내용선택, 2: 템플릿선택, 3: 배치/편집
             const [orderedSections, setOrderedSections] = useState([]); // [{ type, label, items }]
             const [itemLinks, setItemLinks] = useState({}); // { [itemId]: 'https://...' }
+            // Newsletter save/load (bf.newsletters)
+            const [savedNewsletters, setSavedNewsletters] = useState([]); // saved drafts list (light columns only)
+            const [currentNewsletterId, setCurrentNewsletterId] = useState(null); // editing draft id
+            const [nlSaving, setNlSaving] = useState(false);
+            const [nlListOpen, setNlListOpen] = useState(false); // saved list collapsible
+            // Newsletter design customization (null = template default)
+            const [newsletterCustom, setNewsletterCustom] = useState({ accent: null, accent2: null, font: null });
+            // Newsletter inline editing
+            const [editedItems, setEditedItems] = useState({}); // { [itemId]: { title } } — title override (content reuses rewrittenContents)
+            const [editingItemId, setEditingItemId] = useState(null); // item id with open edit panel
+            const [editingSectionIdx, setEditingSectionIdx] = useState(null); // section index with label being edited
+            const [nlPreviewMode, setNlPreviewMode] = useState('desktop'); // 'desktop' | 'mobile'
 
             // School management state
             const [schoolsData, setSchoolsData] = useState([]);
@@ -4400,9 +4448,10 @@
                         const { data: atts } = await supabase.from('attachments')
                             .select('file_path, file_type').eq('board_id', bid).order('created_at', { ascending: true });
                         const imgs = (atts || []).filter(a => a.file_type?.startsWith('image/'));
-                        newUrls[bid] = imgs.map(img => { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); return u?.publicUrl || null; }).filter(Boolean);
+                        const urls = imgs.map(img => { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); return u?.publicUrl || null; }).filter(Boolean);
+                        if (urls.length > 0) newUrls[bid] = urls; // keep snapshot URLs when source board/attachments were deleted
                     }
-                    setBoardImageUrls(newUrls);
+                    setBoardImageUrls(prev => ({ ...prev, ...newUrls }));
                 };
                 loadImages();
             }, [selectedBoardKey]);
@@ -4421,10 +4470,36 @@
                         const img = (atts || []).find(a => a.file_type?.startsWith('image/'));
                         if (img) { const { data: u } = supabase.storage.from('attachments').getPublicUrl(img.file_path); urls[gid] = u?.publicUrl || null; }
                     }
-                    setGalleryThumbUrls(urls);
+                    setGalleryThumbUrls(prev => ({ ...prev, ...urls })); // merge: keep snapshot URLs of removed sources
                 };
                 loadGalleryThumbs();
             }, [selectedGalleryKey]);
+
+            // Saved newsletters: load list when visiting newsletter page / switching project
+            const loadSavedNewsletters = async () => {
+                let query = supabase.from('newsletters')
+                    .select('id, title, issue_number, template, status, updated_at')
+                    .order('updated_at', { ascending: false });
+                if (activeProject?.id) query = query.or(`project_id.eq.${activeProject.id},project_id.is.null`);
+                const { data: rows, error } = await query;
+                if (!error) setSavedNewsletters(rows || []);
+            };
+            useEffect(() => {
+                if (currentPage === 'newsletter') loadSavedNewsletters();
+            }, [currentPage, activeProject?.id]);
+
+            // Reset newsletter editing state on project switch (list is re-fetched above)
+            const nlProjectRef = useRef(activeProject?.id);
+            useEffect(() => {
+                if (nlProjectRef.current === (activeProject?.id || null)) return;
+                nlProjectRef.current = activeProject?.id || null;
+                setCurrentNewsletterId(null);
+                setNewsletterCustom({ accent: null, accent2: null, font: null });
+                setEditedItems({}); setEditingItemId(null); setEditingSectionIdx(null);
+                setOrderedSections([]); setItemLinks({}); setRewrittenContents({});
+                setSelectedScheduleIds(new Set()); setSelectedBoardIds(new Set()); setSelectedGalleryNewsletterIds(new Set());
+                setNewsletterStep(1);
+            }, [activeProject?.id]);
 
             // AI rewrite handler
             const handleRewriteBoard = async (boardId, originalText) => {
@@ -11963,9 +12038,26 @@
                     if (gals.length > 0) secs.push({ type: 'gallery', label: '갤러리', items: gals });
                     return secs;
                 };
+                // Merge fresh selection into existing ordered sections (preserves user order/labels/edits)
+                const syncSections = () => {
+                    const fresh = buildSections();
+                    setOrderedSections(prev => {
+                        if (prev.length === 0) return fresh;
+                        const merged = prev.map(sec => {
+                            const f = fresh.find(x => x.type === sec.type);
+                            if (!f) return null; // all items deselected → drop section
+                            const freshIds = new Set(f.items.map(i => i.id));
+                            const kept = sec.items.filter(i => freshIds.has(i.id));
+                            const keptIds = new Set(kept.map(i => i.id));
+                            return { ...sec, items: [...kept, ...f.items.filter(i => !keptIds.has(i.id))] };
+                        }).filter(Boolean);
+                        fresh.forEach(f => { if (!merged.some(s => s.type === f.type)) merged.push(f); });
+                        return merged;
+                    });
+                };
                 const goToStep = (step) => {
                     if (step === 2 && totalSelected === 0) { alert('콘텐츠를 1개 이상 선택해주세요.'); return; }
-                    if (step === 3) setOrderedSections(buildSections());
+                    if (step === 3) syncSections();
                     setNewsletterStep(step);
                 };
                 const moveSection = (index, direction) => {
@@ -11982,7 +12074,124 @@
                 };
 
                 const nlAssets = { boardImageUrls, rewrittenContents, galleryThumbUrls, itemLinks };
-                const buildHtml = () => generateNewsletterHTML(newsletterTemplate, newsletterConfig, orderedSections, effectiveOrgName, nlAssets);
+
+                // Apply inline title edits onto a sections copy (originals untouched)
+                const applyItemEdits = (sections) => sections.map(sec => ({
+                    ...sec,
+                    items: sec.items.map(it => editedItems[it.id]?.title !== undefined
+                        ? { ...it, title: editedItems[it.id].title, name: editedItems[it.id].title }
+                        : it),
+                }));
+                // Post-process: swap template accent colors / font with user customization
+                const applyCustomDesign = (html) => {
+                    const theme = NL_THEMES[newsletterTemplate] || NL_THEMES.modern;
+                    const c = newsletterCustom;
+                    if (c.accent && c.accent !== theme.accent) html = html.split(theme.accent).join(c.accent);
+                    if (c.accent2 && c.accent2 !== theme.accent2) html = html.split(theme.accent2).join(c.accent2);
+                    if (c.font) {
+                        const stack = (NL_FONTS.find(f => f.id === c.font) || {}).stack;
+                        if (stack) { html = html.split(theme.font).join(stack); html = html.split(NL_EMAIL_FONT).join(stack); }
+                    }
+                    return html;
+                };
+                const buildHtml = () => applyCustomDesign(
+                    generateNewsletterHTML(newsletterTemplate, newsletterConfig, applyItemEdits(orderedSections), effectiveOrgName, nlAssets)
+                );
+
+                // ── Save / Load / Duplicate / Delete (bf.newsletters) ──
+                const serializeNewsletter = () => ({
+                    project_id: activeProject?.id || null,
+                    title: newsletterConfig.title,
+                    issue_number: newsletterConfig.issueNumber,
+                    template: newsletterTemplate,
+                    config: { ...newsletterConfig, custom: newsletterCustom },
+                    sections: orderedSections.length > 0 ? orderedSections : buildSections(),
+                    assets: { boardImageUrls, rewrittenContents, galleryThumbUrls, itemLinks, editedItems },
+                    selection: {
+                        scheduleIds: [...selectedScheduleIds],
+                        boardIds: [...selectedBoardIds],
+                        galleryIds: [...selectedGalleryNewsletterIds],
+                    },
+                    updated_at: new Date().toISOString(),
+                });
+                const handleSaveNewsletter = async () => {
+                    if (totalSelected === 0 && orderedSections.length === 0) { alert('저장할 콘텐츠가 없습니다.'); return; }
+                    setNlSaving(true);
+                    try {
+                        const payload = serializeNewsletter();
+                        if (currentNewsletterId) {
+                            const { error } = await supabase.from('newsletters').update(payload).eq('id', currentNewsletterId);
+                            if (error) throw error;
+                        } else {
+                            const { data: row, error } = await supabase.from('newsletters').insert(payload).select('id').single();
+                            if (error) throw error;
+                            setCurrentNewsletterId(row.id);
+                        }
+                        await loadSavedNewsletters();
+                        alert('임시저장되었습니다.');
+                    } catch (e) { alert('저장 실패: ' + (e.message || e)); }
+                    finally { setNlSaving(false); }
+                };
+                const restoreNewsletterState = (n) => {
+                    const cfg = n.config || {};
+                    const { custom, ...rest } = cfg;
+                    setNewsletterConfig({ title: '', issueNumber: '', publishDate: new Date().toISOString().split('T')[0], greeting: '', closing: '', dateFrom: '', dateTo: '', scheduleCategory: 'all', boardCategory: 'all', ...rest });
+                    setNewsletterCustom(custom || { accent: null, accent2: null, font: null });
+                    setNewsletterTemplate(n.template || 'modern');
+                    setOrderedSections(Array.isArray(n.sections) ? n.sections : []);
+                    const a = n.assets || {};
+                    setBoardImageUrls(a.boardImageUrls || {});
+                    setRewrittenContents(a.rewrittenContents || {});
+                    setGalleryThumbUrls(a.galleryThumbUrls || {});
+                    setItemLinks(a.itemLinks || {});
+                    setEditedItems(a.editedItems || {});
+                    const sel = n.selection || {};
+                    setSelectedScheduleIds(new Set(sel.scheduleIds || []));
+                    setSelectedBoardIds(new Set(sel.boardIds || []));
+                    setSelectedGalleryNewsletterIds(new Set(sel.galleryIds || []));
+                    setEditingItemId(null); setEditingSectionIdx(null);
+                };
+                const handleLoadNewsletter = async (id) => {
+                    const { data: n, error } = await supabase.from('newsletters').select('*').eq('id', id).single();
+                    if (error || !n) { alert('불러오기 실패: ' + (error?.message || '')); return; }
+                    restoreNewsletterState(n);
+                    setCurrentNewsletterId(n.id);
+                    setNewsletterStep(3);
+                };
+                const handleDuplicateNewsletter = async (id) => {
+                    const { data: n, error } = await supabase.from('newsletters').select('*').eq('id', id).single();
+                    if (error || !n) { alert('복제 실패: ' + (error?.message || '')); return; }
+                    const today = new Date().toISOString().split('T')[0];
+                    const copy = {
+                        project_id: n.project_id, title: n.title, issue_number: '',
+                        template: n.template,
+                        config: { ...(n.config || {}), issueNumber: '', publishDate: today },
+                        sections: n.sections, assets: n.assets, selection: n.selection,
+                        status: 'draft',
+                    };
+                    const { data: row, error: e2 } = await supabase.from('newsletters').insert(copy).select('*').single();
+                    if (e2 || !row) { alert('복제 실패: ' + (e2?.message || '')); return; }
+                    restoreNewsletterState(row);
+                    setCurrentNewsletterId(row.id);
+                    setNewsletterStep(3);
+                    await loadSavedNewsletters();
+                };
+                const handleDeleteNewsletter = async (id) => {
+                    if (!confirm('이 뉴스레터를 삭제할까요?')) return;
+                    const { error } = await supabase.from('newsletters').delete().eq('id', id);
+                    if (error) { alert('삭제 실패: ' + error.message); return; }
+                    if (currentNewsletterId === id) setCurrentNewsletterId(null);
+                    await loadSavedNewsletters();
+                };
+                // After print/copy/download: offer to mark saved draft as published
+                const offerPublish = async () => {
+                    if (!currentNewsletterId) return;
+                    const cur = savedNewsletters.find(n => n.id === currentNewsletterId);
+                    if (!cur || cur.status !== 'draft') return;
+                    if (!confirm('이 뉴스레터를 발행 완료로 표시할까요?')) return;
+                    const { error } = await supabase.from('newsletters').update({ status: 'published', updated_at: new Date().toISOString() }).eq('id', currentNewsletterId);
+                    if (!error) await loadSavedNewsletters();
+                };
 
                 const handlePrintOrdered = () => {
                     if (orderedSections.length === 0) { alert('콘텐츠가 없습니다.'); return; }
@@ -11990,6 +12199,18 @@
                     const pw = window.open('', '_blank', 'width=900,height=700');
                     if (!pw) { alert('팝업이 차단되었습니다.'); return; }
                     pw.document.write(html); pw.document.close();
+                    offerPublish();
+                };
+                const handleDownloadOrdered = () => {
+                    if (orderedSections.length === 0) { alert('콘텐츠가 없습니다.'); return; }
+                    const blob = new Blob([buildHtml()], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `뉴스레터_${newsletterConfig.issueNumber || newsletterConfig.publishDate || 'draft'}.html`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    offerPublish();
                 };
                 const handleCopyOrdered = async () => {
                     if (orderedSections.length === 0) { alert('콘텐츠가 없습니다.'); return; }
@@ -11999,6 +12220,7 @@
                     try {
                         await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([cleanHtml], { type: 'text/html' }), 'text/plain': new Blob([cleanHtml.replace(/<[^>]*>/g, '')], { type: 'text/plain' }) })]);
                         alert('뉴스레터가 클립보드에 복사되었습니다!\n카카오톡, 이메일 등에 Ctrl+V로 붙여넣기하세요.');
+                        offerPublish();
                     } catch(e) { alert('복사에 실패했습니다.'); }
                 };
 
@@ -12010,6 +12232,7 @@
                     { id: 'classic', name: '클래식 / 공식문서', desc: '표 형식 일정, 번호 기사, 기관용', color: '#1e3a5f', preview: ['═══════════════', '■ 주요 소식', '───────────', '1. 기사 제목', '  본문 내용', '', '■ 활동 일정 (표)'] },
                     { id: 'email', name: '이메일 뉴스레터', desc: 'Gmail·Outlook 호환 테이블 레이아웃', color: '#27ae60', preview: ['┌─ e-NEWSLETTER ─┐', '│                │', '│  ORG NAME      │', '│  뉴스레터 제목  │', '│                │', '├─ 주요 소식 ────┤', '│ 제목  본문...   │'] },
                     { id: 'grid', name: '그리드 / 매거진블로그', desc: '3단 카드 그리드, 피처드 센터', color: '#d35400', preview: ['┌──┐┌────┐┌──┐', '│  ││    ││  │', '│  ││ ★  ││  │', '│  ││feat││  │', '├──┤│    │├──┤', '│  ││    ││  │', '└──┘└────┘└──┘'] },
+                    { id: 'bold', name: '볼드 / 포스터', desc: '다크 배경, 카드뉴스·SNS용', color: '#7c3aed', preview: ['▓▓ NEWSLETTER ▓▓', '▓ 큰 제목       ▓', '▓▓▓▓▓▓▓▓▓▓▓▓▓▓', '● 주요 소식', '┃ 카드 이미지 ┃', '┃ 제목 + 본문 ┃', '▓▓▓▓▓▓▓▓▓▓▓▓▓▓'] },
                 ];
 
 
@@ -12039,6 +12262,32 @@
                         {/* Step 1: 내용 선택 */}
                         {newsletterStep === 1 && (
                             <div>
+                                {savedNewsletters.length > 0 && (
+                                    <div className="card" style={{ marginBottom: 16 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} onClick={() => setNlListOpen(o => !o)}>
+                                            <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>📂 저장된 뉴스레터 ({savedNewsletters.length})</h3>
+                                            <span style={{ fontSize: 12, color: '#6b7280' }}>{nlListOpen ? '▲ 접기' : '▼ 펼치기'}</span>
+                                        </div>
+                                        {nlListOpen && (
+                                            <div style={{ marginTop: 12 }}>
+                                                {savedNewsletters.map(n => (
+                                                    <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', background: currentNewsletterId === n.id ? '#f0fdfa' : 'transparent', borderRadius: 6 }}>
+                                                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {n.issue_number ? n.issue_number + ' · ' : ''}{n.title || '(제목 없음)'}
+                                                        </span>
+                                                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: n.status === 'published' ? '#dcfce7' : '#fef3c7', color: n.status === 'published' ? '#16a34a' : '#d97706' }}>
+                                                            {n.status === 'published' ? '발행됨' : '임시저장'}
+                                                        </span>
+                                                        <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>{(n.updated_at || '').slice(0, 10)}</span>
+                                                        <button onClick={() => handleLoadNewsletter(n.id)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: '#0d9488', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>불러오기</button>
+                                                        <button onClick={() => handleDuplicateNewsletter(n.id)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer' }}>복제</button>
+                                                        <button onClick={() => handleDeleteNewsletter(n.id)} style={{ padding: '4px 8px', fontSize: 11, background: '#fff', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 5, cursor: 'pointer' }}>삭제</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="card" style={{ marginBottom: 16 }}>
                                     <h3 style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>뉴스레터 정보</h3>
                                     <div className="schedule-form-group">
@@ -12136,7 +12385,7 @@
                             <div>
                                 <div className="card" style={{ marginBottom: 20 }}>
                                     <h3 style={{ marginBottom: 16, fontSize: 16, fontWeight: 600 }}>🎨 템플릿을 선택하세요</h3>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
                                         {TEMPLATES.map(t => (
                                             <div key={t.id} onClick={() => setNewsletterTemplate(t.id)} style={{ padding: 14, borderRadius: 12, cursor: 'pointer', transition: 'all .2s', border: newsletterTemplate === t.id ? `2px solid ${t.color}` : '2px solid #e5e7eb', background: newsletterTemplate === t.id ? `${t.color}08` : '#fff', boxShadow: newsletterTemplate === t.id ? `0 2px 8px ${t.color}20` : 'none' }}>
                                                 <div style={{ background: '#f8f9fa', borderRadius: 8, padding: '10px 12px', marginBottom: 10, fontFamily: 'monospace', fontSize: 9, lineHeight: 1.5, color: '#6b7280', whiteSpace: 'pre', overflow: 'hidden', height: 100 }}>{t.preview.join('\n')}</div>
@@ -12150,9 +12399,50 @@
                                     </div>
                                     {(() => { const bc = selectedBoardIds.size, sc = selectedScheduleIds.size, gc = selectedGalleryNewsletterIds.size; let msg = null; if (bc >= 3 || gc >= 2) msg = '게시글/갤러리가 많습니다 — "매거진" 또는 "그리드" 추천'; else if (sc >= 3 && bc <= 1) msg = '일정 중심 콘텐츠 — "클래식" 추천'; else if (bc <= 1 && sc <= 2) msg = '간결한 콘텐츠 — "모던" 추천'; return msg ? <div style={{ marginTop: 12, padding: '10px 14px', background: '#f0fdfa', borderRadius: 8, fontSize: 12, color: '#0d9488' }}>💡 {msg}</div> : null; })()}
                                 </div>
+                                <div className="card" style={{ marginBottom: 20 }}>
+                                    <h3 style={{ marginBottom: 14, fontSize: 15, fontWeight: 600 }}>🎨 디자인 커스터마이징 <span style={{ fontSize: 11, fontWeight: 400, color: '#9ca3af' }}>(선택 — 미설정 시 템플릿 기본값)</span></h3>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>주 색상</label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <input type="color" value={newsletterCustom.accent || (NL_THEMES[newsletterTemplate] || NL_THEMES.modern).accent}
+                                                    onChange={e => setNewsletterCustom(p => ({ ...p, accent: e.target.value }))}
+                                                    style={{ width: 36, height: 28, padding: 0, border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer' }} />
+                                                {['#0d9488', '#1e3a5f', '#e85d3a', '#7c3aed', '#dc2626', '#16a34a'].map(c => (
+                                                    <button key={c} onClick={() => setNewsletterCustom(p => ({ ...p, accent: c }))} title={c}
+                                                        style={{ width: 22, height: 22, borderRadius: '50%', background: c, border: newsletterCustom.accent === c ? '2px solid #111' : '2px solid #fff', boxShadow: '0 0 0 1px #d1d5db', cursor: 'pointer' }} />
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>보조 색상</label>
+                                            <input type="color" value={newsletterCustom.accent2 || (NL_THEMES[newsletterTemplate] || NL_THEMES.modern).accent2}
+                                                onChange={e => setNewsletterCustom(p => ({ ...p, accent2: e.target.value }))}
+                                                style={{ width: 36, height: 28, padding: 0, border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>폰트</label>
+                                            <div style={{ display: 'flex', gap: 12 }}>
+                                                {NL_FONTS.map(f => (
+                                                    <label key={String(f.id)} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                                                        <input type="radio" name="nlFont" checked={newsletterCustom.font === f.id} onChange={() => setNewsletterCustom(p => ({ ...p, font: f.id }))} />
+                                                        {f.name}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {(newsletterCustom.accent || newsletterCustom.accent2 || newsletterCustom.font) && (
+                                            <button onClick={() => setNewsletterCustom({ accent: null, accent2: null, font: null })}
+                                                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', alignSelf: 'flex-end' }}>기본값 복원</button>
+                                        )}
+                                    </div>
+                                </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
                                     <button onClick={() => goToStep(1)} style={{ padding: '10px 24px', background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>← 내용 선택</button>
-                                    <button onClick={() => goToStep(3)} style={{ padding: '10px 24px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>다음: 배치 및 편집 →</button>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button onClick={handleSaveNewsletter} disabled={nlSaving} style={{ padding: '10px 20px', background: '#fff', color: '#0d9488', border: '1px solid #0d9488', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: nlSaving ? 0.6 : 1 }}>{nlSaving ? '저장 중…' : '💾 임시저장'}</button>
+                                        <button onClick={() => goToStep(3)} style={{ padding: '10px 24px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>다음: 배치 및 편집 →</button>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -12176,7 +12466,15 @@
                                                         <div key={sec.type} style={{ marginBottom: 10, border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: sc.bg }}>
                                                                 <span>{sc.icon}</span>
-                                                                <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: sc.color }}>{sec.label} ({sec.items.length})</span>
+                                                                {editingSectionIdx === si ? (
+                                                                    <input type="text" autoFocus value={sec.label}
+                                                                        onChange={e => setOrderedSections(prev => prev.map((s, i) => i === si ? { ...s, label: e.target.value } : s))}
+                                                                        onBlur={() => setEditingSectionIdx(null)}
+                                                                        onKeyDown={e => { if (e.key === 'Enter') setEditingSectionIdx(null); }}
+                                                                        style={{ flex: 1, fontSize: 13, fontWeight: 700, color: sc.color, padding: '2px 6px', border: '1px solid ' + sc.color + '60', borderRadius: 4, background: '#fff' }} />
+                                                                ) : (
+                                                                    <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: sc.color, cursor: 'text' }} title="클릭하여 섹션 제목 수정" onClick={() => setEditingSectionIdx(si)}>{sec.label} ({sec.items.length}) <span style={{ fontSize: 10, opacity: 0.5 }}>✏️</span></span>
+                                                                )}
                                                                 <div style={{ display: 'flex', gap: 3 }}>
                                                                     <button onClick={() => moveSection(si, -1)} disabled={si === 0}
                                                                         style={{ width: 24, height: 24, border: '1px solid '+sc.color+'40', borderRadius: 5, background: '#fff', cursor: si === 0 ? 'default' : 'pointer', fontSize: 10, opacity: si === 0 ? 0.3 : 1 }}>↑</button>
@@ -12188,7 +12486,9 @@
                                                                 {sec.items.map((item, ii) => (
                                                                     <div key={item.id} style={{ padding: '6px 8px', borderBottom: ii < sec.items.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                                            <span style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title || item.name || ''}</span>
+                                                                            <span style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editedItems[item.id]?.title !== undefined ? editedItems[item.id].title : (item.title || item.name || '')}</span>
+                                                                            <button onClick={() => setEditingItemId(prev => prev === item.id ? null : item.id)} title="제목/본문 수정"
+                                                                                style={{ width: 22, height: 22, border: (editedItems[item.id] || rewrittenContents[item.id] !== undefined) ? '1px solid #d97706' : '1px solid #e5e7eb', borderRadius: 4, background: editingItemId === item.id ? '#fef3c7' : ((editedItems[item.id] || rewrittenContents[item.id] !== undefined) ? '#fffbeb' : '#fafafa'), cursor: 'pointer', fontSize: 10, color: (editedItems[item.id] || rewrittenContents[item.id] !== undefined) ? '#d97706' : '#9ca3af' }}>✏️</button>
                                                                             <button onClick={() => setItemLinks(prev => {
                                                                                 const next = {...prev};
                                                                                 if (next[item.id] !== undefined) { delete next[item.id]; } else { next[item.id] = next[item.id] || ''; }
@@ -12209,6 +12509,31 @@
                                                                                 onChange={e => setItemLinks(prev => ({...prev, [item.id]: e.target.value}))}
                                                                                 style={{ width: '100%', marginTop: 4, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 11, boxSizing: 'border-box', color: '#2563eb' }} />
                                                                         )}
+                                                                        {editingItemId === item.id && (
+                                                                            <div style={{ marginTop: 6, padding: 8, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+                                                                                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#92400e', marginBottom: 2 }}>제목</label>
+                                                                                <input type="text" value={editedItems[item.id]?.title !== undefined ? editedItems[item.id].title : (item.title || item.name || '')}
+                                                                                    onChange={e => setEditedItems(prev => ({ ...prev, [item.id]: { ...prev[item.id], title: e.target.value } }))}
+                                                                                    style={{ width: '100%', padding: '4px 8px', border: '1px solid #fbbf24', borderRadius: 4, fontSize: 12, boxSizing: 'border-box', marginBottom: 6 }} />
+                                                                                {sec.type === 'boards' && (
+                                                                                    <React.Fragment>
+                                                                                        <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#92400e', marginBottom: 2 }}>본문 <span style={{ fontWeight: 400 }}>(AI 재작성 결과에 이어서 수정 가능)</span></label>
+                                                                                        <textarea rows={4} value={rewrittenContents[item.id] !== undefined ? rewrittenContents[item.id] : stripHtml(item.content)}
+                                                                                            onChange={e => setRewrittenContents(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                                                                            style={{ width: '100%', resize: 'vertical', padding: '4px 8px', border: '1px solid #fbbf24', borderRadius: 4, fontSize: 12, boxSizing: 'border-box', marginBottom: 6 }} />
+                                                                                    </React.Fragment>
+                                                                                )}
+                                                                                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                                                                    {(editedItems[item.id] || rewrittenContents[item.id] !== undefined) && (
+                                                                                        <button onClick={() => {
+                                                                                            setEditedItems(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+                                                                                            setRewrittenContents(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+                                                                                        }} style={{ padding: '3px 10px', fontSize: 11, background: '#fff', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 4, cursor: 'pointer' }}>원본으로 되돌리기</button>
+                                                                                    )}
+                                                                                    <button onClick={() => setEditingItemId(null)} style={{ padding: '3px 10px', fontSize: 11, fontWeight: 600, background: '#d97706', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>완료</button>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -12224,15 +12549,34 @@
                                     </div>
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                         <button onClick={() => goToStep(2)} style={{ padding: '10px 20px', background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>← 템플릿 변경</button>
+                                        <button onClick={handleSaveNewsletter} disabled={nlSaving} style={{ padding: '10px 20px', background: '#fff', color: '#0d9488', border: '1px solid #0d9488', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: nlSaving ? 0.6 : 1 }}>{nlSaving ? '저장 중…' : '💾 임시저장'}</button>
                                         <button onClick={handleCopyOrdered} style={{ padding: '10px 20px', background: '#1e1e2e', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>📋 SNS 복사</button>
+                                        <button onClick={handleDownloadOrdered} style={{ padding: '10px 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>⬇️ HTML 다운로드</button>
                                         <button onClick={handlePrintOrdered} style={{ padding: '10px 20px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>🖨️ 인쇄 / 새 창</button>
                                     </div>
                                 </div>
                                 <div style={{ position: 'sticky', top: 20 }}>
                                     <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#f9fafb' }}>
-                                        <div style={{ padding: '8px 12px', background: '#f3f4f6', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>미리보기 — {TEMPLATES.find(t => t.id === newsletterTemplate)?.name || ''}</div>
-                                        <div style={{ position: 'relative', overflow: 'hidden', height: 700 }}>
-                                            {previewHtml ? <iframe srcDoc={previewHtml} style={{ width: '200%', height: '200%', transform: 'scale(0.5)', transformOrigin: 'top left', border: 'none', pointerEvents: 'none' }} sandbox="allow-same-origin" title="뉴스레터 미리보기" /> : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: 14 }}>콘텐츠를 선택하면 미리보기가 표시됩니다</div>}
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f3f4f6' }}>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>미리보기 — {TEMPLATES.find(t => t.id === newsletterTemplate)?.name || ''}</span>
+                                            <div style={{ display: 'flex', gap: 4 }}>
+                                                {[{ id: 'desktop', label: '🖥️ 데스크톱' }, { id: 'mobile', label: '📱 모바일' }].map(m => (
+                                                    <button key={m.id} onClick={() => setNlPreviewMode(m.id)}
+                                                        style={{ padding: '3px 10px', fontSize: 11, fontWeight: 600, border: nlPreviewMode === m.id ? '1px solid #0d9488' : '1px solid #d1d5db', borderRadius: 5, background: nlPreviewMode === m.id ? '#f0fdfa' : '#fff', color: nlPreviewMode === m.id ? '#0d9488' : '#6b7280', cursor: 'pointer' }}>{m.label}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div style={{ position: 'relative', overflowY: 'auto', overflowX: 'hidden', height: 700, background: '#fff' }}>
+                                            {previewHtml ? (
+                                                <div style={{ overflow: 'hidden' }}>
+                                                    <iframe key={nlPreviewMode} srcDoc={previewHtml}
+                                                        onLoad={e => { try { const d = e.target.contentDocument; const h = Math.max(d.body.scrollHeight, d.documentElement.scrollHeight) + 40; e.target.style.height = h + 'px'; e.target.parentElement.style.height = (nlPreviewMode === 'desktop' ? Math.ceil(h / 2) : h) + 'px'; } catch (err) {} }}
+                                                        style={nlPreviewMode === 'desktop'
+                                                            ? { width: '200%', height: 1400, transform: 'scale(0.5)', transformOrigin: 'top left', border: 'none', pointerEvents: 'none', display: 'block' }
+                                                            : { width: 375, height: 1400, border: 'none', pointerEvents: 'none', display: 'block', margin: '0 auto' }}
+                                                        sandbox="allow-same-origin" title="뉴스레터 미리보기" />
+                                                </div>
+                                            ) : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: 14 }}>콘텐츠를 선택하면 미리보기가 표시됩니다</div>}
                                         </div>
                                     </div>
                                 </div>
