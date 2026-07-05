@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-07-05T03:01:29.463Z",
+  "lastUpdated": "2026-07-05T03:30:00.000Z",
   "activeFeatures": [
     "뉴스레터-생성모듈-업데이트",
     "뉴스레터-리뉴얼",
@@ -153,7 +153,7 @@
   "session": {
     "startedAt": "2026-03-06T02:05:39.704Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-07-05T03:01:29.463Z"
+    "lastActivity": "2026-07-05T03:30:00.000Z"
   },
   "history": [
     {
