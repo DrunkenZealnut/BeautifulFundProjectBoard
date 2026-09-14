@@ -1,13 +1,15 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-07-06T01:08:44.000Z",
+  "lastUpdated": "2026-09-14T13:43:44.000Z",
   "activeFeatures": [
     "뉴스레터-생성모듈-업데이트",
     "뉴스레터-리뉴얼",
     "학교시간표조회",
     "학교관리페이지",
     "메인페이지스타일변경",
-    "api"
+    "api",
+    "scratchpad",
+    "tools"
   ],
   "primaryFeature": "뉴스레터-생성모듈-업데이트",
   "features": {
@@ -143,6 +145,32 @@
         "lastUpdated": "2026-03-21T06:39:53.771Z"
       },
       "lastFile": "/Users/zealnutkim/Documents/개발/BeautifulFundProjectBoard/js/app.jsx"
+    },
+    "scratchpad": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-07-06T06:21:33.784Z",
+        "lastUpdated": "2026-07-06T06:21:33.784Z"
+      },
+      "lastFile": "/private/tmp/claude-501/-Users-zealnutkim-DEV-BeautifulFundProjectBoard-fresh/e37a11bc-da88-4a8d-9fe5-282e078582a2/scratchpad/nl_test.js"
+    },
+    "tools": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-09-14T08:58:00.492Z",
+        "lastUpdated": "2026-09-14T11:14:28.002Z"
+      },
+      "lastFile": "/Users/zealnutkim/DEV/BeautifulFundProjectBoard-fresh/content/tools/md2hwpx.py"
     }
   },
   "pipeline": {
@@ -153,7 +181,7 @@
   "session": {
     "startedAt": "2026-03-06T02:05:39.704Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-07-05T03:30:00.000Z"
+    "lastActivity": "2026-09-14T11:14:28.002Z"
   },
   "history": [
     {
@@ -300,6 +328,45 @@
       "feature": "figma-뉴스레터-디자인시스템",
       "phase": "archived",
       "action": "archived to docs/archive/2026-07/figma-뉴스레터-디자인시스템/"
+    },
+    {
+      "timestamp": "2026-07-06T06:21:33.784Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-09-14T08:58:00.492Z",
+      "feature": "tools",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-09-14T09:00:42.882Z",
+      "feature": "tools",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-09-14T09:00:46.543Z",
+      "feature": "tools",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-09-14T11:14:28.002Z",
+      "feature": "tools",
+      "phase": "do",
+      "action": "updated"
+    }
+  ],
+  "archiveHistory": [
+    {
+      "feature": "홍보콘텐츠-생성시스템",
+      "archivedAt": "2026-09-14T13:43:44.000Z",
+      "archivedTo": "docs/archive/2026-09/홍보콘텐츠-생성시스템/",
+      "matchRate": 95.6,
+      "iterationCount": 1
     }
   ]
 }

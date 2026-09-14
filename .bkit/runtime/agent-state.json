@@ -2,12 +2,12 @@
   "version": "1.0",
   "enabled": false,
   "teamName": "",
-  "feature": "뉴스레터-생성모듈-업데이트",
-  "pdcaPhase": "do",
+  "feature": "홍보콘텐츠-생성시스템",
+  "pdcaPhase": "check",
   "orchestrationPattern": "leader",
   "ctoAgent": "opus",
-  "startedAt": "2026-07-05T02:54:43.163Z",
-  "lastUpdated": "2026-07-05T04:20:47.231Z",
+  "startedAt": "2026-09-14T13:40:09.343Z",
+  "lastUpdated": "2026-09-14T13:43:05.552Z",
   "teammates": [],
   "progress": {
     "totalTasks": 0,
@@ -16,13 +16,6 @@
     "failedTasks": 0,
     "pendingTasks": 0
   },
-  "recentMessages": [
-    {
-      "from": "system",
-      "to": "all",
-      "content": "Phase check → report (auto-advanced)",
-      "timestamp": "2026-07-05T03:01:29.464Z"
-    }
-  ],
-  "sessionId": "bb0340b7-c3e8-42e6-adb9-ef2830454660"
+  "recentMessages": [],
+  "sessionId": "33a8887b-82a3-4c24-9786-e70dd841badb"
 }

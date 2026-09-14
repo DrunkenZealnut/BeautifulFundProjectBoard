@@ -5,14 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 아름다운재단 2026 공익단체 인큐베이팅 지원사업 관리시스템 — 청년노동자인권센터용.
-총 사업비 7천만원 예산 집행 관리, 일정, 갤러리, 게시판, 참여자 관리, 학교관리 통합 웹앱.
+총 사업비 7천만원 예산 집행 관리, 일정, 갤러리, 게시판, 뉴스레터, 학교관리 통합 웹앱.
 **단일 사용자** (대표 1인, 직원 없음). 아름다운재단이 대시보드에 직접 접속하여 집행 현황 확인.
 
 ## Tech Stack
 
 - **Frontend**: React 18 (no-build, CDN via unpkg/jsdelivr) + Babel standalone transpiler
-- **Backend**: Supabase (PostgreSQL + JWT Auth + RLS, `bf` schema)
-- **Serverless**: Vercel Python functions (`api/`) — HWPX 생성, NEIS 프록시, AI 재작성, 관리 API
+- **Backend**: Supabase (PostgreSQL + RLS, `bf` schema) — anon key hardcoded in `index.html`
+- **Serverless**: Vercel Python functions (`api/`) — HWPX 생성/서식채우기, NEIS 프록시, AI 재작성, 관리 API
 - **CDN Libraries**: Chart.js, DOMPurify, JSZip, SheetJS, html2pdf.js, Google APIs (Calendar + GSI)
 - **Language**: Korean-first UI, English code comments
 
@@ -25,6 +25,14 @@ python -m http.server 8000
 ```
 
 Open `http://localhost:8000`. No package.json, no npm install, no linter, no test runner.
+
+`api/` Python functions are **not** served by `http.server` — they only run on Vercel (`vercel dev` or a preview deployment). Required env vars (set in Vercel project settings):
+
+| Var | Used by |
+|-----|---------|
+| `ANTHROPIC_API_KEY` | `api/rewrite.py` |
+| `NEIS_API_KEY` | `api/neis.py` |
+| `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | `api/supabase-admin.py` |
 
 ## Database Setup
 
@@ -40,54 +48,58 @@ Note: migrations before the bf-schema switch (commit 014b8bb) target `public.`; 
 
 ### Single-file SPA
 
-The entire app lives in `index.html` (~14,200 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
+The entire app lives in `index.html` (~14,600 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
 
 Top to bottom, `index.html` is:
 
 1. **CDN imports** (React, ReactDOM, Babel, Supabase, Chart.js, DOMPurify, JSZip, SheetJS, Google APIs)
-2. **Inline `<style>` block** (~1300 lines) — includes `@media print` for dashboard printing
-3. **Single `<script type="text/babel">` block** containing:
-   - Supabase client init (~line 2381)
+2. **Inline `<style>` block** (~2300 lines) — includes `@media print` for dashboard printing
+3. **Single `<script type="text/babel">` block** (from ~line 2369) containing:
+   - Supabase client init with `db: { schema: 'bf' }` (~line 2381) — so `.from('table')` needs no schema prefix
    - `CONFIG` constant — budget, tax rates, periods (~line 2386)
    - `EXECUTION_STATUS` — approval workflow states (~line 2400)
    - HWPX fill builders (`buildSalaryFillDocs`/`buildReceiptFillDocs`/`buildMinutesFillDocs`) (~line 2766)
    - `BUDGET_DATA` — budget hierarchy structure (~line 3059)
    - `DOCUMENT_RULES` — evidence requirements per expense type (~line 3195)
    - `downloadHwpxFill` — HWPX fill download dispatcher (~line 3408)
-   - Newsletter template system (`NL_THEMES` ~line 3465, `generateNewsletterHTML` ~line 3653)
-   - `LoginPage` — authentication component (~line 4122)
-   - `ProjectManagementSystem` — root component (~line 4231, ~10,000 lines)
-4. **Service worker** registration and offline handlers
+   - Newsletter template system (`_nlEsc` ~3437, `NL_FONTS`/`NL_EMAIL_FONT` ~3466, `NL_THEMES` ~3474, `generateNewsletterHTML` ~3730)
+   - `LoginPage` — authentication component (~line 4195)
+   - `ProjectManagementSystem` — root component (~line 4304, ~10,000 lines)
+4. **Service worker** registration and offline handlers (`service-worker.js`, network-first with cache fallback; Supabase/Google requests bypass it)
+
+Use `/find-component <name>` to locate symbols — line numbers above drift with every edit.
 
 ### Critical constraint: Babel standalone
 
 Code is transpiled by Babel standalone in the browser. This means:
-- **Do NOT use React hooks (`useMemo`, `useCallback`, `useEffect`) inside `render*()` helper functions** — only at the top level of `ProjectManagementSystem()`. The `render*()` functions are regular functions called during render, not React components, so hooks inside them violate React's rules and cause a white screen.
+- **Do NOT use React hooks (`useMemo`, `useCallback`, `useEffect`) inside `render*()` helper functions** — only at the top level of `ProjectManagementSystem()`. The `render*()` functions are regular functions called during render, not React components, so hooks inside them violate React's rules and cause a white screen. (`renderMonthlyChart` is the one existing `useCallback` — it is declared at top level, not inside another renderer.)
 - `catch {}` (without parameter) works in the CDN Babel version but avoid if possible.
+- No source maps, no linter: a syntax error anywhere in the babel block yields a blank page with the error only in the browser console.
 
 ### Root component structure
 
-`ProjectManagementSystem` contains ALL app state (~165 `useState` declarations) and these page renderers:
+`ProjectManagementSystem` contains ALL app state (~173 `useState` declarations) and these page renderers:
 
-| Function | Page | Key features |
-|----------|------|-------------|
-| `renderDashboard()` | 대시보드 | Budget gauge, alerts (`getDashboardAlerts()`), category breakdown, print/snapshot export |
-| `renderBudget()` | 예산 관리 | 7 sub-tabs (dashboard, breakdown, register, calculator, history, ratio, calendar) |
-| `renderSchedule()` | 일정 관리 | Calendar view, list view, Google Calendar sync |
-| `renderBoard()` | 게시판 | 4 categories (공지/자료/보고서/자유), rich text, comments |
-| `renderGallery()` | 갤러리 | Categorized images, ZIP download, newsletter integration |
-| `renderNewsletter()` | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 6 templates, AI rewrite, iframe preview (desktop/mobile), save/load drafts (`bf.newsletters`), color/font customization, inline editing |
-| `renderSchools()` | 학교관리 | NEIS API school search, timetable viewer, textbook management |
-| `renderAdmin()` | 관리자 | Users, recipients, org settings, project management (admin-only) |
-| `renderGuide()` | 회계가이드 | Accounting rules, withholding tax calculator, FAQ |
+| Function | ~Line | Page | Key features |
+|----------|-------|------|-------------|
+| `renderDashboard()` | 5770 | 대시보드 | Budget gauge, alerts (`getDashboardAlerts()`), category breakdown, print/snapshot export |
+| `renderSchedule()` | 6741 | 일정 관리 | Calendar view, list view, Google Calendar sync |
+| `renderBoard()` | 8330 | 게시판 | 4 categories (공지/자료/보고서/자유), rich text, comments |
+| `renderGallery()` | 8551 | 갤러리 | Categorized images, ZIP download, newsletter integration |
+| `renderBudget()` | 8704 | 예산 관리 | 7 sub-tabs (dashboard, breakdown, register, calculator, history, ratio, calendar) |
+| `renderGuide()` | 11511 | 회계가이드 | Accounting rules, withholding tax calculator, FAQ |
+| `renderNewsletter()` | 12028 | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 7 templates, AI rewrite, iframe preview (desktop/mobile), save/load drafts (`bf.newsletters`), color/font customization, inline editing |
+| `renderSchools()` | 12778 | 학교관리 | NEIS API school search, timetable viewer, textbook management |
+| `renderAdmin()` | 13170 | 관리자 | Users, recipients, org settings, project management (admin-only) |
+| `renderContent()` | 14019 | — | `currentPage` switch |
 
 Navigation is state-driven via `currentPage` (no URL routing).
 
 ### Newsletter Template System
 
-6 templates using a unified theme architecture:
+7 templates using a unified theme architecture:
 
-- **Modern/Magazine/Classic/Bold**: Rendered via `NL_THEMES` theme objects → `_nlGenerateThemed()` shared renderer. Each theme defines `header`, `title`, `greeting`, `closing`, `footer`, `sectionLabel`, `scheduleItem`, `boardItem`, `galleryItem` as functions returning HTML strings.
+- **Modern/Magazine/Classic/Bold/Community**: Rendered via `NL_THEMES` theme objects → `_nlGenerateThemed()` shared renderer. Each theme defines `header`, `title`, `greeting`, `closing`, `footer`, `sectionLabel`, `scheduleItem`, `boardItem`, `galleryItem` as functions returning HTML strings, plus `galleryGrid`/`contentPad` style strings. `community` (Figma-derived card-list design) is the default template.
 - **Email**: `generateNewsletterEmail()` — table-based layout for Gmail/Outlook compatibility
 - **Grid**: `generateNewsletterGrid()` — Hoom-style 3-column card grid with featured center
 
@@ -95,11 +107,24 @@ Navigation is state-driven via `currentPage` (no URL routing).
 - `sections`: `[{ type: 'boards'|'schedules'|'gallery', label, items }]` — ordering AND labels controlled by user in Step 3 (`sec.label` flows into `sectionLabel()`; email/grid take a `labels` param)
 - `assets`: `{ boardImageUrls, rewrittenContents, galleryThumbUrls, itemLinks }`
 
-To add a new themed template: add an entry to `NL_THEMES` with the required render functions. For custom layouts (like email/grid), add a standalone generate function and a layout check in the dispatcher.
+To add a new themed template: add an entry to `NL_THEMES` with the required render functions AND add a matching card to the template picker list in `renderNewsletter` (`{ id, name, desc, color, preview }`). For custom layouts (like email/grid), add a standalone generate function and a layout check in the dispatcher.
 
 **Color/font customization** works by post-processing the generated HTML (`applyCustomDesign` in `renderNewsletter`): the theme's declared `accent`/`accent2` hex strings are string-replaced with user-picked colors, and font stacks likewise (`NL_FONTS`, `NL_EMAIL_FONT`). Theme render functions hardcode hex values — keep each theme's declared `accent`/`accent2` in sync with the hex actually used in its render functions, or replacement silently stops working.
 
 **Save/load** (`bf.newsletters`): full snapshot serialization — `config` (+`custom`), `sections` (orderedSections verbatim), `assets` (incl. `editedItems`), `selection` (Step 1 checkbox IDs). Inline title edits live in `editedItems` state; body edits reuse `rewrittenContents` (same override slot as AI rewrite). `syncSections()` merges fresh selection into existing sections on Step 3 entry — do not revert to rebuild-on-entry or user ordering/labels are lost.
+
+### 홍보콘텐츠 생성시스템 (`content/` + `/promo`)
+
+Local-only workspace, independent of `index.html`. Source docs in `data/` (git-ignored, contains PII) are distilled into `content/kb/` — `facts.yaml` is the **single source of truth** for every number, date, and name (baseline: 2026-08-23 사업변경신청서 "변경 후"); the `01`~`08` markdown files are narrative context. `facts.deprecated` lists pre-change figures (캠페인 30회, 청소년참견위원회…) and `facts.forbidden` the foundation's wording rules ('후원'→'지원', '아름다운재단' no space) — `promo.py check` fails any output containing them.
+
+- `/promo brief|draft|visual|render|doc|check|kb-sync|status` — skill in `.claude/skills/promo/`; workflow and rules in its `SKILL.md` + `references/`
+- `content/tools/promo.py` — single CLI: `fill` (slot YAML → HTML via mini-mustache, warns on `promo-slots` length limits), `render` (Playwright Chromium → PNG @2x / A4 PDF + preview), `check` (R1 PII · R2 deprecated/forbidden · R3 credit_line · R4 amounts · R5 dates · R6 org name · R7 empty slots), `index`, `kb-extract`, `selftest [--render]` (check 민감도 픽스처 + 렌더 재현성)
+- `content/tools/md2hwpx.py` — markdown subset → section0.xml → hwpx skill `build_hwpx.py`/`validate.py` (proposal/report/gonmun/base styles)
+- Templates: `content/templates/visual/*.html` (6: card-square, card-portrait, og-banner, poster-a4, leaflet-3fold, notice-a4 — each declares `promo-size`/`promo-print`/`promo-slots` meta) and `content/templates/docs/*.md` (6 skeletons)
+- `content/brand/tokens.css` must stay in sync with `NL_THEMES.community` in `index.html` (`#0b98ff`/`#f9e450`/`#131313`); Pretendard Variable (OFL) is vendored in `content/brand/fonts/`
+- Outputs: `content/out/<YYYY-MM-DD-슬러그>/{brief.md, draft.md, visual/, final/, check-report.md}`; `content/out/INDEX.md` is generated — never hand-edit
+- Runtime: `content/.venv` (playwright, pyyaml, lxml, pdfplumber). Rebuild with `python3 -m venv content/.venv && content/.venv/bin/pip install -r content/tools/requirements.txt && content/.venv/bin/playwright install chromium`
+- Never write contact info, seals, or real school names into `content/kb/` or drafts; leave `(연락처는 최종본에 기입)` placeholders
 
 ### Serverless API Functions (`api/`)
 
@@ -109,18 +134,18 @@ To add a new themed template: add an entry to `NL_THEMES` with the required rend
 | `api/hwpx.py` | `POST /api/hwpx` | HWPX (한글) document generation | 30s |
 | `api/hwpx-fill.py` | `POST /api/hwpx-fill` | HWPX 서식 채우기 (급여명세서·영수증빙·회의일지) | 30s |
 | `api/rewrite.py` | `POST /api/rewrite` | AI newsletter rewrite (Claude API) | 15s |
-| `api/supabase-admin.py` | `POST /api/supabase-admin` | Admin SQL operations (bf schema) | 15s |
+| `api/supabase-admin.py` | `POST /api/supabase-admin` | Admin SQL operations (bf schema) via service role — whitelisted in `ALLOWED_OPERATIONS` | 15s |
 
 HWPX templates in `api/hwpxskill_templates/{base,gonmun,report,minutes,proposal}/`; HWPX build/validation helpers in `api/hwpxskill_scripts/`. Python deps are in `requirements.txt` (`lxml`) — used by the serverless functions only, not the static frontend.
 
-**Important:** `hwpx.py` generates new HWPX from scratch (tab-separated text paragraphs). It does NOT support filling existing template forms with merged cells/checkboxes.
+**Important:** `hwpx.py` generates new HWPX from scratch (tab-separated text paragraphs). It does NOT support filling existing template forms with merged cells/checkboxes — that is `hwpx-fill.py`.
 
 ### HWPX Template Fill (F-13)
 
-`api/hwpx-fill.py` fills foundation form templates via the unzip-replace-repackage approach: preprocessed templates in `api/hwpxfill_templates/{salary,receipt,minutes}/` contain `{{placeholder}}` markers in `Contents/section0.xml`; the server only substitutes placeholders (XML-escaped) and zips — data collection, formatting, and document splitting happen client-side in `buildSalaryFillDocs`/`buildReceiptFillDocs`/`buildMinutesFillDocs` + `downloadHwpxFill`. Grid limits per document: salary 12 payment rows, receipt 2 entries, minutes 6 attendees (excess splits into multiple documents; multiple documents return a ZIP). Templates are regenerated from `templates/*.hwpx` originals by `scripts/preprocess_templates.py` — never edit `hwpxfill_templates` with the Hancom editor (it splits placeholder runs).
+`api/hwpx-fill.py` fills foundation form templates via the unzip-replace-repackage approach: preprocessed templates in `api/hwpxfill_templates/{salary,receipt,minutes}/` contain `{{placeholder}}` markers in `Contents/section0.xml`; the server only substitutes placeholders (XML-escaped) and zips — data collection, formatting, and document splitting happen client-side in `buildSalaryFillDocs`/`buildReceiptFillDocs`/`buildMinutesFillDocs` + `downloadHwpxFill`. Grid limits per document: salary 12 payment rows, receipt 2 entries, minutes 6 attendees (excess splits into multiple documents; multiple documents return a ZIP). Templates are regenerated from `templates/*.hwpx` originals by `python3 scripts/preprocess_templates.py` — never edit `hwpxfill_templates` with the Hancom editor (it splits placeholder runs).
 
 ### Authentication
-- SHA-256 hashed password check against `users` table
+- SHA-256 hashed password check against `users` table (client-side, no Supabase Auth)
 - Session in `localStorage` (`bf_user_session`), 24h expiry
 - Admin page: `role = 'admin'` only
 - 초기 관리자 계정은 로컬 개발 전용
@@ -155,7 +180,7 @@ Category (사업비/운영비) → Subcategory → Line Item → Executions
 const { data, error } = await supabase.from('table').select('*').order('created_at', { ascending: false });
 ```
 
-All tables use `bf` schema (not `public`). RLS enabled. Public anon key client-side. UUID primary keys.
+All tables use `bf` schema (not `public`) — the client is configured with `db: { schema: 'bf' }`. RLS enabled. Public anon key client-side. UUID primary keys.
 
 ## Code Conventions
 
@@ -170,27 +195,40 @@ All tables use `bf` schema (not `public`). RLS enabled. Public anon key client-s
 
 Vercel auto-deploy on push to `main`. `vercel.json` configures Python runtimes (@vercel/python@4.5.0), timeouts, and security headers (CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
 
-When adding new CDN scripts, update the CSP `script-src` in `vercel.json`.
+When adding external resources, update the CSP in `vercel.json`: new CDN scripts → `script-src`; new fetch targets → `connect-src`; new image hosts → `img-src` (currently only Supabase + data/blob). CSP is not enforced under `http.server`, so a missing entry only shows up after deploy.
+
+## PDCA Docs (`docs/`)
+
+bkit PDCA workflow: `01-plan/features/*.plan.md` → `02-design/features/*.design.md` → `03-analysis/*.analysis.md` → `04-report/*.report.md`. Completed features are moved to `archive/YYYY-MM/` with an `_INDEX.md`. Feature IDs (`F-06`, `F-10`, `F-13`…) or Korean slugs name the docs.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Primary application (~14,000 lines, edit this) |
+| `index.html` | Primary application (~14,600 lines, edit this) |
 | `api/neis.py` | NEIS school/timetable proxy |
-| `api/hwpx.py` | HWPX document generator |
+| `api/hwpx.py` | HWPX document generator (from scratch) |
+| `api/hwpx-fill.py` | HWPX 서식 채우기 (F-13) |
 | `api/rewrite.py` | AI newsletter rewriter |
 | `api/supabase-admin.py` | Admin SQL operations |
-| `vercel.json` | Deployment config + security headers |
-| `supabase-schema-safe.sql` | Database schema (bf schema) |
-| `supabase-migration-*.sql` | Incremental migrations |
-| `api/hwpx-fill.py` | HWPX 서식 채우기 (F-13) |
 | `api/hwpxfill_templates/` | Placeholder-preprocessed HWPX form templates (generated, do not hand-edit) |
 | `templates/` | 재단 서식 원본 (무수정 보존) |
 | `scripts/preprocess_templates.py` | templates/ → hwpxfill_templates/ 전처리 (재실행 가능) |
+| `vercel.json` | Deployment config + security headers |
+| `supabase-schema-safe.sql` | Database schema (bf schema) |
+| `supabase-migration-*.sql` | Incremental migrations |
+| `SUPABASE_SETUP.md` | Supabase project setup walkthrough |
 | `manifest.json` + `service-worker.js` | PWA support |
-| `docs/` | bkit PDCA docs — `01-plan/`, `02-design/`, `03-analysis/`, `archive/` |
+| `docs/` | bkit PDCA docs — `01-plan/`, `02-design/`, `03-analysis/`, `04-report/`, `archive/` |
 | `_archive/` | Reference JSX modules (not used by running app) |
+| `.claude/agents/` | Project agents: `budget-domain-expert`, `code-reviewer`, `feature-planner`, `sql-migration-validator` |
+| `.claude/skills/promo/` | `/promo` skill — 홍보물·문서 생성 워크플로 |
+| `data/` | 사업 원천 문서 (신청서·사업계획·예산·변경신청서·수행가이드). git-ignored, read-only |
+| `content/kb/` | 정제된 지식베이스 — `facts.yaml` (단일 진실 원천) + `01`~`08` md |
+| `content/templates/` | `visual/` HTML 템플릿 6종, `docs/` 문서 골격 6종 |
+| `content/tools/` | `promo.py` (fill/render/check/index/kb-extract), `md2hwpx.py` |
+| `content/brand/` | `tokens.css`, Pretendard font, `logo/` (user-supplied) |
+| `content/out/` | 산출물 (git-ignored), `INDEX.md` generated |
 
 ## Claude Code Commands
 
@@ -199,6 +237,7 @@ When adding new CDN scripts, update the CSP `script-src` in `vercel.json`.
 - `/new-migration` — Create Supabase migration file
 - `/find-component` — Locate component/function in index.html
 - `/review-changes` — Review current changes
+- `/promo <brief|draft|visual|render|doc|check|kb-sync|status>` — 홍보물·문서 생성 (see `.claude/skills/promo/SKILL.md`)
 
 ## Skill routing
 
