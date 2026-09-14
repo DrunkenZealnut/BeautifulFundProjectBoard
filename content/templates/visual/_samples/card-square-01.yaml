@@ -1,0 +1,16 @@
+template: card-square
+page: 1
+variant: cover
+slots:
+  eyebrow: "교육·토론회"
+  title: "일하는 열아홉"
+  subtitle: "직업계고 청소년과 청년노동자의 일상을 4주에 걸쳐 함께 봅니다"
+  dates: "10.14 · 10.21 · 10.28 · 11.4 (수)"
+  items:
+    - { n: "1회", text: "직업계고 열아홉의 하루" }
+    - { n: "2회", text: "제조업 청년노동자" }
+    - { n: "3회", text: "지방 청년노동자" }
+    - { n: "4회", text: "기초연구보고서 첫 공개" }
+  cta: "참여 신청"
+  credit: "아름다운재단 2026 공익단체 인큐베이팅 지원사업"
+  logo_org: "../../brand/logo/org.svg"
