@@ -3619,6 +3619,43 @@
                 galleryGrid: 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;',
                 contentPad: 'padding:28px;',
             },
+            community: {
+                name: '커뮤니티 / 카드 리스트', accent: '#0b98ff', accent2: '#f9e450', bg: '#ffffff',
+                font: "'Pretendard', -apple-system, sans-serif",
+                wrap: 'max-width:600px;margin:0 auto;background:#fff;',
+                header: (org, issue, esc) => `<div style="padding:24px 20px 4px;">
+                    <div style="font-size:13px;font-weight:600;color:#131313;">${esc(org)}</div>
+                    <div style="font-size:12px;color:#777777;margin-top:2px;">${issue}</div></div>`,
+                title: (t, esc) => `<h1 style="font-size:22pt;font-weight:700;color:#131313;margin:12px 0 12px;line-height:1.35;letter-spacing:-0.5px;">${esc(t)}</h1>`,
+                greeting: (g, esc) => `<div style="margin-bottom:8px;font-size:10.5pt;line-height:1.75;color:#131313;white-space:pre-line;">${esc(g)}</div>`,
+                closing: (c, esc) => `<div style="margin-top:16px;font-size:10.5pt;line-height:1.75;color:#131313;white-space:pre-line;">${esc(c)}</div>`,
+                footer: (org, esc) => `<div style="padding:20px;border-top:1px solid #eeeeee;text-align:center;">
+                    <p style="font-size:9pt;color:#9ca3af;">${esc(org)}</p>
+                    <p style="font-size:8pt;color:#d1d5db;margin-top:4px;">아름다운재단 2026 공익단체 인큐베이팅 지원사업</p></div>`,
+                sectionLabel: (label) => `<div style="padding:16px 0 4px;">
+                    <div style="height:1px;background:#eeeeee;margin-bottom:16px;"></div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:32px;height:32px;border-radius:8px;background:#f9e450;flex-shrink:0;"></div>
+                        <span style="font-size:16pt;font-weight:700;color:#131313;">${label}</span></div></div>`,
+                scheduleItem: (s, esc, wl) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid #f3f4f6;">
+                    <div style="flex:1;"><div style="font-size:11.5pt;font-weight:600;color:#131313;">${wl ? wl(s.id, esc(s.title)) : esc(s.title)}</div>
+                    ${s.location ? '<div style="font-size:9.5pt;color:#777777;margin-top:3px;">'+esc(s.location)+'</div>' : ''}</div>
+                    <span style="font-size:9.5pt;font-weight:600;color:#131313;white-space:nowrap;margin-left:12px;">${esc((s.start_date||'').slice(5))}</span></div>`,
+                boardItem: (b, content, images, esc, idx, total, wl) => `<div style="display:flex;gap:16px;padding:16px 0;${idx < total-1 ? 'border-bottom:1px solid #f3f4f6;' : ''}">
+                    <div style="width:110px;height:90px;border-radius:8px;flex-shrink:0;overflow:hidden;background:linear-gradient(135deg,#edf7ff,#fff0fa);">
+                        ${images.length > 0 ? '<img src="'+esc(images[0])+'" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" />' : ''}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:11.5pt;font-weight:600;color:#131313;margin-bottom:4px;">${wl ? wl(b.id, esc(b.title)) : esc(b.title)}</div>
+                        <div style="font-size:9pt;color:#777777;margin-bottom:6px;">${esc(b.created_at ? b.created_at.split('T')[0] : '')}</div>
+                        <div style="font-size:9.5pt;line-height:1.6;color:#777777;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${content}</div>
+                        <div style="font-size:9.5pt;color:#0b98ff;font-weight:600;margin-top:6px;">${wl ? wl(b.id, '더 알아보기 →') : '더 알아보기 →'}</div></div></div>`,
+                galleryItem: (g, url, esc, wl) => `<div>
+                    <div style="width:100%;height:130px;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,#fef9ce,#f3f4ff);">
+                    ${url ? (wl ? wl(g.id, '<img src="'+esc(url)+'" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" />') : '<img src="'+esc(url)+'" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" />') : ''}</div>
+                    <div style="font-size:9.5pt;color:#131313;margin-top:6px;font-weight:600;">${wl ? wl(g.id, esc(g.title)) : esc(g.title)}</div></div>`,
+                galleryGrid: 'display:grid;grid-template-columns:1fr 1fr;gap:16px;',
+                contentPad: 'padding:8px 20px 24px;',
+            },
             email: {
                 name: '이메일 뉴스레터', accent: '#27ae60', accent2: '#2c3e50', bg: '#e6e5e7', layout: 'email',
                 font: "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
@@ -4375,7 +4412,7 @@
             const initialLoadDone = useRef(false);
 
             // ===== 뉴스레터 상태 =====
-            const [newsletterTemplate, setNewsletterTemplate] = useState('modern'); // modern | magazine | classic
+            const [newsletterTemplate, setNewsletterTemplate] = useState('community'); // modern | magazine | classic | community
             const [newsletterConfig, setNewsletterConfig] = useState({
                 title: '', issueNumber: '', publishDate: new Date().toISOString().split('T')[0],
                 greeting: '', closing: '', dateFrom: '', dateTo: '',
@@ -12233,6 +12270,7 @@
                     { id: 'email', name: '이메일 뉴스레터', desc: 'Gmail·Outlook 호환 테이블 레이아웃', color: '#27ae60', preview: ['┌─ e-NEWSLETTER ─┐', '│                │', '│  ORG NAME      │', '│  뉴스레터 제목  │', '│                │', '├─ 주요 소식 ────┤', '│ 제목  본문...   │'] },
                     { id: 'grid', name: '그리드 / 매거진블로그', desc: '3단 카드 그리드, 피처드 센터', color: '#d35400', preview: ['┌──┐┌────┐┌──┐', '│  ││    ││  │', '│  ││ ★  ││  │', '│  ││feat││  │', '├──┤│    │├──┤', '│  ││    ││  │', '└──┘└────┘└──┘'] },
                     { id: 'bold', name: '볼드 / 포스터', desc: '다크 배경, 카드뉴스·SNS용', color: '#7c3aed', preview: ['▓▓ NEWSLETTER ▓▓', '▓ 큰 제목       ▓', '▓▓▓▓▓▓▓▓▓▓▓▓▓▓', '● 주요 소식', '┃ 카드 이미지 ┃', '┃ 제목 + 본문 ┃', '▓▓▓▓▓▓▓▓▓▓▓▓▓▓'] },
+                    { id: 'community', name: '커뮤니티 / 카드 리스트', desc: '얇은 구분선 + 썸네일 카드, 소식지형', color: '#0b98ff', preview: ['조직명 · 발행일', '', '큰 제목', '───────────────', '● 주요 소식', '┌──┐  제목', '│▨▨│  날짜', '└──┘  본문 2줄...', '     더 알아보기 →'] },
                 ];
 
 
