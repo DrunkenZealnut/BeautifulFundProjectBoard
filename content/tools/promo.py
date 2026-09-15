@@ -413,6 +413,9 @@ def cmd_check(args) -> int:
             if tup not in fdates:
                 findings.append(("WARN", "R5 날짜", rel, _line_of(text, m.start()), m.group(0)))
         for m in SHORT_DATE_RE.finditer(text):
+            line_start = text.rfind("\n", 0, m.start()) + 1
+            if text[line_start:m.start()].lstrip().startswith("#"):   # 마크다운 제목 번호(4.1 등) 제외
+                continue
             md_ = (int(m.group(1)), int(m.group(2)))
             if md_ not in fmonthdays:
                 findings.append(("WARN", "R5 날짜(M.D)", rel, _line_of(text, m.start()), m.group(0)))

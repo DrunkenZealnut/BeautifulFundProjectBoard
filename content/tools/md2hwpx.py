@@ -37,7 +37,11 @@ STYLES = {
     "minutes":  {"title": (7, 20), "h2": (8, 0), "h3": (9, 0), "bold": (9, 0), "th": (9, 21), "td": (0, 22), "th_bf": 4, "td_bf": 3},
     "base":     {"title": (0, 0), "h2": (0, 0), "h3": (0, 0), "bold": (0, 0), "th": (0, 0), "td": (0, 0), "th_bf": 3, "td_bf": 3},
 }
-ROMAN = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ", "Ⅶ", "Ⅷ", "Ⅸ", "Ⅹ"]
+ROMAN = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ", "Ⅶ", "Ⅷ", "Ⅸ", "Ⅹ", "Ⅺ", "Ⅻ"]
+
+
+def roman(n: int) -> str:
+    return ROMAN[n - 1] if n <= len(ROMAN) else str(n)
 
 
 class Gen:
@@ -95,7 +99,7 @@ class Gen:
         self.h2 += 1
         self.h3 = 0
         if self.st["h2"] == "bar":
-            self.table([[(ROMAN[self.h2 - 1], 10, 21, 5), ("  " + text, 8, 22, 6)]], [3200, BODY_W - 3200], [2800])
+            self.table([[(roman(self.h2), 10, 21, 5), ("  " + text, 8, 22, 6)]], [3200, BODY_W - 3200], [2800])
         else:
             ch, pp = self.st["h2"]
             self.para(text, ch, pp)
