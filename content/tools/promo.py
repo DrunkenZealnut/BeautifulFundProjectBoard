@@ -8,6 +8,7 @@ promo.py — 홍보콘텐츠 생성시스템 단일 CLI
   index       out/*/brief.md → out/INDEX.md
   kb-extract  원본 문서 보조 변환 (pdf 텍스트 / HTML 표 → md 표 / PII 스캔)
   selftest    check 민감도 픽스처 검증 (+ --render 재현성)
+  hwpx-image  HWPX 끝에 이미지 문단 추가 (지원문구 배너 등)
 
 실행: content/.venv/bin/python3 content/tools/promo.py <cmd> …
 설계: docs/archive/2026-09/홍보콘텐츠-생성시스템/홍보콘텐츠-생성시스템.design.md §7
@@ -382,10 +383,12 @@ def cmd_check(args) -> int:
     for rel, text in texts.items():
         is_final = rel.startswith("final/") or rel.startswith("visual/")
         is_yaml = rel.endswith((".yaml", ".yml"))
-        # R1 PII
+        # R1 PII — brief.contact_in_final: true 이면 이 산출물의 전화·이메일은 사용자가 의도적으로 기입한 것 → WARN (그 외 PII는 여전히 FAIL)
+        contact_ok = bool(brief_fm.get("contact_in_final"))
         for label, rx in PII_PATTERNS.items():
             for m in rx.finditer(text):
-                findings.append(("FAIL", f"R1 PII({label})", rel, _line_of(text, m.start()), m.group(0)))
+                lvl = "WARN" if (contact_ok and label in ("휴대전화", "이메일")) else "FAIL"
+                findings.append((lvl, f"R1 PII({label})", rel, _line_of(text, m.start()), m.group(0)))
         # R2 deprecated (internal 제외) / forbidden (항상)
         for rule, items, active in (("R2 deprecated", deprecated, not internal), ("R2 forbidden", forbidden, True)):
             if not active:
@@ -564,6 +567,96 @@ def cmd_kb_extract(args) -> int:
     return 2
 
 
+# ---------------------------------------------------------------- hwpx-image
+
+def cmd_hwpx_image(args) -> int:
+    """HWPX 마지막에 이미지를 글자처럼 취급되는 그림 문단으로 추가. 원본은 <name>.bak.hwpx 로 보존."""
+    import shutil
+    import zipfile
+    from PIL import Image
+
+    hwpx = Path(args.hwpx).resolve()
+    img = Path(args.image).resolve()
+    if not hwpx.exists() or not img.exists():
+        eprint("FAIL 파일 없음"); return 2
+    px_w, px_h = Image.open(img).size
+    ext = img.suffix.lower().lstrip(".")
+    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "bmp": "image/bmp"}.get(ext, f"image/{ext}")
+    width = args.width                       # HWPUNIT (기본 본문폭 42520)
+    height = round(width * px_h / px_w)
+    dim_w, dim_h = px_w * 75, px_h * 75      # 1px@96dpi = 75 HWPUNIT
+
+    bak = hwpx.with_suffix(".bak.hwpx")
+    if not args.no_backup:
+        shutil.copy2(hwpx, bak)
+    # 원본 항목을 모두 메모리에 읽은 뒤 닫는다 — 같은 경로에 쓰기 위해 (--no-backup 시 자기 자신을 덮어씀)
+    with zipfile.ZipFile(hwpx) as zsrc:
+        names = zsrc.namelist()
+        blobs = {n: zsrc.read(n) for n in names}
+
+    class _Mem:
+        def read(self, n): return blobs[n]
+        def close(self): pass
+    zin = _Mem()
+    existing = [n for n in names if n.startswith("BinData/")]
+    idx = 1
+    while f"image{idx}" in "".join(existing) or any(f"image{idx}." in n for n in existing):
+        idx += 1
+    item_id = f"image{idx}"
+    bin_name = f"BinData/{item_id}.{ext}"
+    hpf = zin.read("Contents/content.hpf").decode("utf-8")
+    sec = zin.read("Contents/section0.xml").decode("utf-8")
+    hpf = hpf.replace("</opf:manifest>", f'  <opf:item id="{item_id}" href="{bin_name}" media-type="{mime}" isEmbeded="1"/>\n  </opf:manifest>')
+    ids = [int(x) for x in re.findall(r'<hp:p id="(\d+)"', sec)]
+    pid = max(ids + [1000000000]) + 1
+    pic = f'''  <hp:p id="{pid}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t/></hp:run>
+  </hp:p>
+  <hp:p id="{pid + 1}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0">
+      <hp:pic id="{pid + 2}" zOrder="0" numberingType="PICTURE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" href="" groupLevel="0" instid="{pid + 2}" reverse="0">
+        <hp:sz width="{width}" widthRelTo="ABSOLUTE" height="{height}" heightRelTo="ABSOLUTE" protect="0"/>
+        <hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>
+        <hp:outMargin left="0" right="0" top="0" bottom="0"/>
+        <hp:offset x="0" y="0"/>
+        <hp:orgSz width="{width}" height="{height}"/>
+        <hp:curSz width="{width}" height="{height}"/>
+        <hp:flip horizontal="0" vertical="0"/>
+        <hp:rotationInfo angle="0" centerX="{width // 2}" centerY="{height // 2}" rotateimage="1"/>
+        <hp:renderingInfo><hc:transMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/><hc:scaMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/><hc:rotMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/></hp:renderingInfo>
+        <hp:lineShape color="none" width="0" style="NONE" endCap="FLAT" headStyle="NORMAL" tailStyle="NORMAL" headfill="0" tailfill="0" headSz="SMALL_SMALL" tailSz="SMALL_SMALL" outlineStyle="NORMAL" alpha="0"/>
+        <hp:imgRect><hc:pt0 x="0" y="0"/><hc:pt1 x="{width}" y="0"/><hc:pt2 x="{width}" y="{height}"/><hc:pt3 x="0" y="{height}"/></hp:imgRect>
+        <hp:imgClip left="0" right="{dim_w}" top="0" bottom="{dim_h}"/>
+        <hp:inMargin left="0" right="0" top="0" bottom="0"/>
+        <hp:imgDim dimwidth="{dim_w}" dimheight="{dim_h}"/>
+        <hc:img binaryItemIDRef="{item_id}" bright="0" contrast="0" effect="REAL_PIC" alpha="0"/>
+      </hp:pic>
+    </hp:run>
+  </hp:p>
+</hs:sec>'''
+    if "xmlns:hc=" not in sec[:1500]:
+        sec = sec.replace("<hs:sec ", '<hs:sec xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" ', 1)
+    sec = sec.rstrip()
+    if not sec.endswith("</hs:sec>"):
+        eprint("FAIL section0.xml 끝이 </hs:sec> 가 아님"); return 1
+    sec = sec[: -len("</hs:sec>")] + pic + "\n"
+    with zipfile.ZipFile(hwpx, "w") as zout:
+        zout.writestr(zipfile.ZipInfo("mimetype"), zin.read("mimetype"), compress_type=zipfile.ZIP_STORED)
+        for n in names:
+            if n == "mimetype":
+                continue
+            data = zin.read(n)
+            if n == "Contents/content.hpf":
+                data = hpf.encode("utf-8")
+            elif n == "Contents/section0.xml":
+                data = sec.encode("utf-8")
+            zout.writestr(n, data, compress_type=zipfile.ZIP_DEFLATED)
+        zout.write(str(img), bin_name, compress_type=zipfile.ZIP_DEFLATED)
+    zin.close()
+    print(f"hwpx-image  {img.name} → {hwpx.name} ({bin_name}, {width}x{height} HWPUNIT)" + ("" if args.no_backup else f"  backup: {bak.name}"))
+    return 0
+
+
 # ---------------------------------------------------------------- selftest
 
 FIXTURE = TEMPLATES_VISUAL / "_samples" / "_check-fixture"
@@ -653,6 +746,13 @@ def main(argv=None) -> int:
     k.add_argument("--pages")
     k.add_argument("--pii-scan", metavar="DIR")
     k.set_defaults(fn=cmd_kb_extract)
+
+    h = sub.add_parser("hwpx-image", help="HWPX 끝에 이미지 문단 추가 (본문폭 맞춤)")
+    h.add_argument("hwpx")
+    h.add_argument("image")
+    h.add_argument("--width", type=int, default=42520, help="HWPUNIT (A4 본문폭 42520)")
+    h.add_argument("--no-backup", action="store_true")
+    h.set_defaults(fn=cmd_hwpx_image)
 
     t = sub.add_parser("selftest", help="check 민감도 픽스처 + (--render) 렌더 재현성")
     t.add_argument("--render", action="store_true")
