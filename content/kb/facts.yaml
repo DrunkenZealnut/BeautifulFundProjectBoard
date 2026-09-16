@@ -84,7 +84,7 @@ units:
       - 성과공유 교육·토론회 4회 운영 (3단체 공동기획)
       - 보고서 300부 인쇄·배포 (학교·국회·노동부·교육청)
     analysis_scope: { ncs_materials: 86, textbooks: 9 }          # 2026-09-15 사용자 확인
-    survey: { target: 반도체 대기업 현장노동자, company: 삼성전자, n: 48, note: "대외 산출물에는 실명 대신 '반도체 대기업' 표기 권장" }
+    survey: { target: 반도체 대기업 현장노동자, n: 48, note: "설문 대상 기업 실명은 kb·산출물 모두 미기재 — '반도체 대기업'으로 표기" }
     findings:                            # 기초연구 보고서 초안 2026-09-11 (data/반도체 기초보고서_20260911.hwpx) — 발간본에서 재확인
       report_title: 반도체고등학교 노동안전교과서 제작을 위한 기초연구보고서
       textbooks_analyzed: 9
