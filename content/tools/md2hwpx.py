@@ -12,6 +12,7 @@ md2hwpx.py — 마크다운 부분집합 → HWPX section0.xml → hwpx 스킬 b
   | a | b |              표 (첫 행 헤더, |---| 구분행 무시). 열 너비 균등
   **굵게**               인라인 볼드는 무시하고 텍스트만 (한 줄 전체가 **…**면 볼드 문단)
   <!-- … -->             주석 제거 (facts 주석 포함)
+  > 인용                 들여쓰기 문단
   빈 줄                  빈 문단
   그 외                  본문 문단
 
@@ -177,6 +178,8 @@ def convert(md_text: str, template: str) -> str:
             g.h2_bar(re.sub(r"^\d+\.\s*", "", line[3:])); g.para("")
         elif line.startswith("### "):
             g.h3_badge(re.sub(r"^\d+(\.\d+)*\.?\s*", "", line[4:]))
+        elif line.startswith("> "):                      # 인용 → 들여쓰기 문단 (report: paraPr 24)
+            g.para("  " + line[2:].strip(), 0, 24 if template == "report" else 0)
         elif raw.startswith(("  - ", "  * ", "\t- ")):
             g.para("    - " + line[2:].strip())
         elif line.startswith(("- ", "* ")):
