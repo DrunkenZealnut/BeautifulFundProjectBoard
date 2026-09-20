@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: React 18 (no-build, CDN via unpkg/jsdelivr) + Babel standalone transpiler
 - **Backend**: Supabase (PostgreSQL + RLS, `bf` schema) — anon key hardcoded in `index.html`
 - **Serverless**: Vercel Python functions (`api/`) — HWPX 생성/서식채우기, NEIS 프록시, AI 재작성, 관리 API
-- **CDN Libraries**: Chart.js, DOMPurify, JSZip, SheetJS, html2pdf.js, Google APIs (Calendar + GSI)
+- **CDN Libraries**: Chart.js, DOMPurify, JSZip, SheetJS, html2pdf.js, pdf.js (pdfjs-dist 3.11.174 UMD), Google APIs (Calendar + GSI)
 - **Language**: Korean-first UI, English code comments
 
 ## Running the Application
@@ -62,6 +62,7 @@ Top to bottom, `index.html` is:
    - `BUDGET_DATA` — budget hierarchy structure (~line 3059)
    - `DOCUMENT_RULES` — evidence requirements per expense type (~line 3195)
    - `downloadHwpxFill` — HWPX fill download dispatcher (~line 3408)
+   - 입금확인증 PDF parser (`extractPdfTextLines`/`DEPOSIT_PDF_LABELS`/`parseDepositConfirmation`/`executionDupKey`/`findDuplicateExecution`) (~line 3457)
    - Newsletter template system (`_nlEsc` ~3437, `NL_FONTS`/`NL_EMAIL_FONT` ~3466, `NL_THEMES` ~3474, `generateNewsletterHTML` ~3730)
    - `LoginPage` — authentication component (~line 4195)
    - `ProjectManagementSystem` — root component (~line 4304, ~10,000 lines)
@@ -86,7 +87,7 @@ Code is transpiled by Babel standalone in the browser. This means:
 | `renderSchedule()` | 6741 | 일정 관리 | Calendar view, list view, Google Calendar sync |
 | `renderBoard()` | 8330 | 게시판 | 4 categories (공지/자료/보고서/자유), rich text, comments |
 | `renderGallery()` | 8551 | 갤러리 | Categorized images, ZIP download, newsletter integration |
-| `renderBudget()` | 8704 | 예산 관리 | 7 sub-tabs (dashboard, breakdown, register, calculator, history, ratio, calendar) |
+| `renderBudget()` | 8704 | 예산 관리 | 8 sub-tabs (dashboard, breakdown, register, import, calculator, history, ratio, calendar) — `import` = 일괄등록 (입금확인증 PDF / 은행 엑셀) |
 | `renderGuide()` | 11511 | 회계가이드 | Accounting rules, withholding tax calculator, FAQ |
 | `renderNewsletter()` | 12028 | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 7 templates, AI rewrite, iframe preview (desktop/mobile), save/load drafts (`bf.newsletters`), color/font customization, inline editing |
 | `renderSchools()` | 12778 | 학교관리 | NEIS API school search, timetable viewer, textbook management |
@@ -144,6 +145,19 @@ HWPX templates in `api/hwpxskill_templates/{base,gonmun,report,minutes,proposal}
 
 `api/hwpx-fill.py` fills foundation form templates via the unzip-replace-repackage approach: preprocessed templates in `api/hwpxfill_templates/{salary,receipt,minutes}/` contain `{{placeholder}}` markers in `Contents/section0.xml`; the server only substitutes placeholders (XML-escaped) and zips — data collection, formatting, and document splitting happen client-side in `buildSalaryFillDocs`/`buildReceiptFillDocs`/`buildMinutesFillDocs` + `downloadHwpxFill`. Grid limits per document: salary 12 payment rows, receipt 2 entries, minutes 6 attendees (excess splits into multiple documents; multiple documents return a ZIP). Templates are regenerated from `templates/*.hwpx` originals by `python3 scripts/preprocess_templates.py` — never edit `hwpxfill_templates` with the Hancom editor (it splits placeholder runs).
 
+### 입금확인증 PDF 집행등록 (F-14)
+
+일괄등록 탭(`budgetTab === 'import'`, `bankImportSource: 'pdf' | 'excel'`)과 단건 등록 폼의 「📎 입금확인증 PDF로 자동입력」 버튼이 같은 파서를 쓴다. 모든 처리가 브라우저 안에서 끝난다 (서버 전송 없음).
+
+- `extractPdfTextLines(file, worker?)`: pdf.js `getTextContent()` 아이템을 y(±2pt)로 줄을 묶고 x로 정렬해 줄 문자열 배열로 재구성 — PDFium 출력은 글자 1개가 아이템 1개이고 순서가 읽기 순서와 다르므로 정렬이 필수. 다건 처리 시 `new pdfjsLib.PDFWorker()` 하나를 넘겨 재사용(파일마다 새 워커 ≈ 70ms)
+- `parseDepositConfirmation(lines, fileName)`: `DEPOSIT_PDF_LABELS`(평문 라벨 → `_spaced`가 글자 사이 공백 허용 정규식 조립, 긴 라벨 우선)로 줄마다 라벨 위치를 찾고 "라벨 끝 ~ 다음 라벨 시작"을 값으로 취함. 빈 `lines`(스캔본)도 파서가 처리해 `'텍스트 없음(스캔본)'` 경고를 붙임. 신한은행 입금확인증만 검증됨. 매핑: 거래일시→`execution_date`(`normalizeDate`), 입금금액→`amount`(실지급액), 수취인성명→`recipient`, 출금통장표시내용→거래메모→파일명→`description`, 수수료→별도 집행 행(`_kind: 'fee'`, 본 행 예산항목 연동, 수취인 `신한은행`)
+- 계좌번호(`acctOut`/`acctIn`)는 라벨 소비용으로만 매칭 — 결과 객체·state·로그에 넣지 말 것
+- 증빙 첨부는 컴포넌트 헬퍼 `uploadExecutionDoc(execId, docName, file, tag)` → `insertExecutionDocs(rows)`(documents insert + `mergeExecutionDocs`)로 통일 — 단건 폼·수수료 후속·일괄 등록·집행내역 탭 재첨부 4곳이 공용. 문서명은 `pickTransferDocName(type)` (유형별 필수 서류 중 `/이체(내역서|확인증|증)/`, 없으면 `'이체확인증'` → 집행내역 탭 "기타 첨부 증빙"에 표시)
+- 일괄 등록은 행마다 `id: crypto.randomUUID()`를 클라이언트에서 부여해 insert하므로 증빙 첨부가 서버 반환 순서에 의존하지 않는다
+- `executionDocsMap` 전체 로드 여부는 `executionDocsLoaded` 플래그가 담당한다 (맵이 비어 있는지로 판단하지 말 것 — 과거 그 가드 때문에 탭 진입 전 병합하면 전체 로드가 건너뛰어졌음). 병합은 조건 없이 `mergeExecutionDocs`로
+- `bankImportRows` 행은 `_kind` (`'excel' | 'pdf' | 'fee'`)로 분기: 엑셀 행은 `_raw`+`bankColMap`에서 렌더 시 파생, PDF/수수료 행은 `execution_date`/`amount`/`recipient` 필드를 직접 편집. 행 편집은 미리보기 IIFE의 `updateRow(ri, patch)` 하나로 — 본 행 날짜는 수수료 행에 항상 전파, 소분류/항목은 `_feeLinked`일 때만, PDF 본 행은 편집 시 `_dup` 재검사
+- pdf.js 워커는 교차출처라 `blob:` 래퍼로 뜨므로 CSP에 `worker-src 'self' blob:`이 있어야 한다 (없으면 fake worker로 폴백, 동작은 함)
+
 ### Authentication
 - SHA-256 hashed password check against `users` table (client-side, no Supabase Auth)
 - Session in `localStorage` (`bf_user_session`), 24h expiry
@@ -195,7 +209,7 @@ All tables use `bf` schema (not `public`) — the client is configured with `db:
 
 Vercel auto-deploy on push to `main`. `vercel.json` configures Python runtimes (@vercel/python@4.5.0), timeouts, and security headers (CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
 
-When adding external resources, update the CSP in `vercel.json`: new CDN scripts → `script-src`; new fetch targets → `connect-src`; new image hosts → `img-src` (currently only Supabase + data/blob). CSP is not enforced under `http.server`, so a missing entry only shows up after deploy.
+When adding external resources, update the CSP in `vercel.json`: new CDN scripts → `script-src`; new fetch targets → `connect-src`; new image hosts → `img-src` (currently only Supabase + data/blob); Web Worker from CDN (pdf.js style blob wrapper) → `worker-src`. CSP is not enforced under `http.server`, so a missing entry only shows up after deploy.
 
 ## PDCA Docs (`docs/`)
 

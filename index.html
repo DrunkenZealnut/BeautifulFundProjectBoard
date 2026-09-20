@@ -35,6 +35,9 @@
     <!-- html2pdf.js: HTML → PDF 직접 다운로드 (jsPDF + html2canvas 통합) -->
     <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 
+    <!-- pdf.js: 입금확인증 PDF 텍스트 추출 (UMD 3.x — window.pdfjsLib) -->
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+
     <style>
         * {
             box-sizing: border-box;
@@ -2396,6 +2399,11 @@
 
         const DEFAULT_ORG_NAME = '청년노동자인권센터';
 
+        // pdf.js worker — cross-origin URL이므로 pdf.js가 blob: 래퍼 워커를 생성 (CSP worker-src blob: 필요, 차단 시 fake worker 폴백)
+        if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        }
+
         // 예산 집행 상태 정보 (레이블 + 배지 색상)
         const EXECUTION_STATUS = {
             pending:   { label: '대기',   bg: '#FFF3CD', color: '#856404' },
@@ -2408,6 +2416,14 @@
         const fmt = (n) => Math.round(n).toLocaleString();
         const parseInput = (s) => String(s).replace(/[^0-9]/g, '');
         const fmtInput = (v) => { const s = parseInput(v); return s ? fmt(Number(s)) : ''; };
+        // Date | '2026.09.18 14:03' | '2026/9/8' → 'YYYY-MM-DD' ('' if unparseable)
+        const normalizeDate = (v) => {
+            if (!v) return '';
+            if (v instanceof Date) return v.toISOString().slice(0, 10);
+            const m = String(v).replace(/[./]/g, '-').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+            return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : '';
+        };
+        const safeFileName = (name) => String(name).replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
         const pct = (spent, budget) => budget > 0 ? Math.min(100, Math.round(spent / budget * 100)) : 0;
 
         // 비밀번호 SHA-256 해시 유틸리티 (최상위 스코프 - LoginPage·ProjectManagementSystem 공유)
@@ -3428,6 +3444,116 @@
                 alert('서식 생성 서버 연결 실패. 잠시 후 다시 시도해주세요.');
                 return false;
             }
+        };
+
+        // ────────────────────────────────────────────────────────────
+        // 입금확인증 PDF 파서 (F-14) — 브라우저 내 텍스트 추출 + 라벨 스캔
+        // 계좌번호(출금계좌/입금계좌)는 라벨 소비용으로만 매칭하고 결과에 넣지 않는다.
+        // ────────────────────────────────────────────────────────────
+
+        // PDF → 줄 문자열 배열. PDFium 출력은 글자 1개가 아이템 1개이고 순서가 읽기 순서와 다르므로
+        // y(±2pt)로 줄을 묶고 x로 정렬해 재구성한다. 글자 간격 3pt 초과는 공백으로 본다.
+        // `worker`(pdfjsLib.PDFWorker)를 넘기면 여러 파일이 워커 1개를 재사용한다 (파일마다 새 워커는 ~70ms).
+        const extractPdfTextLines = async (file, worker) => {
+            const data = new Uint8Array(await file.arrayBuffer());
+            const pdf = await window.pdfjsLib.getDocument({ data, worker }).promise;
+            const lines = [];
+            try {
+                const pageCount = Math.min(pdf.numPages, 2); // 확인증은 1p, 안전상 2p까지만
+                for (let p = 1; p <= pageCount; p++) {
+                    const page = await pdf.getPage(p);
+                    const tc = await page.getTextContent();
+                    const rows = []; // [{ y, items: [{ x, w, s }] }]
+                    tc.items.forEach(it => {
+                        if (!('str' in it) || it.str === '') return;
+                        const x = it.transform[4], y = it.transform[5];
+                        let row = rows.find(r => Math.abs(r.y - y) <= 2);
+                        if (!row) { row = { y, items: [] }; rows.push(row); }
+                        row.items.push({ x, w: it.width, s: it.str });
+                    });
+                    rows.sort((a, b) => b.y - a.y).forEach(row => { // PDF 좌표계: y 클수록 위
+                        row.items.sort((a, b) => a.x - b.x);
+                        let s = '', lastEnd = null;
+                        row.items.forEach(it => {
+                            if (lastEnd != null && it.x - lastEnd > 3) s += ' ';
+                            s += it.s;
+                            lastEnd = it.x + it.w;
+                        });
+                        s = s.replace(/\s+/g, ' ').trim();
+                        if (s) lines.push(s);
+                    });
+                }
+            } finally {
+                pdf.destroy(); // 외부 worker는 파괴하지 않음
+            }
+            return lines;
+        };
+        const pdfReadErrorMsg = (err) => err && err.name === 'PasswordException' ? '암호가 걸린 PDF입니다' : '읽을 수 없는 PDF입니다';
+
+        // 라벨 별칭 테이블 — 글자 사이 공백 허용("업체사용 Key", "수취인 성명"), 긴 라벨을 먼저 두어 부분 일치 방지
+        const DEPOSIT_PDF_LABELS = [
+            { key: 'memoOut',      labels: ['출금통장표시내용'] }, // 집행 내용("제목")
+            { key: 'memoIn',       labels: ['입금통장표시내용'] },
+            { key: 'recipient',    labels: ['수취인성명', '수취인', '받는분'] },
+            { key: 'amount',       labels: ['입금금액', '이체금액', '거래금액'] },
+            { key: 'fee',          labels: ['이체수수료', '수수료'] },
+            { key: 'date',         labels: ['거래일시', '이체일시', '거래일자'] },
+            { key: 'bankIn',       labels: ['입금은행'] },
+            { key: 'acctOut',      labels: ['출금계좌'] }, // 소비만, 저장 안 함
+            { key: 'acctIn',       labels: ['입금계좌'] }, // 소비만, 저장 안 함
+            { key: 'memo',         labels: ['거래메모'] },
+            { key: 'transferType', labels: ['이체구분'] },
+            { key: 'senderCode',   labels: ['입금인코드'] },
+            { key: 'vendorKey',    labels: ['업체사용Key'] }
+        ];
+        const _spaced = (label) => label.split('').join('\\s*');
+        const DEPOSIT_LABEL_RE = new RegExp(DEPOSIT_PDF_LABELS.map(l => `(${l.labels.map(_spaced).join('|')})`).join('|'), 'g');
+        const DEPOSIT_FOOTER_RE = /바랍니다|입니다\.?$|참고용/; // 하단 안내문(라벨이 다시 등장) 제외
+
+        // 줄 배열 → { execution_date, amount, fee, recipient, description, bankIn, warnings }
+        // 줄마다 라벨 위치를 모두 찾고 "라벨 끝 ~ 다음 라벨 시작"을 값으로 취한다(한 줄에 라벨-값 쌍 2개인 4열 격자 대응). 같은 키는 첫 등장 우선.
+        // 빈 lines(텍스트 없는 스캔본)도 처리: 값은 비우고 '텍스트 없음(스캔본)' 경고만 남긴다.
+        const parseDepositConfirmation = (lines, fileName = '') => {
+            const raw = {};
+            lines.forEach(line => {
+                if (DEPOSIT_FOOTER_RE.test(line)) return;
+                const hits = [];
+                for (const m of line.matchAll(DEPOSIT_LABEL_RE)) {
+                    const gi = m.slice(1).findIndex(g => g !== undefined);
+                    hits.push({ key: DEPOSIT_PDF_LABELS[gi].key, start: m.index, end: m.index + m[0].length });
+                }
+                hits.forEach((h, i) => {
+                    const value = line.slice(h.end, i + 1 < hits.length ? hits[i + 1].start : undefined).trim();
+                    if (raw[h.key] === undefined) raw[h.key] = value;
+                });
+            });
+            const num = v => { const digits = parseInput(v || ''); return digits ? Number(digits) : null; };
+            const execution_date = normalizeDate(raw.date); // "2026.09.1814:03:33"처럼 시각이 붙어도 통과
+            const amount = num(raw.amount);
+            const recipient = raw.recipient || '';
+            const memo = raw.memoOut || raw.memo || '';
+            const baseName = fileName.replace(/\.pdf$/i, '').trim();
+            const warnings = [];
+            if (lines.length === 0) warnings.push('텍스트 없음(스캔본)');
+            else if (Object.keys(raw).length === 0) warnings.push('입금확인증 형식을 인식하지 못했습니다');
+            if (!execution_date) warnings.push('날짜 미인식');
+            if (amount == null) warnings.push('금액 미인식');
+            if (!recipient) warnings.push('수취인 미인식');
+            return {
+                execution_date, amount,
+                fee: num(raw.fee),
+                recipient,
+                description: memo || baseName || (recipient ? `${recipient} 계좌이체` : ''),
+                bankIn: raw.bankIn || '',
+                warnings
+            };
+        };
+
+        // (집행일, 금액, 수취인) 동일 → 같은 집행으로 본다 (중복 의심 판정 키)
+        const executionDupKey = (e) => `${e.execution_date}|${Number(e.amount)}|${(e.recipient || '').trim()}`;
+        const findDuplicateExecution = (executions, cand) => {
+            const key = executionDupKey(cand);
+            return (executions || []).find(e => executionDupKey(e) === key) || null;
         };
 
         // ────────────────────────────────────────────────────────────
@@ -5004,6 +5130,7 @@
             const executionFileInputRef = useRef(null);
             const activeUploadExecutionIdRef = useRef(null);
             const [executionDocsMap, setExecutionDocsMap] = useState({});
+            const [executionDocsLoaded, setExecutionDocsLoaded] = useState(false); // 집행내역 탭 documents 전체 로드 완료 여부
             // { [execId]: { [docName]: { file_path, file_name, file_size } } }
             const docUploadFileInputRef = useRef(null);
             const activeDocUploadRef = useRef(null); // { execId, docName }
@@ -5011,6 +5138,9 @@
             // { [docName]: File } — 등록 폼 서류 첨부 (등록 완료 후 업로드)
             const formDocFileInputRef = useRef(null);
             const activeFormDocNameRef = useRef(null);
+            // 단건 등록 폼 — 입금확인증 PDF 자동입력 (F-14)
+            const [formPdfEvidence, setFormPdfEvidence] = useState(null); // { file, parsed } | null
+            const pdfAutofillInputRef = useRef(null);
             const boardEditorRef = useRef(null);
             const galleryEditorRef = useRef(null);
             // ── 대시보드 차트 refs ────────────────────────────────────────
@@ -5049,7 +5179,7 @@
             const [comments, setComments] = useState([]);
             const [newComment, setNewComment] = useState('');
             const [activityLogs, setActivityLogs] = useState([]);
-            const [formData, setFormData] = useState({
+            const emptyExecutionForm = () => ({
                 subcategory_id: '',
                 subcategory_name: '',
                 category_name: '',
@@ -5062,11 +5192,102 @@
                 execution_date: new Date().toISOString().split('T')[0],
                 recipient: ''
             });
+            const [formData, setFormData] = useState(emptyExecutionForm);
+            const resetRegisterForm = () => {
+                setFormData(emptyExecutionForm());
+                setFormDocFiles({});
+                setFormPdfEvidence(null);
+                activeFormDocNameRef.current = null;
+            };
             // ===== 은행 엑셀 일괄등록 상태 =====
             const [bankImportRows, setBankImportRows] = useState([]); // parsed Excel rows
             const [bankImportStep, setBankImportStep] = useState('upload'); // upload | preview | done
             const [bankColMap, setBankColMap] = useState({ date: '', amount: '', type: '', name: '' }); // column mapping
             const [bankHeaders, setBankHeaders] = useState([]); // Excel column headers
+            // ===== 입금확인증 PDF 일괄등록 상태 (F-14) =====
+            const [bankImportSource, setBankImportSource] = useState('pdf'); // 'pdf' | 'excel'
+            const [pdfParseProgress, setPdfParseProgress] = useState(null); // { done, total } | null
+            const [bulkRegisterResult, setBulkRegisterResult] = useState(null); // { inserted, attached, failedDocs } — done 화면 (done 진입 직전 항상 설정)
+            const resetBankImport = () => { setBankImportStep('upload'); setBankImportRows([]); setBankHeaders([]); };
+
+            // 단건 등록 폼: 입금확인증 PDF 1장 → formData 채움 + 이체 증빙 예약 (F-14)
+            const handleFormPdfAutofill = async (file) => {
+                try {
+                    const lines = await extractPdfTextLines(file);
+                    const parsed = parseDepositConfirmation(lines, file.name);
+                    setFormPdfEvidence({ file, parsed });
+                    if (lines.length === 0) {
+                        // 스캔본: 값은 못 읽지만 증빙으로는 보관 (수동 입력)
+                        setFormData(prev => ({ ...prev, payment_method: '계좌이체' }));
+                        alert('텍스트를 읽을 수 없는 PDF(스캔본)입니다. 증빙으로만 첨부되니 집행일·금액·수취인을 직접 입력해주세요.');
+                        return;
+                    }
+                    setFormData(prev => ({
+                        ...prev,
+                        execution_date: parsed.execution_date || prev.execution_date,
+                        amount: parsed.amount != null ? String(parsed.amount) : prev.amount,
+                        recipient: parsed.recipient || prev.recipient,
+                        description: parsed.description || prev.description,
+                        payment_method: '계좌이체'
+                    }));
+                    if (parsed.warnings.length > 0) alert('일부 항목을 읽지 못했습니다: ' + parsed.warnings.join(', ') + '\n직접 입력해주세요.');
+                } catch (err) {
+                    console.error('입금확인증 PDF 읽기 실패:', file.name, err && err.name);
+                    alert(pdfReadErrorMsg(err) + '.');
+                }
+            };
+
+            // 입금확인증 PDF 여러 장 → 파싱 → 미리보기 행(본 행 + 수수료 행) 생성 (F-14)
+            const handleDepositPdfFiles = async (fileList) => {
+                const files = Array.from(fileList || []).filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+                if (files.length === 0) { alert('PDF 파일을 선택해주세요.'); return; }
+                if (!window.pdfjsLib) { alert('PDF 라이브러리가 로드되지 않았습니다. 새로고침 후 다시 시도해주세요.'); return; }
+                setPdfParseProgress({ done: 0, total: files.length });
+                const rows = [];
+                const errors = [];
+                const seen = new Set(); // 업로드 내 중복 키
+                const worker = new window.pdfjsLib.PDFWorker(); // 배치당 워커 1개 재사용
+                try {
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        try {
+                            const parsed = parseDepositConfirmation(await extractPdfTextLines(file, worker), file.name);
+                            const complete = !!parsed.execution_date && parsed.amount != null;
+                            const dup = complete ? findDuplicateExecution(data.budgetExecutions, parsed) : null;
+                            const dupInUpload = complete && seen.has(executionDupKey(parsed));
+                            if (complete) seen.add(executionDupKey(parsed));
+                            const base = { _pdfFile: file, execution_date: parsed.execution_date, subcategory_id: '', budget_item_id: '', payment_method: '계좌이체' };
+                            rows.push({
+                                ...base, _idx: rows.length, _kind: 'pdf', _bankIn: parsed.bankIn,
+                                _warnings: dupInUpload ? [...parsed.warnings, '업로드 내 중복'] : parsed.warnings,
+                                _dup: dup, _selected: !dup && !dupInUpload,
+                                amount: parsed.amount != null ? String(parsed.amount) : '',
+                                recipient: parsed.recipient,
+                                description: parsed.description
+                            });
+                            if (parsed.fee > 0) {
+                                rows.push({
+                                    ...base, _idx: rows.length, _kind: 'fee', _feeOf: rows.length - 1, _feeLinked: true, _selected: true,
+                                    amount: String(parsed.fee),
+                                    recipient: '신한은행',
+                                    description: parsed.description ? `이체수수료 · ${parsed.description}` : '이체수수료'
+                                });
+                            }
+                        } catch (err) {
+                            console.error('입금확인증 PDF 읽기 실패:', file.name, err && err.name);
+                            errors.push(`${file.name}: ${pdfReadErrorMsg(err)}`);
+                        }
+                        setPdfParseProgress({ done: i + 1, total: files.length });
+                    }
+                } finally {
+                    worker.destroy();
+                    setPdfParseProgress(null);
+                }
+                if (rows.length === 0) { alert('읽을 수 있는 PDF가 없습니다.' + (errors.length ? '\n' + errors.join('\n') : '')); return; }
+                setBankImportRows(rows);
+                setBankImportStep('preview');
+                if (errors.length > 0) alert('읽지 못한 파일:\n' + errors.join('\n'));
+            };
 
             const [calculatorAmount, setCalculatorAmount] = useState('');
             const [calculationResult, setCalculationResult] = useState(null);
@@ -5150,6 +5371,39 @@
                 }
 
                 return docs;
+            };
+
+            // 계좌이체 증빙 슬롯 이름: 유형별 필수 서류 중 이체 항목, 없으면 '이체확인증' (F-14)
+            const pickTransferDocName = (type) =>
+                getRequiredDocuments(type, '계좌이체').find(d => /이체(내역서|확인증|증)/.test(d)) || '이체확인증';
+            // 단건 등록 폼: 자동입력된 PDF가 들어갈 증빙 슬롯 (예산 항목 선택 전엔 null)
+            const autoDocName = formPdfEvidence ? pickTransferDocName(formData.type) : null;
+
+            // 증빙 파일 1개 업로드 → documents 행 (storage 실패 시 throw). 단건·수수료·일괄·집행내역 탭 공용
+            const uploadExecutionDoc = async (execId, docName, file, tag = '') => {
+                const filePath = `execution/${execId}/${Date.now()}_${tag}${safeFileName(file.name)}`;
+                const { data: storageData, error } = await supabase.storage.from('attachments').upload(filePath, file);
+                if (error) throw error;
+                return {
+                    execution_id: execId, document_name: docName, document_type: 'required',
+                    file_path: storageData?.path || filePath, file_name: file.name, file_size: file.size, uploaded_by: currentUser.id
+                };
+            };
+            // 집행내역 탭 증빙 맵에 병합 (전체 로드 전이면 탭 진입 시 재조회로 덮어써짐)
+            const mergeExecutionDocs = (docRows) => setExecutionDocsMap(prev => {
+                const next = { ...prev };
+                docRows.forEach(d => {
+                    next[d.execution_id] = { ...(next[d.execution_id] || {}), [d.document_name]: { file_path: d.file_path, file_name: d.file_name, file_size: d.file_size } };
+                });
+                return next;
+            });
+            // documents 행 insert + 맵 병합. 실패 시 error 반환
+            const insertExecutionDocs = async (docRows) => {
+                if (docRows.length === 0) return null;
+                const { error } = await supabase.from('documents').insert(docRows);
+                if (error) console.error('documents insert 실패:', error);
+                else mergeExecutionDocs(docRows);
+                return error;
             };
 
             // 시기별 예산 조회 헬퍼
@@ -5673,8 +5927,7 @@
 
             // 집행 내역 탭: 증빙서류 업로드 현황 로드
             useEffect(() => {
-                if (budgetTab !== 'history') return;
-                if (Object.keys(executionDocsMap).length > 0) return;
+                if (budgetTab !== 'history' || executionDocsLoaded) return;
                 const loadDocs = async () => {
                     try {
                         const { data: docs } = await supabase
@@ -5687,6 +5940,7 @@
                             map[d.execution_id][d.document_name] = d;
                         });
                         setExecutionDocsMap(map);
+                        setExecutionDocsLoaded(true);
                     } catch (err) {
                         console.error('Error loading execution documents:', err);
                     }
@@ -9209,9 +9463,33 @@
 
                             {budgetTab === 'register' && (
                                 <div>
-                                    <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px' }}>
-                                        📝 예산 집행 등록
-                                    </h2>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>
+                                            📝 예산 집행 등록
+                                        </h2>
+                                        {/* 입금확인증 PDF 자동입력 (F-14) */}
+                                        <input
+                                            ref={pdfAutofillInputRef}
+                                            type="file"
+                                            accept="application/pdf,.pdf"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                e.target.value = '';
+                                                if (file) handleFormPdfAutofill(file);
+                                            }}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            style={{ fontSize: '13px' }}
+                                            disabled={!window.pdfjsLib}
+                                            title="신한은행 입금확인증 PDF에서 집행일·금액·수취인·집행내용을 읽어 채웁니다"
+                                            onClick={() => pdfAutofillInputRef.current?.click()}
+                                        >
+                                            📎 입금확인증 PDF로 자동입력
+                                        </button>
+                                    </div>
 
                                     <div className="form-grid">
                                         <div className="form-group">
@@ -9324,6 +9602,15 @@
                                             value={formData.description}
                                             onChange={(e) => setFormData({...formData, description: e.target.value})}
                                         />
+                                        {formPdfEvidence && (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '8px', padding: '8px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '12px', color: '#1e40af' }}>
+                                                <span>
+                                                    📎 자동입력됨: <strong>{formPdfEvidence.file.name}</strong> → 등록 시 이체 증빙으로 첨부됩니다
+                                                    {formPdfEvidence.parsed.fee > 0 ? ` · 수수료 ${fmt(formPdfEvidence.parsed.fee)}원 (등록 후 추가 등록 여부 확인)` : ''}
+                                                </span>
+                                                <button type="button" className="btn btn-secondary" style={{ fontSize: '11px', padding: '2px 8px' }} onClick={() => setFormPdfEvidence(null)}>해제</button>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* 필요 서류 첨부 */}
@@ -9340,7 +9627,7 @@
                                             </h4>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                 {getRequiredDocuments(formData.type, formData.payment_method).map((doc, index) => {
-                                                    const attachedFile = formDocFiles[doc];
+                                                    const attachedFile = formDocFiles[doc] || (doc === autoDocName ? formPdfEvidence.file : null);
                                                     return (
                                                         <div key={index} style={{
                                                             display: 'flex',
@@ -9464,37 +9751,19 @@
                                                         return;
                                                     }
 
-                                                    // 서류 첨부파일 병렬 업로드
+                                                    // 서류 첨부파일 병렬 업로드 (수동 첨부 우선, 같은 슬롯이 비어 있으면 자동입력 PDF를 이체 증빙으로)
                                                     const docEntries = Object.entries(formDocFiles);
+                                                    if (autoDocName && !formDocFiles[autoDocName]) docEntries.push([autoDocName, formPdfEvidence.file]);
                                                     if (inserted?.id && docEntries.length > 0) {
-                                                        const baseTs = Date.now();
                                                         const uploadResults = await Promise.allSettled(
-                                                            docEntries.map(async ([docName, file], i) => {
-                                                                const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
-                                                                const filePath = `execution/${inserted.id}/${baseTs}_${i}_${safeName}`;
-                                                                const { data: storageData, error: storageError } = await supabase.storage
-                                                                    .from('attachments').upload(filePath, file);
-                                                                if (storageError) throw storageError;
-                                                                return {
-                                                                    execution_id: inserted.id,
-                                                                    document_name: docName,
-                                                                    document_type: 'required',
-                                                                    file_path: storageData?.path || filePath,
-                                                                    file_name: file.name,
-                                                                    file_size: file.size,
-                                                                    uploaded_by: currentUser.id
-                                                                };
-                                                            })
+                                                            docEntries.map(([docName, file], i) => uploadExecutionDoc(inserted.id, docName, file, `${i}_`))
                                                         );
-                                                        const docsToInsert = uploadResults
-                                                            .filter(r => r.status === 'fulfilled')
-                                                            .map(r => r.value);
-                                                        if (docsToInsert.length > 0) {
-                                                            await supabase.from('documents').insert(docsToInsert);
-                                                        }
+                                                        const docsToInsert = uploadResults.filter(r => r.status === 'fulfilled').map(r => r.value);
+                                                        const docErr = await insertExecutionDocs(docsToInsert);
                                                         const failed = uploadResults
                                                             .map((r, i) => r.status === 'rejected' ? docEntries[i][0] : null)
                                                             .filter(Boolean);
+                                                        if (docErr) failed.push(...docsToInsert.map(d => d.document_name));
                                                         if (failed.length > 0) {
                                                             console.error('서류 첨부 실패:', failed);
                                                             alert(`⚠️ 일부 서류 첨부 실패:\n${failed.join('\n')}\n\n집행내역은 등록되었으니 나중에 다시 첨부해주세요.`);
@@ -9503,22 +9772,29 @@
 
                                                     alert('예산 집행이 성공적으로 등록되었습니다.');
 
-                                                    // 폼 초기화
-                                                    setFormData({
-                                                        subcategory_id: '',
-                                                        subcategory_name: '',
-                                                        category_name: '',
-                                                        budget_item_id: '',
-                                                        budget_item_name: '',
-                                                        type: '',
-                                                        description: '',
-                                                        amount: '',
-                                                        payment_method: '',
-                                                        execution_date: new Date().toISOString().split('T')[0],
-                                                        recipient: ''
-                                                    });
-                                                    setFormDocFiles({});
-                                                    activeFormDocNameRef.current = null;
+                                                    // 입금확인증 수수료 → 같은 예산항목으로 별도 건 추가 등록 (F-14)
+                                                    const pdfFee = formPdfEvidence?.parsed?.fee || 0;
+                                                    if (inserted?.id && pdfFee > 0 && confirm(`이체수수료 ${fmt(pdfFee)}원을 같은 예산항목으로 추가 등록할까요?`)) {
+                                                        try {
+                                                            const feeData = { ...insertData, amount: pdfFee, recipient: '신한은행', description: `이체수수료 · ${insertData.description}` };
+                                                            const { data: feeInserted, error: feeError } = await supabase
+                                                                .from('budget_executions').insert([feeData]).select().single();
+                                                            if (feeError) throw feeError;
+                                                            if (feeInserted?.id) {
+                                                                try {
+                                                                    await insertExecutionDocs([await uploadExecutionDoc(feeInserted.id, autoDocName, formPdfEvidence.file, 'fee_')]);
+                                                                } catch (docErr) {
+                                                                    console.error('수수료 증빙 첨부 실패:', docErr);
+                                                                }
+                                                            }
+                                                            alert(`이체수수료 ${fmt(pdfFee)}원이 추가 등록되었습니다.`);
+                                                        } catch (feeErr) {
+                                                            console.error('수수료 추가 등록 오류:', feeErr);
+                                                            alert('수수료 추가 등록 중 오류가 발생했습니다: ' + (feeErr.message || ''));
+                                                        }
+                                                    }
+
+                                                    resetRegisterForm();
                                                     // 데이터 새로고침
                                                     await refreshExecutions();
 
@@ -9532,23 +9808,7 @@
                                         </button>
                                         <button
                                             className="btn btn-secondary"
-                                            onClick={() => {
-                                                setFormData({
-                                                    subcategory_id: '',
-                                                    subcategory_name: '',
-                                                    category_name: '',
-                                                    budget_item_id: '',
-                                                    budget_item_name: '',
-                                                    type: '',
-                                                    description: '',
-                                                    amount: '',
-                                                    payment_method: '',
-                                                    execution_date: new Date().toISOString().split('T')[0],
-                                                    recipient: ''
-                                                });
-                                                setFormDocFiles({});
-                                                activeFormDocNameRef.current = null;
-                                            }}
+                                            onClick={resetRegisterForm}
                                         >
                                             🔄 초기화
                                         </button>
@@ -9558,11 +9818,57 @@
 
                             {budgetTab === 'import' && (
                                 <div>
-                                    <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 16 }}>📥 은행 엑셀 일괄등록</h2>
-                                    <p style={{ color: '#666', fontSize: 13, marginBottom: 20 }}>은행에서 다운로드한 거래내역 엑셀 파일을 업로드하여 집행내역을 일괄 등록합니다.</p>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                                        <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>📥 일괄등록</h2>
+                                        <div style={{ display: 'flex', gap: 6 }}>
+                                            {[{ id: 'pdf', label: '📄 입금확인증 PDF' }, { id: 'excel', label: '📊 은행 거래내역 엑셀' }].map(src => (
+                                                <button key={src.id} type="button"
+                                                    className={`btn ${bankImportSource === src.id ? 'btn-primary' : 'btn-secondary'}`}
+                                                    style={{ fontSize: 13, padding: '6px 14px' }}
+                                                    disabled={!!pdfParseProgress}
+                                                    onClick={() => {
+                                                        if (bankImportSource === src.id) return;
+                                                        if (bankImportStep !== 'upload' && !confirm('현재 미리보기를 지우고 소스를 바꿀까요?')) return;
+                                                        setBankImportSource(src.id);
+                                                        resetBankImport();
+                                                    }}>
+                                                    {src.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <p style={{ color: '#666', fontSize: 13, marginBottom: 20 }}>
+                                        {bankImportSource === 'pdf'
+                                            ? '신한은행 인터넷뱅킹에서 저장한 입금확인증 PDF를 올리면 집행일·금액·수취인·집행내용이 자동으로 채워집니다. 이체 수수료는 별도 건으로 함께 등록되며, 계좌번호는 저장하지 않습니다.'
+                                            : '은행에서 다운로드한 거래내역 엑셀 파일을 업로드하여 집행내역을 일괄 등록합니다.'}
+                                    </p>
 
-                                    {/* Step 1: Upload */}
-                                    {bankImportStep === 'upload' && (
+                                    {/* Step 1: Upload — 입금확인증 PDF */}
+                                    {bankImportStep === 'upload' && bankImportSource === 'pdf' && (
+                                        <div
+                                            style={{ textAlign: 'center', padding: '40px 20px', border: '2px dashed #d1d5db', borderRadius: 16, background: '#fafafa' }}
+                                            onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#0b98ff'; }}
+                                            onDragLeave={(e) => { e.currentTarget.style.borderColor = '#d1d5db'; }}
+                                            onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#d1d5db'; if (!pdfParseProgress) handleDepositPdfFiles(e.dataTransfer.files); }}
+                                        >
+                                            <p style={{ fontSize: 40, marginBottom: 12 }}>📄</p>
+                                            <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>입금확인증 PDF를 여기에 끌어다 놓거나 선택하세요</p>
+                                            <p style={{ fontSize: 12, color: '#999', marginBottom: 20 }}>여러 장 가능 · 신한은행 인터넷뱅킹 출력본 검증됨 · 계좌번호는 저장하지 않습니다</p>
+                                            <input type="file" accept="application/pdf,.pdf" multiple style={{ display: 'none' }} id="deposit-pdf-input"
+                                                onChange={(e) => { const picked = Array.from(e.target.files || []); e.target.value = ''; handleDepositPdfFiles(picked); }} />
+                                            <button className="btn btn-primary" style={{ padding: '12px 32px', fontSize: 14 }}
+                                                disabled={!!pdfParseProgress || !window.pdfjsLib}
+                                                onClick={() => document.getElementById('deposit-pdf-input').click()}>
+                                                {pdfParseProgress ? `⏳ ${pdfParseProgress.done} / ${pdfParseProgress.total} 장 읽는 중…` : '파일 선택'}
+                                            </button>
+                                            {!window.pdfjsLib && (
+                                                <p style={{ fontSize: 12, color: '#dc2626', marginTop: 12 }}>PDF 라이브러리를 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.</p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Step 1: Upload — 은행 엑셀 */}
+                                    {bankImportStep === 'upload' && bankImportSource === 'excel' && (
                                         <div style={{ textAlign: 'center', padding: '40px 20px', border: '2px dashed #d1d5db', borderRadius: 16, background: '#fafafa' }}>
                                             <p style={{ fontSize: 40, marginBottom: 12 }}>📄</p>
                                             <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>엑셀 파일을 선택하세요</p>
@@ -9602,6 +9908,7 @@
                                                                 .filter(r => r.some(c => c !== '' && c != null))
                                                                 .map((r, i) => ({
                                                                     _idx: i,
+                                                                    _kind: 'excel',
                                                                     _raw: r,
                                                                     _selected: true,
                                                                     subcategory_id: '',
@@ -9632,23 +9939,52 @@
                                             const idx = parseInt(cm[key]);
                                             return (!isNaN(idx) && row._raw[idx] != null) ? row._raw[idx] : '';
                                         };
-                                        const fmtDate = (v) => {
-                                            if (!v) return '';
-                                            if (v instanceof Date) return v.toISOString().slice(0, 10);
-                                            const s = String(v).replace(/\./g, '-').replace(/\//g, '-').trim();
-                                            const m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-                                            return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : '';
-                                        };
                                         const parseAmt = (v) => {
                                             if (typeof v === 'number') return Math.abs(Math.round(v));
                                             return Math.abs(parseInt(String(v).replace(/[,\s원₩]/g, '')) || 0);
                                         };
+                                        // 행 종류별 값 접근 통일 (엑셀 행: _raw+열 매핑에서 렌더 시 파생 / PDF·수수료 행: 행 필드 직접)
+                                        const rowDate = r => r._kind === 'excel' ? normalizeDate(getVal(r, 'date')) : (r.execution_date || '');
+                                        const rowAmount = r => parseAmt(r._kind === 'excel' ? getVal(r, 'amount') : r.amount);
+                                        const rowName = r => r._kind === 'excel' ? String(getVal(r, 'name') || '') : (r.recipient || '');
+                                        const rowIsWithdraw = r => r._kind === 'excel' ? /출금|지급|이체/.test(String(getVal(r, 'type'))) : true;
+                                        // 행 편집 단일 진입점: PDF 본 행은 중복 재검사, 수수료 행은 매핑 직접 지정 시 연동 해제,
+                                        // 본 행 → 수수료 행 전파(날짜는 항상, 소분류/항목은 연동 중일 때만)
+                                        const updateRow = (ri, patch) => setBankImportRows(prev => prev.map((r, i) => {
+                                            if (i === ri) {
+                                                const next = { ...r, ...patch };
+                                                if (r._kind === 'pdf') {
+                                                    const amt = parseAmt(next.amount);
+                                                    next._dup = next.execution_date && amt > 0 ? findDuplicateExecution(data.budgetExecutions, { ...next, amount: amt }) : null;
+                                                }
+                                                if (r._kind === 'fee' && ('subcategory_id' in patch || 'budget_item_id' in patch)) next._feeLinked = false;
+                                                return next;
+                                            }
+                                            if (r._kind === 'fee' && r._feeOf === ri) {
+                                                const follow = {};
+                                                if ('execution_date' in patch) follow.execution_date = patch.execution_date;
+                                                if (r._feeLinked) {
+                                                    if ('subcategory_id' in patch) follow.subcategory_id = patch.subcategory_id;
+                                                    if ('budget_item_id' in patch) follow.budget_item_id = patch.budget_item_id;
+                                                }
+                                                return Object.keys(follow).length ? { ...r, ...follow } : r;
+                                            }
+                                            return r;
+                                        }));
                                         const allSubcats = getAllSubcategories();
                                         const selectedCount = bankImportRows.filter(r => r._selected).length;
+                                        const feeCount = bankImportRows.filter(r => r._kind === 'fee').length;
+                                        const isPdfSource = bankImportSource === 'pdf';
+                                        const thStyle = (extra) => ({ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', ...extra });
+                                        const cellInput = { width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 };
+                                        const pill = (bg, color, text, key) => (
+                                            <span key={key} style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: bg, color, marginRight: 4, marginBottom: 2, whiteSpace: 'nowrap' }}>{text}</span>
+                                        );
 
                                         return (
                                         <div>
-                                            {/* Column Mapping */}
+                                            {/* Column Mapping (엑셀 소스만) */}
+                                            {!isPdfSource && (
                                             <div className="card" style={{ marginBottom: 16, padding: 16 }}>
                                                 <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>열 매핑 설정</h3>
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
@@ -9669,49 +10005,67 @@
                                                     ))}
                                                 </div>
                                             </div>
+                                            )}
 
                                             {/* Actions Bar */}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                                     <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}
-                                                        onClick={() => { setBankImportStep('upload'); setBankImportRows([]); setBankHeaders([]); }}>
+                                                        onClick={resetBankImport}>
                                                         ← 다시 업로드
                                                     </button>
-                                                    <span style={{ fontSize: 13, color: '#666' }}>총 {bankImportRows.length}건 중 <strong>{selectedCount}건</strong> 선택</span>
+                                                    <span style={{ fontSize: 13, color: '#666' }}>
+                                                        총 {bankImportRows.length}건{feeCount > 0 ? ` (수수료 ${feeCount}건 포함)` : ''} 중 <strong>{selectedCount}건</strong> 선택
+                                                    </span>
                                                 </div>
                                                 <button className="btn btn-primary" style={{ padding: '10px 24px', fontSize: 14 }}
                                                     disabled={selectedCount === 0}
                                                     onClick={async () => {
                                                         const toInsert = bankImportRows.filter(r => r._selected && r.subcategory_id && r.budget_item_id);
                                                         if (toInsert.length === 0) { alert('예산항목이 매핑된 건이 없습니다. 소분류와 항목을 선택해주세요.'); return; }
-                                                        if (!confirm(`${toInsert.length}건을 일괄 등록하시겠습니까?`)) return;
+                                                        const feeSel = toInsert.filter(r => r._kind === 'fee').length;
+                                                        if (!confirm(`${toInsert.length}건${feeSel > 0 ? ` (수수료 ${feeSel}건 포함)` : ''}을 일괄 등록하시겠습니까?`)) return;
                                                         try {
+                                                            // id를 클라이언트에서 부여 → 증빙 첨부 시 서버 반환 순서에 의존하지 않음
                                                             const insertRows = toInsert.map(r => {
                                                                 const sub = allSubcats.find(s => s.id === r.subcategory_id);
                                                                 const item = sub ? sub.items.find(it => it.id === r.budget_item_id) : null;
                                                                 const cat = effectiveBudgetData.categories.find(c => c.subcategories.some(s => s.id === r.subcategory_id));
                                                                 if (!sub || !cat || !item) throw new Error(`행 ${r._idx + 1}: 필수 항목 매핑이 누락되었습니다.`);
-                                                                const session = JSON.parse(localStorage.getItem('bf_user_session') || '{}');
+                                                                const execDate = rowDate(r);
+                                                                const amount = rowAmount(r);
+                                                                if (r._kind !== 'excel' && (!execDate || !(amount > 0))) throw new Error(`행 ${r._idx + 1}: 날짜와 금액을 확인해주세요.`);
                                                                 return {
+                                                                    id: crypto.randomUUID(),
                                                                     subcategory_id: r.subcategory_id,
                                                                     subcategory_name: sub.name,
                                                                     category_name: cat.name,
                                                                     budget_item_id: r.budget_item_id,
                                                                     budget_item_name: item.name,
                                                                     type: item.type || '일반지출',
-                                                                    description: r.description || String(getVal(r, 'name') || '은행 거래'),
-                                                                    amount: parseAmt(getVal(r, 'amount')),
+                                                                    description: r.description || (r._kind === 'excel' ? String(getVal(r, 'name') || '은행 거래') : `${rowName(r)} 계좌이체`),
+                                                                    amount,
                                                                     payment_method: r.payment_method,
-                                                                    execution_date: fmtDate(getVal(r, 'date')) || new Date().toISOString().slice(0,10),
-                                                                    recipient: String(getVal(r, 'name') || ''),
+                                                                    execution_date: execDate || new Date().toISOString().slice(0,10),
+                                                                    recipient: rowName(r),
                                                                     status: 'pending',
-                                                                    created_by: session.id || null,
+                                                                    created_by: currentUser.id,
                                                                     project_id: activeProject?.id || null
                                                                 };
                                                             });
                                                             const { error } = await supabase.from('budget_executions').insert(insertRows);
                                                             if (error) throw error;
-                                                            alert(`${insertRows.length}건 일괄 등록 완료!`);
+
+                                                            // PDF 원본을 이체 증빙으로 첨부 (F-14)
+                                                            const jobs = toInsert.map((r, i) => ({ r, i })).filter(({ r }) => r._pdfFile);
+                                                            const results = await Promise.allSettled(jobs.map(({ r, i }) =>
+                                                                uploadExecutionDoc(insertRows[i].id, pickTransferDocName(insertRows[i].type), r._pdfFile, `${i}_`)));
+                                                            const docsToInsert = results.filter(x => x.status === 'fulfilled').map(x => x.value);
+                                                            const failedDocs = results.map((x, k) => x.status === 'rejected' ? jobs[k].r._pdfFile.name : null).filter(Boolean);
+                                                            if (failedDocs.length > 0) console.error('증빙 첨부 실패:', failedDocs);
+                                                            const docErr = await insertExecutionDocs(docsToInsert);
+                                                            if (docErr) failedDocs.push(...docsToInsert.map(d => d.file_name));
+                                                            setBulkRegisterResult({ inserted: insertRows.length, attached: docErr ? 0 : docsToInsert.length, failedDocs });
                                                             setBankImportStep('done');
                                                             await refreshExecutions();
                                                         } catch (err) {
@@ -9727,70 +10081,94 @@
                                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                                                     <thead>
                                                         <tr style={{ background: '#f8f9fa' }}>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', width: 40 }}>
+                                                            <th style={thStyle({ textAlign: 'center', width: 40 })}>
                                                                 <input type="checkbox" checked={bankImportRows.every(r => r._selected)}
                                                                     onChange={e => setBankImportRows(prev => prev.map(r => ({...r, _selected: e.target.checked})))} />
                                                             </th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', width: 90 }}>날짜</th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'right', width: 100 }}>금액</th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', width: 70 }}>구분</th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', width: 100 }}>입출금자</th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>소분류</th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>예산항목</th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', width: 160 }}>설명</th>
-                                                            <th style={{ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', width: 80 }}>결제방법</th>
+                                                            <th style={thStyle({ width: isPdfSource ? 120 : 90 })}>날짜</th>
+                                                            <th style={thStyle({ textAlign: 'right', width: 100 })}>{isPdfSource ? '금액 (실지급액)' : '금액'}</th>
+                                                            <th style={thStyle({ textAlign: 'center', width: 70 })}>구분</th>
+                                                            <th style={thStyle({ width: 100 })}>{isPdfSource ? '수취인' : '입출금자'}</th>
+                                                            <th style={thStyle({})}>소분류</th>
+                                                            <th style={thStyle({})}>예산항목</th>
+                                                            <th style={thStyle({ width: 160 })}>설명</th>
+                                                            <th style={thStyle({ textAlign: 'center', width: 80 })}>결제방법</th>
+                                                            {isPdfSource && <th style={thStyle({ width: 150 })}>상태</th>}
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {bankImportRows.map((row, ri) => {
-                                                            const dateVal = fmtDate(getVal(row, 'date'));
-                                                            const amtVal = parseAmt(getVal(row, 'amount'));
-                                                            const typeVal = String(getVal(row, 'type'));
-                                                            const nameVal = String(getVal(row, 'name'));
-                                                            const isWithdraw = typeVal.includes('출금') || typeVal.includes('지급') || typeVal.includes('이체');
+                                                            const dateVal = rowDate(row);
+                                                            const amtVal = rowAmount(row);
+                                                            const nameVal = rowName(row);
+                                                            const isWithdraw = rowIsWithdraw(row);
+                                                            const isFee = row._kind === 'fee';
+                                                            const isPdfRow = row._kind === 'pdf';
                                                             const rowItems = row.subcategory_id ? getAllBudgetItems(row.subcategory_id) : [];
                                                             return (
-                                                            <tr key={ri} style={{ background: row._selected ? '#fff' : '#f9fafb', opacity: row._selected ? 1 : 0.5, borderBottom: '1px solid #f0f0f0' }}>
+                                                            <tr key={ri} style={{ background: !row._selected ? '#f9fafb' : (isFee ? '#fafafa' : '#fff'), opacity: row._selected ? 1 : 0.5, borderBottom: '1px solid #f0f0f0' }}>
                                                                 <td style={{ padding: '8px', textAlign: 'center' }}>
                                                                     <input type="checkbox" checked={row._selected}
-                                                                        onChange={() => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, _selected: !r._selected} : r))} />
+                                                                        onChange={() => updateRow(ri, { _selected: !row._selected })} />
                                                                 </td>
-                                                                <td style={{ padding: '8px', whiteSpace: 'nowrap', color: '#374151' }}>{dateVal}</td>
-                                                                <td style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: isWithdraw ? '#dc2626' : '#059669' }}>{fmt(amtVal)}</td>
+                                                                <td style={{ padding: '8px', whiteSpace: 'nowrap', color: '#374151' }}>
+                                                                    {isPdfRow
+                                                                        ? <input type="date" value={row.execution_date} style={{ ...cellInput, width: 'auto' }} onChange={e => updateRow(ri, { execution_date: e.target.value })} />
+                                                                        : (isFee ? <span>└ {dateVal}</span> : dateVal)}
+                                                                </td>
+                                                                <td style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: isWithdraw ? '#dc2626' : '#059669' }}>
+                                                                    {isPdfRow
+                                                                        ? <input type="text" inputMode="numeric" value={fmtInput(row.amount)} style={{ ...cellInput, textAlign: 'right' }} onChange={e => updateRow(ri, { amount: parseInput(e.target.value) })} />
+                                                                        : fmt(amtVal)}
+                                                                </td>
                                                                 <td style={{ padding: '8px', textAlign: 'center' }}>
-                                                                    <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                                                                        background: isWithdraw ? '#fef2f2' : '#f0fdf4', color: isWithdraw ? '#dc2626' : '#059669' }}>
-                                                                        {isWithdraw ? '출금' : '입금'}
-                                                                    </span>
+                                                                    {isFee
+                                                                        ? pill('#f5f3ff', '#6d28d9', '수수료')
+                                                                        : pill(isWithdraw ? '#fef2f2' : '#f0fdf4', isWithdraw ? '#dc2626' : '#059669', isWithdraw ? '출금' : '입금')}
                                                                 </td>
-                                                                <td style={{ padding: '8px', color: '#374151' }}>{nameVal}</td>
+                                                                <td style={{ padding: '8px', color: '#374151' }}>
+                                                                    {isPdfRow
+                                                                        ? <input type="text" value={row.recipient} placeholder="수취인" style={cellInput} onChange={e => updateRow(ri, { recipient: e.target.value })} />
+                                                                        : nameVal}
+                                                                </td>
                                                                 <td style={{ padding: '8px' }}>
-                                                                    <select value={row.subcategory_id} style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
-                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, subcategory_id: e.target.value, budget_item_id: ''} : r))}>
+                                                                    <select value={row.subcategory_id} style={cellInput}
+                                                                        onChange={e => updateRow(ri, { subcategory_id: e.target.value, budget_item_id: '' })}>
                                                                         <option value="">-- 선택 --</option>
                                                                         {allSubcats.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                                     </select>
                                                                 </td>
                                                                 <td style={{ padding: '8px' }}>
-                                                                    <select value={row.budget_item_id} style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
+                                                                    <select value={row.budget_item_id} style={cellInput}
                                                                         disabled={!row.subcategory_id}
-                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, budget_item_id: e.target.value} : r))}>
+                                                                        onChange={e => updateRow(ri, { budget_item_id: e.target.value })}>
                                                                         <option value="">-- 선택 --</option>
                                                                         {rowItems.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
                                                                     </select>
                                                                 </td>
                                                                 <td style={{ padding: '8px' }}>
                                                                     <input type="text" placeholder={nameVal || '설명 입력'} value={row.description}
-                                                                        style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
-                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, description: e.target.value} : r))} />
+                                                                        style={cellInput}
+                                                                        onChange={e => updateRow(ri, { description: e.target.value })} />
                                                                 </td>
                                                                 <td style={{ padding: '8px', textAlign: 'center' }}>
-                                                                    <select value={row.payment_method} style={{ padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }}
-                                                                        onChange={e => setBankImportRows(prev => prev.map((r, i) => i === ri ? {...r, payment_method: e.target.value} : r))}>
-                                                                        <option value="계좌이체">계좌이체</option>
-                                                                        <option value="카드">카드</option>
-                                                                    </select>
+                                                                    {row._kind === 'excel' ? (
+                                                                        <select value={row.payment_method} style={{ ...cellInput, width: 'auto' }}
+                                                                            onChange={e => updateRow(ri, { payment_method: e.target.value })}>
+                                                                            <option value="계좌이체">계좌이체</option>
+                                                                            <option value="카드">카드</option>
+                                                                        </select>
+                                                                    ) : <span style={{ fontSize: 11, color: '#374151' }}>계좌이체</span>}
                                                                 </td>
+                                                                {isPdfSource && (
+                                                                    <td style={{ padding: '8px' }}>
+                                                                        {isFee && pill('#f3f4f6', '#4b5563', row._feeLinked ? '본 행 항목 연동' : '항목 직접 지정')}
+                                                                        {isPdfRow && pill('#eff6ff', '#1d4ed8', '📎 PDF')}
+                                                                        {isPdfRow && row._bankIn && pill('#f0fdf4', '#166534', `🏦 ${row._bankIn}`)}
+                                                                        {isPdfRow && row._dup && pill('#fee2e2', '#991b1b', `⚠ 중복 의심 (기존 ${row._dup.execution_date} · ${fmt(row._dup.amount)})`)}
+                                                                        {isPdfRow && row._warnings.map((w, wi) => pill('#fef3c7', '#92400e', `⚠ ${w}`, wi))}
+                                                                    </td>
+                                                                )}
                                                             </tr>
                                                             );
                                                         })}
@@ -9802,13 +10180,23 @@
                                     })()}
 
                                     {/* Step 3: Done */}
-                                    {bankImportStep === 'done' && (
+                                    {bankImportStep === 'done' && bulkRegisterResult && (
                                         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
                                             <p style={{ fontSize: 48, marginBottom: 12 }}>✅</p>
-                                            <p style={{ fontSize: 18, fontWeight: 700, color: '#059669', marginBottom: 8 }}>일괄 등록 완료!</p>
+                                            <p style={{ fontSize: 18, fontWeight: 700, color: '#059669', marginBottom: 8 }}>
+                                                {bulkRegisterResult.inserted}건 등록{bulkRegisterResult.attached > 0 ? ` · 📎 증빙 ${bulkRegisterResult.attached}건 첨부` : ''}
+                                            </p>
                                             <p style={{ fontSize: 13, color: '#666', marginBottom: 24 }}>등록된 내역은 집행내역 탭에서 확인할 수 있습니다.</p>
+                                            {bulkRegisterResult.failedDocs.length > 0 && (
+                                                <div style={{ display: 'inline-block', textAlign: 'left', background: '#FEF3CD', border: '1px solid #F6E05E', borderRadius: 8, padding: '10px 16px', marginBottom: 24, fontSize: 13 }}>
+                                                    ⚠️ 증빙 첨부 실패 — 집행내역 탭에서 다시 첨부해주세요:
+                                                    <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+                                                        {bulkRegisterResult.failedDocs.map((n, i) => <li key={i}>{n}</li>)}
+                                                    </ul>
+                                                </div>
+                                            )}
                                             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                                                <button className="btn btn-secondary" onClick={() => { setBankImportStep('upload'); setBankImportRows([]); setBankHeaders([]); }}>
+                                                <button className="btn btn-secondary" onClick={resetBankImport}>
                                                     📥 추가 업로드
                                                 </button>
                                                 <button className="btn btn-primary" onClick={() => setBudgetTab('history')}>
@@ -10291,7 +10679,7 @@
                                     </div>
 
                                     {/* 증빙서류 미비 경고 (docs 로딩 완료 후에만 표시) */}
-                                    {Object.keys(executionDocsMap).length > 0 && (() => {
+                                    {executionDocsLoaded && (() => {
                                         const missingDocs = (data?.budgetExecutions || []).filter(e => {
                                             if (!DOCUMENT_RULES[e.type]) return false;
                                             const required = getRequiredDocuments(e.type, e.payment_method);
@@ -10414,6 +10802,20 @@
                                             const si = EXECUTION_STATUS[execution.status] || EXECUTION_STATUS.pending;
                                             const isEditing = editingExecution?.id === execution.id;
                                             const isDeleteConfirm = executionDeleteId === execution.id;
+                                            const requiredDocs = getRequiredDocuments(execution.type, execution.payment_method);
+                                            const execDocs = executionDocsMap[execution.id] || {};
+                                            // 필수 목록에 없는 문서명(예: 규칙 없는 유형에 첨부된 '이체확인증')도 표시 (F-14)
+                                            const extraDocs = Object.entries(execDocs).filter(([name, rec]) => !requiredDocs.includes(name) && rec?.file_name);
+                                            const docDownloadBtn = (rec) => (
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    style={{ fontSize: '12px', padding: '3px 10px', color: '#1B6B5A', borderColor: '#1B6B5A', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                                    onClick={() => downloadFile(rec.file_path, rec.file_name)}
+                                                    title={rec.file_name}
+                                                >
+                                                    ⬇️ {rec.file_name}
+                                                </button>
+                                            );
                                             return (
                                         <div key={execution.id} className="execution-item" style={{ position: 'relative' }}>
                                             {/* 체크박스 */}
@@ -10614,33 +11016,15 @@
                                                     </button>
                                                 </div>
                                             )}
-                                            {!isEditing && DOCUMENT_RULES[execution.type] && (
+                                            {!isEditing && (requiredDocs.length > 0 || extraDocs.length > 0) && (
                                                 <div className="documents-list">
-                                                    <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>
-                                                    {getRequiredDocuments(execution.type, execution.payment_method).map((doc, index) => {
-                                                        const docRecord = executionDocsMap[execution.id]?.[doc];
+                                                    {requiredDocs.length > 0 && <div style={{ fontWeight: '600', marginBottom: '8px' }}>필요 증빙서류:</div>}
+                                                    {requiredDocs.map((doc, index) => {
+                                                        const docRecord = execDocs[doc];
                                                         return (
                                                             <div key={index} className="document-item">
                                                                 <span>📄 {doc}</span>
-                                                                {docRecord?.file_name ? (
-                                                                    <button
-                                                                        className="btn btn-secondary"
-                                                                        style={{
-                                                                            fontSize: '12px',
-                                                                            padding: '3px 10px',
-                                                                            color: '#1B6B5A',
-                                                                            borderColor: '#1B6B5A',
-                                                                            maxWidth: '200px',
-                                                                            overflow: 'hidden',
-                                                                            textOverflow: 'ellipsis',
-                                                                            whiteSpace: 'nowrap'
-                                                                        }}
-                                                                        onClick={() => downloadFile(docRecord.file_path, docRecord.file_name)}
-                                                                        title={docRecord.file_name}
-                                                                    >
-                                                                        ⬇️ {docRecord.file_name}
-                                                                    </button>
-                                                                ) : (
+                                                                {docRecord?.file_name ? docDownloadBtn(docRecord) : (
                                                                     <button
                                                                         className="btn btn-secondary"
                                                                         style={{ fontSize: '12px', padding: '3px 10px', flexShrink: 0 }}
@@ -10655,6 +11039,17 @@
                                                             </div>
                                                         );
                                                     })}
+                                                    {extraDocs.length > 0 && (
+                                                        <div style={{ marginTop: '8px' }}>
+                                                            <div style={{ fontWeight: '600', marginBottom: '6px', fontSize: '13px', color: '#666' }}>기타 첨부 증빙:</div>
+                                                            {extraDocs.map(([name, rec]) => (
+                                                                <div key={name} className="document-item">
+                                                                    <span>📄 {name}</span>
+                                                                    {docDownloadBtn(rec)}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -10672,32 +11067,8 @@
                                             activeDocUploadRef.current = null;
                                             if (!file || !execId || !docName) return;
                                             try {
-                                                const timestamp = Date.now();
-                                                const safeName = file.name.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
-                                                const filePath = `execution/${execId}/${timestamp}_${safeName}`;
-                                                const { data: storageData, error: storageError } = await supabase.storage
-                                                    .from('attachments')
-                                                    .upload(filePath, file);
-                                                if (storageError) throw storageError;
-                                                const { error: dbError } = await supabase
-                                                    .from('documents')
-                                                    .insert([{
-                                                        execution_id: execId,
-                                                        document_name: docName,
-                                                        document_type: 'required',
-                                                        file_path: storageData?.path || filePath,
-                                                        file_name: file.name,
-                                                        file_size: file.size,
-                                                        uploaded_by: currentUser.id
-                                                    }]);
+                                                const dbError = await insertExecutionDocs([await uploadExecutionDoc(execId, docName, file)]);
                                                 if (dbError) throw dbError;
-                                                setExecutionDocsMap(prev => ({
-                                                    ...prev,
-                                                    [execId]: {
-                                                        ...(prev[execId] || {}),
-                                                        [docName]: { file_path: storageData?.path || filePath, file_name: file.name, file_size: file.size }
-                                                    }
-                                                }));
                                             } catch (err) {
                                                 console.error('문서 첨부 실패:', err);
                                                 alert('파일 첨부 중 오류가 발생했습니다.');
