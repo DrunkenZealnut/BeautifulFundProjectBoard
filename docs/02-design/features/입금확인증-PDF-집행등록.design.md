@@ -306,7 +306,7 @@ const findDuplicateExecution = (executions, cand) => {
      dup = findDuplicateExecution(data.budgetExecutions, parsed)
      base = { _pdfFile, execution_date, subcategory_id:'', budget_item_id:'', payment_method:'계좌이체' }  // 두 행 공통
      rows.push({ ...base, _kind:'pdf', _bankIn, _warnings, _dup, _selected: !dup && !dupInUpload, amount, recipient, description })
-     if (parsed.fee > 0) rows.push({ ...base, _kind:'fee', _feeOf: 본 행 인덱스, _feeLinked: true, _selected: true, amount: fee, recipient:'신한은행', description })
+     if (parsed.fee > 0) rows.push({ ...base, _kind:'fee', _feeOf: 본 행 인덱스, _feeLinked: true, _selected: 본 행과 동일(!dup && !dupInUpload), amount: fee, recipient:'신한은행', description })   // 중복 PDF면 수수료 행만 등록되는 일 방지
      setPdfParseProgress({ done: i + 1, total })
 4. 업로드 내 중복 표시 (본 행끼리)
 5. rows가 하나도 없으면(전부 실패) alert만 하고 upload 단계 유지; 있으면 setBankImportRows(rows); setBankImportStep('preview'); setPdfParseProgress(null)
@@ -468,7 +468,7 @@ const uploadExecutionDoc = async (execId, docName, file, tag = '') => {   // sto
              file_path: storageData?.path || filePath, file_name: file.name, file_size: file.size, uploaded_by: currentUser.id };
 };
 const mergeExecutionDocs = (docRows) => setExecutionDocsMap(prev => { /* 무조건 병합 */ });
-const insertExecutionDocs = async (docRows) => { /* documents insert → 성공 시 mergeExecutionDocs; error 반환 */ };
+const insertExecutionDocs = async (docRows) => { /* documents insert → 성공 시 mergeExecutionDocs; 실패 시 업로드한 file_path를 storage에서 remove(계좌정보 PDF 고아 방지); error 반환 */ };
 ```
 
 - `safeFileName`은 최상위 유틸(`fmtInput` 옆). 경로 규칙은 기존 단건 폼과 동일 (`execution/{id}/{ts}_{tag}{safeName}`)

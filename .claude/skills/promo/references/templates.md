@@ -10,7 +10,7 @@ variant: cover          # 템플릿별 옵션 (card-square: cover)
 slots:
   title: "…"
   items: [{ n: "1회", text: "…" }]
-  logo_org: "../../brand/logo/org.svg"    # yaml 위치 기준 상대경로
+  logo_org: "../../../brand/logo/org.svg"    # yaml 위치 기준 상대경로 (_samples/·out/<id>/visual/ 모두 content/brand)
 raw: {}                 # HTML 그대로 넣을 슬롯 (예: qr)
 ```
 

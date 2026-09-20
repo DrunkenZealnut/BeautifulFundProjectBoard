@@ -5267,7 +5267,7 @@
                             });
                             if (parsed.fee > 0) {
                                 rows.push({
-                                    ...base, _idx: rows.length, _kind: 'fee', _feeOf: rows.length - 1, _feeLinked: true, _selected: true,
+                                    ...base, _idx: rows.length, _kind: 'fee', _feeOf: rows.length - 1, _feeLinked: true, _selected: !dup && !dupInUpload,
                                     amount: String(parsed.fee),
                                     recipient: '신한은행',
                                     description: parsed.description ? `이체수수료 · ${parsed.description}` : '이체수수료'
@@ -5401,8 +5401,17 @@
             const insertExecutionDocs = async (docRows) => {
                 if (docRows.length === 0) return null;
                 const { error } = await supabase.from('documents').insert(docRows);
-                if (error) console.error('documents insert 실패:', error);
-                else mergeExecutionDocs(docRows);
+                if (error) {
+                    console.error('documents insert 실패:', error);
+                    // 문서 행 없이 storage에만 남은 PDF(계좌정보 포함) 정리
+                    const paths = docRows.map(d => d.file_path).filter(Boolean);
+                    if (paths.length > 0) {
+                        const { error: cleanupError } = await supabase.storage.from('attachments').remove(paths);
+                        if (cleanupError) console.error('증빙 storage 롤백 실패:', cleanupError);
+                    }
+                } else {
+                    mergeExecutionDocs(docRows);
+                }
                 return error;
             };
 

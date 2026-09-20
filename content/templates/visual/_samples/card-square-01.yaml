@@ -13,4 +13,4 @@ slots:
     - { n: "4회", text: "기초연구보고서 첫 공개" }
   cta: "참여 신청"
   credit: "아름다운재단 2026 공익단체 인큐베이팅 지원사업"
-  logo_org: "../../brand/logo/org.svg"
+  logo_org: "../../../brand/logo/org.svg"
