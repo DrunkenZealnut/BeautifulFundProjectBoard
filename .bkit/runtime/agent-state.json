@@ -2,12 +2,12 @@
   "version": "1.0",
   "enabled": false,
   "teamName": "",
-  "feature": "홍보콘텐츠-생성시스템",
+  "feature": "입금확인증-PDF-집행등록",
   "pdcaPhase": "check",
   "orchestrationPattern": "leader",
   "ctoAgent": "opus",
-  "startedAt": "2026-09-14T13:40:09.343Z",
-  "lastUpdated": "2026-09-16T07:57:20.775Z",
+  "startedAt": "2026-09-20T21:29:43.002Z",
+  "lastUpdated": "2026-09-20T21:54:37.363Z",
   "teammates": [],
   "progress": {
     "totalTasks": 0,
@@ -17,5 +17,5 @@
     "pendingTasks": 0
   },
   "recentMessages": [],
-  "sessionId": "33a8887b-82a3-4c24-9786-e70dd841badb"
+  "sessionId": "c6b24e9e-6dc5-402d-87b0-c4898eab3f1f"
 }

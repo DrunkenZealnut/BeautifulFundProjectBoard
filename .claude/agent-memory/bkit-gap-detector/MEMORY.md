@@ -47,3 +47,6 @@
 - Attendance data now dual-persisted: localStorage + Supabase system_settings (key: attendance_data)
 - All reports use window.print(), no programmatic PDF generation
 - Activity log filters: all 3 axes complete (user, action type, date range)
+
+### F-14 입금확인증 PDF (2026-09-20)
+- [F-14 gap analysis](f14_deposit_pdf_analysis.md) — 2026-09-20 iter 1: 94%, gaps are doc-only + one fee-row date bug
