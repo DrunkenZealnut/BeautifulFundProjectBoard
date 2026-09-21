@@ -1,0 +1,7 @@
+template: og-banner
+slots:
+  eyebrow: "교육·토론회"
+  title: "일하는 열아홉"
+  subtitle: "직업계고 청소년과 청년노동자의 일상, 4주간의 이야기"
+  org: "청년노동자인권센터"
+  credit: "아름다운재단 2026 공익단체 인큐베이팅 지원사업"

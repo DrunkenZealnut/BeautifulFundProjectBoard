@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="promo-size" content="1080x1080">
+<meta name="promo-slots" content='{"eyebrow":16,"title":18,"subtitle":48,"dates":34,"items":{"max":5,"n":6,"text":22},"cta":16,"credit":40}'>
+<!--
+  card-square — 1080×1080 카드뉴스 (인스타그램·페이스북)
+  슬롯: eyebrow · title · subtitle · dates · items[{n,text}] · cta · credit · logo_org · logo_funder
+  variant: "" (일반) | "cover" (표지: 제목 확대, 리스트 숨김)
+  글자 수: title 18자(2줄), subtitle 48자(2줄), items 5개×22자
+-->
+<link rel="stylesheet" href="../../brand/tokens.css">
+<style>
+  .card { width: 1080px; height: 1080px; position: relative; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; padding: var(--pad); }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 22px; background: var(--accent2); }
+  .card::after { content: ""; position: absolute; right: -180px; bottom: -180px; width: 520px; height: 520px; border-radius: 50%; background: var(--accent-soft); z-index: 0; }
+  .card > * { position: relative; z-index: 1; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 12px; }
+  .page { font-size: var(--t-caption); color: var(--muted); font-weight: 600; }
+  .title { margin-top: 20px; }
+  .cover .title { font-size: var(--t-display); margin-top: 32px; }
+  .sub { margin-top: 24px; max-width: 880px; }
+  .dates { margin-top: 28px; display: inline-flex; align-items: center; gap: 14px; }
+  .dates .chip { font-size: var(--t-body); padding: 0.3em 0.8em; }
+  .list { margin-top: 44px; display: flex; flex-direction: column; gap: 26px; }
+  .list:empty, .cover .list { display: none; }
+  .item { display: flex; align-items: center; gap: 22px; font-size: var(--t-body); font-weight: 600; }
+  .item .n { flex: 0 0 auto; min-width: 88px; padding: 6px 14px; border-radius: 10px; background: var(--accent); color: #fff; text-align: center; font-weight: 800; font-size: var(--t-caption); }
+  .cta { margin-top: auto; padding-top: 36px; font-size: var(--t-sub); font-weight: 800; color: var(--accent); }
+  .credit-row { margin-top: auto; padding-top: 24px; border-top: 1px solid var(--line); }
+  .cta + .credit-row { margin-top: 28px; }
+</style>
+</head>
+<body>
+<div class="card {{variant}}">
+  <div class="head">
+    <div class="eyebrow">{{eyebrow}}</div>
+    <div class="page">{{page}}</div>
+  </div>
+  <h1 class="title">{{title}}</h1>
+  {{#subtitle}}<p class="sub">{{subtitle}}</p>{{/subtitle}}
+  {{#dates}}<div class="dates"><span class="chip">{{dates}}</span></div>{{/dates}}
+  <div class="list">{{#items}}<div class="item"><span class="n">{{n}}</span><span>{{text}}</span></div>{{/items}}</div>
+  {{#cta}}<div class="cta">{{cta}} →</div>{{/cta}}
+  <div class="credit-row">
+    <div class="logos">
+      {{#logo_funder}}<img src="{{logo_funder}}" alt="아름다운재단">{{/logo_funder}}
+      {{#logo_org}}<img src="{{logo_org}}" alt="청년노동자인권센터">{{/logo_org}}
+      {{^logo_org}}<span class="wordmark">청년노동자인권센터</span>{{/logo_org}}
+    </div>
+    <div class="credit">{{credit}}</div>
+  </div>
+</div>
+</body>
+</html>

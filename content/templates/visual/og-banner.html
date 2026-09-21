@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="promo-size" content="1200x630">
+<meta name="promo-slots" content='{"eyebrow":16,"title":24,"subtitle":40,"org":20,"credit":40}'>
+<!--
+  og-banner — 1200×630 링크 공유 (OG 이미지, 카카오톡·페이스북 미리보기)
+  슬롯: eyebrow · title · subtitle · org · credit · logo_org · logo_funder
+  좌: 텍스트 / 우: 컬러 블록
+-->
+<link rel="stylesheet" href="../../brand/tokens.css">
+<style>
+  :root { --t-title: 58px; --t-sub: 28px; --t-caption: 20px; --pad: 64px; }
+  .card { width: 1200px; height: 630px; position: relative; overflow: hidden; background: var(--bg); display: grid; grid-template-columns: 1fr 380px; }
+  .left { padding: var(--pad); display: flex; flex-direction: column; }
+  .title { margin-top: 18px; }
+  .sub { margin-top: 18px; color: #444; }
+  .credit-row { margin-top: auto; padding-top: 24px; border-top: 1px solid var(--line); }
+  .right { position: relative; background: var(--accent); overflow: hidden; }
+  .right::before { content: ""; position: absolute; left: -90px; top: 90px; width: 300px; height: 300px; border-radius: 50%; background: var(--accent2); }
+  .right::after { content: ""; position: absolute; right: -80px; bottom: -120px; width: 320px; height: 320px; border-radius: 60px; background: rgba(255,255,255,0.18); transform: rotate(12deg); }
+  .right .org { position: absolute; left: 32px; bottom: 36px; color: #fff; font-weight: 800; font-size: var(--t-caption); z-index: 1; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="left">
+    <div class="eyebrow">{{eyebrow}}</div>
+    <h1 class="title">{{title}}</h1>
+    {{#subtitle}}<p class="sub">{{subtitle}}</p>{{/subtitle}}
+    <div class="credit-row">
+      <div class="logos">
+        {{#logo_funder}}<img src="{{logo_funder}}" alt="아름다운재단">{{/logo_funder}}
+        {{#logo_org}}<img src="{{logo_org}}" alt="청년노동자인권센터">{{/logo_org}}
+        {{^logo_org}}<span class="wordmark">청년노동자인권센터</span>{{/logo_org}}
+      </div>
+      <div class="credit">{{credit}}</div>
+    </div>
+  </div>
+  <div class="right"><div class="org">{{org}}</div></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="promo-size" content="794x1123">
+<meta name="promo-print" content="A4">
+<meta name="promo-slots" content='{"eyebrow":16,"title":24,"lead":80,"facts":{"max":4,"k":6,"v":30},"sections":{"max":4,"h":14,"body":200},"contact_note":40,"credit":40}'>
+<!--
+  notice-a4 — A4 세로 안내문 (동아리 모집·프로그램 안내, 텍스트 중심). pdf + preview.png
+  슬롯: eyebrow · title · lead · facts[{k,v}] (대상/일정/장소/신청 등 요약표) · sections[{h,body}] · contact_note · credit · logo_org · logo_funder
+-->
+<link rel="stylesheet" href="../../brand/tokens.css">
+<style>
+  @page { size: A4; margin: 0; }
+  html, body { width: 210mm; height: 297mm; }
+  .sheet { width: 210mm; height: 297mm; position: relative; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); padding: var(--pad); }
+  .sheet::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 5mm; background: var(--accent2); }
+  .head { display: flex; justify-content: space-between; align-items: center; }
+  .title { font-size: 26pt; margin-top: 4mm; }
+  .lead { margin-top: 4mm; font-size: 12pt; line-height: 1.6; color: #333; }
+  table.facts { width: 100%; border-collapse: collapse; margin-top: 7mm; font-size: 10.5pt; }
+  table.facts:empty { display: none; }
+  table.facts th, table.facts td { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 3mm 3mm; text-align: left; vertical-align: top; }
+  table.facts th { width: 26mm; background: var(--bg-soft); color: var(--accent); font-weight: 800; }
+  .sections { margin-top: 7mm; display: flex; flex-direction: column; gap: 5mm; }
+  .sec h2 { font-size: 12.5pt; font-weight: 800; display: flex; align-items: center; gap: 2.5mm; }
+  .sec h2::before { content: ""; width: 3mm; height: 3mm; border-radius: 50%; background: var(--accent); }
+  .sec p { margin-top: 1.5mm; font-size: 10.5pt; line-height: 1.65; color: #333; white-space: pre-line; }
+  .contact { margin-top: auto; padding-top: 5mm; font-size: 10pt; color: var(--muted); }
+  .credit-row { margin-top: 4mm; padding-top: 4mm; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body class="print">
+<div class="sheet">
+  <div class="head">
+    <div class="eyebrow">{{eyebrow}}</div>
+    <span class="wordmark">청년노동자인권센터</span>
+  </div>
+  <h1 class="title">{{title}}</h1>
+  {{#lead}}<p class="lead">{{lead}}</p>{{/lead}}
+  <table class="facts">{{#facts}}<tr><th>{{k}}</th><td>{{v}}</td></tr>{{/facts}}</table>
+  <div class="sections">{{#sections}}<div class="sec"><h2>{{h}}</h2><p>{{body}}</p></div>{{/sections}}</div>
+  {{#contact_note}}<div class="contact">{{contact_note}}</div>{{/contact_note}}
+  <div class="credit-row">
+    <div class="logos">
+      {{#logo_funder}}<img src="{{logo_funder}}" alt="아름다운재단">{{/logo_funder}}
+      {{#logo_org}}<img src="{{logo_org}}" alt="청년노동자인권센터">{{/logo_org}}
+      {{^logo_org}}<span class="wordmark">청년노동자인권센터</span>{{/logo_org}}
+    </div>
+    <div class="credit">{{credit}}</div>
+  </div>
+</div>
+</body>
+</html>

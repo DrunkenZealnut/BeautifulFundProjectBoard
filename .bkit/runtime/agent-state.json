@@ -2,12 +2,12 @@
   "version": "1.0",
   "enabled": false,
   "teamName": "",
-  "feature": "뉴스레터-생성모듈-업데이트",
-  "pdcaPhase": "do",
+  "feature": "입금확인증-PDF-집행등록",
+  "pdcaPhase": "check",
   "orchestrationPattern": "leader",
   "ctoAgent": "opus",
-  "startedAt": "2026-07-05T02:54:43.163Z",
-  "lastUpdated": "2026-07-05T04:20:47.231Z",
+  "startedAt": "2026-09-20T21:29:43.002Z",
+  "lastUpdated": "2026-09-21T02:25:51.910Z",
   "teammates": [],
   "progress": {
     "totalTasks": 0,
@@ -16,13 +16,6 @@
     "failedTasks": 0,
     "pendingTasks": 0
   },
-  "recentMessages": [
-    {
-      "from": "system",
-      "to": "all",
-      "content": "Phase check → report (auto-advanced)",
-      "timestamp": "2026-07-05T03:01:29.464Z"
-    }
-  ],
-  "sessionId": "bb0340b7-c3e8-42e6-adb9-ef2830454660"
+  "recentMessages": [],
+  "sessionId": "c6b24e9e-6dc5-402d-87b0-c4898eab3f1f"
 }

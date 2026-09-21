@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="promo-size" content="1123x794">
+<meta name="promo-print" content="A4">
+<meta name="promo-slots" content='{"cover":{"eyebrow":16,"title":14,"tagline":40},"intro":{"title":14,"body":160,"list":{"max":4,"text":26}},"panels":{"max":3,"title":14,"body":160,"list":{"max":4,"text":26},"links":{"max":3,"label":14,"url":40}},"back":{"title":14,"body":200,"links":{"max":3,"label":14,"url":40}},"credit":40}'>
+<!--
+  leaflet-3fold — A4 가로 양면 3단 접지 리플릿 (교사용 컨텐츠 안내 등). pdf(2쪽) + preview.png(1쪽)
+  슬롯(중첩):
+    cover:  { eyebrow, title, tagline }            앞표지 (1쪽 오른쪽 패널)
+    intro:  { title, body }                         안쪽 날개 (1쪽 왼쪽 패널) — 단체 소개
+    back:   { title, body, links[{label,url}] }     뒤표지 (1쪽 가운데) — 재단·지원사업 소개 + 문의
+    panels: [ { title, body, list[{text}], links[{label,url}] } ×3 ]   2쪽 왼→오
+    credit, logo_org, logo_funder
+  접지: 1쪽 = [안쪽날개 | 뒤표지 | 앞표지], 2쪽 = [p1 | p2 | p3]. 각 패널 99mm.
+-->
+<link rel="stylesheet" href="../../brand/tokens.css">
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  html, body { width: 297mm; }
+  .sheet { width: 297mm; height: 210mm; display: grid; grid-template-columns: repeat(3, 99mm); overflow: hidden; background: var(--bg); page-break-after: always; break-after: page; }
+  .sheet:last-child { page-break-after: auto; break-after: auto; }
+  .panel { padding: 12mm 9mm; display: flex; flex-direction: column; border-right: 0.2mm dashed var(--line); overflow: hidden; }
+  .panel:last-child { border-right: 0; }
+  .panel h2 { font-size: var(--t-sub); font-weight: 800; letter-spacing: -0.01em; }
+  .panel h2::before { content: ""; display: block; width: 10mm; height: 1.6mm; background: var(--accent2); margin-bottom: 3mm; border-radius: 1mm; }
+  .panel .body { font-size: 10pt; line-height: 1.65; margin-top: 4mm; color: #333; }
+  .panel ul { margin: 4mm 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2mm; }
+  .panel ul:empty { display: none; }
+  .panel li { font-size: 10pt; font-weight: 600; padding-left: 5mm; position: relative; }
+  .panel li::before { content: ""; position: absolute; left: 0; top: 0.45em; width: 2.6mm; height: 2.6mm; border-radius: 50%; background: var(--accent); }
+  .links { margin-top: auto; padding-top: 4mm; display: flex; flex-direction: column; gap: 1.5mm; }
+  .links:empty { display: none; }
+  .link { font-size: 9pt; display: flex; gap: 2mm; }
+  .link .l { font-weight: 800; color: var(--accent); white-space: nowrap; }
+  .link .u { color: var(--muted); word-break: break-all; }
+  /* 앞표지 */
+  .cover { background: var(--accent); color: #fff; position: relative; }
+  .cover::after { content: ""; position: absolute; right: -22mm; bottom: -22mm; width: 70mm; height: 70mm; border-radius: 50%; background: var(--accent2); }
+  .cover > * { position: relative; z-index: 1; }
+  .cover .eyebrow { color: #fff; opacity: 0.9; }
+  .cover .title { font-size: 30pt; margin-top: 6mm; color: #fff; }
+  .cover .tagline { margin-top: 6mm; font-size: 12pt; line-height: 1.5; opacity: 0.95; }
+  .cover .credit-row { margin-top: auto; border-top: 1px solid rgba(255,255,255,0.35); padding-top: 4mm; color: #fff; flex-direction: column; align-items: flex-start; gap: 1.5mm; }
+  .wordmark { white-space: nowrap; }
+  .cover .credit-row .credit, .cover .credit-row .wordmark { color: #fff; }
+  /* 뒤표지 */
+  .back { background: var(--bg-soft); }
+  .back .credit-row { margin-top: auto; padding-top: 4mm; border-top: 1px solid var(--line); flex-direction: column; align-items: flex-start; gap: 2mm; }
+</style>
+</head>
+<body class="print">
+<!-- 1쪽 (바깥면): 안쪽날개 | 뒤표지 | 앞표지 -->
+<div class="sheet">
+  <div class="panel intro">
+    <h2>{{intro.title}}</h2>
+    <p class="body">{{intro.body}}</p>
+    <ul>{{#intro.list}}<li>{{text}}</li>{{/intro.list}}</ul>
+  </div>
+  <div class="panel back">
+    <h2>{{back.title}}</h2>
+    <p class="body">{{back.body}}</p>
+    <div class="links">{{#back.links}}<div class="link"><span class="l">{{label}}</span><span class="u">{{url}}</span></div>{{/back.links}}</div>
+    <div class="credit-row">
+      <div class="logos">
+        {{#logo_funder}}<img src="{{logo_funder}}" alt="아름다운재단">{{/logo_funder}}
+        {{#logo_org}}<img src="{{logo_org}}" alt="청년노동자인권센터">{{/logo_org}}
+        {{^logo_org}}<span class="wordmark">청년노동자인권센터</span>{{/logo_org}}
+      </div>
+      <div class="credit">{{credit}}</div>
+    </div>
+  </div>
+  <div class="panel cover">
+    <div class="eyebrow">{{cover.eyebrow}}</div>
+    <h1 class="title">{{cover.title}}</h1>
+    <p class="tagline">{{cover.tagline}}</p>
+    <div class="credit-row">
+      <span class="wordmark">청년노동자인권센터</span>
+      <span class="credit">{{credit}}</span>
+    </div>
+  </div>
+</div>
+<!-- 2쪽 (안면): p1 | p2 | p3 -->
+<div class="sheet">
+  {{#panels}}
+  <div class="panel">
+    <h2>{{title}}</h2>
+    {{#body}}<p class="body">{{body}}</p>{{/body}}
+    <ul>{{#list}}<li>{{text}}</li>{{/list}}</ul>
+    <div class="links">{{#links}}<div class="link"><span class="l">{{label}}</span><span class="u">{{url}}</span></div>{{/links}}</div>
+  </div>
+  {{/panels}}
+</div>
+</body>
+</html>

@@ -31,3 +31,13 @@ __pycache__/
 
 # Private working data (accounting ledgers, not for repo)
 account/
+
+# 홍보콘텐츠 생성시스템 (content/) — 원본·산출물·사진·venv는 로컬 전용
+data/
+content/.venv/
+content/out/
+content/brand/photos/
+content/kb/_raw/
+content/templates/visual/_samples/*.html
+content/templates/visual/_samples/*.png
+content/templates/visual/_samples/*.pdf

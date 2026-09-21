@@ -1,0 +1,86 @@
+/* tokens.css — 청년노동자인권센터 홍보물 브랜드 토큰
+   값은 index.html NL_THEMES.community 와 동일하게 유지 (변경 시 양쪽 동기화).
+   폰트: Pretendard Variable (SIL OFL 1.1) — fonts/PretendardVariable.woff2 */
+
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/PretendardVariable.woff2') format('woff2-variations'),
+       url('fonts/PretendardVariable.woff2') format('woff2');
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  /* 색 */
+  --accent: #0b98ff;        /* 하늘 — 신뢰·안전 */
+  --accent2: #f9e450;       /* 노랑 — 유쾌·에너지 */
+  --ink: #131313;
+  --muted: #777777;
+  --line: #eeeeee;
+  --line-soft: #f3f4f6;
+  --bg: #ffffff;
+  --bg-soft: #f9fafb;
+  --accent-soft: #edf7ff;
+  --accent2-soft: #fef9ce;
+  --grad-1: linear-gradient(135deg, #edf7ff, #fff0fa);
+  --grad-2: linear-gradient(135deg, #fef9ce, #f3f4ff);
+
+  /* 서체 */
+  --font: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --radius: 16px;
+  --radius-sm: 8px;
+
+  /* 1080 캔버스 기준 타이포·간격 (px) */
+  --t-display: 84px;
+  --t-title: 64px;
+  --t-sub: 36px;
+  --t-body: 30px;
+  --t-caption: 22px;
+  --pad: 72px;
+  --gap: 28px;
+}
+
+/* 인쇄물(A4)용 재정의 — body.print */
+.print {
+  --t-display: 34pt;
+  --t-title: 26pt;
+  --t-sub: 15pt;
+  --t-body: 11pt;
+  --t-caption: 9pt;
+  --pad: 16mm;
+  --gap: 6mm;
+}
+
+/* 공통 리셋 */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--bg);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.4;
+}
+img { max-width: 100%; display: block; }
+h1, h2, h3, p { margin: 0; }
+
+/* 유틸 */
+.eyebrow { font-size: var(--t-caption); font-weight: 700; letter-spacing: 0.02em; color: var(--accent); text-transform: uppercase; }
+.title { font-size: var(--t-title); font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; }
+.display { font-size: var(--t-display); font-weight: 800; line-height: 1.12; letter-spacing: -0.03em; }
+.sub { font-size: var(--t-sub); font-weight: 500; line-height: 1.4; color: var(--ink); }
+.body { font-size: var(--t-body); line-height: 1.6; }
+.caption { font-size: var(--t-caption); color: var(--muted); line-height: 1.5; }
+.chip { display: inline-block; padding: 0.35em 0.9em; border-radius: 999px; background: var(--accent2); color: var(--ink); font-weight: 700; font-size: var(--t-caption); }
+.bar { height: 6px; background: var(--accent2); border-radius: 3px; }
+.rule { height: 1px; background: var(--line); }
+
+/* 크레딧·로고 행 — 재단 로고가 앞 (수행가이드) */
+.credit-row { display: flex; align-items: center; justify-content: space-between; gap: var(--gap); }
+.credit-row .logos { display: flex; align-items: center; gap: calc(var(--gap) * 0.75); }
+.credit-row .logos img { height: 1.6em; width: auto; }
+.credit-row .wordmark { font-weight: 800; font-size: var(--t-caption); letter-spacing: -0.01em; }
+.credit-row .credit { font-size: var(--t-caption); color: var(--muted); }
