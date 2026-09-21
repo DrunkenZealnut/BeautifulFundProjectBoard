@@ -1,8 +1,7 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-09-21T02:22:31.000Z",
+  "lastUpdated": "2026-09-21T02:31:33.000Z",
   "activeFeatures": [
-    "입금확인증-PDF-집행등록",
     "뉴스레터-생성모듈-업데이트",
     "뉴스레터-리뉴얼",
     "학교시간표조회",
@@ -12,7 +11,7 @@
     "scratchpad",
     "tools"
   ],
-  "primaryFeature": "입금확인증-PDF-집행등록",
+  "primaryFeature": "뉴스레터-생성모듈-업데이트",
   "features": {
     "뉴스레터-생성모듈-업데이트": {
       "phase": "completed",
@@ -174,28 +173,12 @@
       "lastFile": "/Users/zealnutkim/DEV/BeautifulFundProjectBoard-fresh/content/tools/md2hwpx.py"
     },
     "입금확인증-PDF-집행등록": {
-      "phase": "completed",
-      "phaseNumber": 6,
+      "phase": "archived",
       "matchRate": 94,
       "iterationCount": 0,
-      "requirements": [
-        "입금확인증 PDF 업로드 → 브라우저 내 pdf.js 텍스트 추출·라벨 파싱",
-        "일괄등록 미리보기 자동 채움 (집행일·금액·수취인·집행내용)",
-        "등록 시 PDF를 이체 증빙으로 자동 첨부",
-        "중복 의심 감지 · 인식 실패 처리",
-        "수수료 별도 집행 건 자동 생성 (본 행 예산항목 연동)"
-      ],
-      "documents": {
-        "plan": "docs/01-plan/features/입금확인증-PDF-집행등록.plan.md",
-        "design": "docs/02-design/features/입금확인증-PDF-집행등록.design.md",
-        "analysis": "docs/03-analysis/입금확인증-PDF-집행등록.analysis.md",
-        "report": "docs/04-report/입금확인증-PDF-집행등록.report.md"
-      },
-      "timestamps": {
-        "started": "2026-09-20T12:28:47.000Z",
-        "lastUpdated": "2026-09-21T02:22:31.000Z"
-      },
-      "lastFile": "/Users/zealnutkim/DEV/BeautifulFundProjectBoard-fresh/index.html"
+      "startedAt": "2026-09-20T12:28:47.000Z",
+      "archivedAt": "2026-09-21T02:31:33.000Z",
+      "archivedTo": "docs/archive/2026-09/입금확인증-PDF-집행등록/"
     }
   },
   "pipeline": {
@@ -431,6 +414,14 @@
       "action": "reported",
       "matchRate": 94,
       "note": "완료 보고서 작성. PR #38 오픈·CodeRabbit 3건 반영. 머지·배포는 사용자 액션 대기"
+    },
+    {
+      "timestamp": "2026-09-21T02:31:33.000Z",
+      "feature": "입금확인증-PDF-집행등록",
+      "phase": "archived",
+      "action": "archived",
+      "archivedTo": "docs/archive/2026-09/입금확인증-PDF-집행등록/",
+      "matchRate": 94
     }
   ],
   "archiveHistory": [
