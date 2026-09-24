@@ -40,7 +40,7 @@ Execute in Supabase SQL Editor in order:
 1. `supabase-schema-safe.sql` — All tables, indexes, RLS, sample data
 2. `supabase-migration-auth.sql` — Users RLS + 로컬 개발용 초기 관리자 (배포 전 변경 필수)
 
-Additional migrations (apply in order): `supabase-migration-{rls-improved,gallery-category,gallery-rls-fix,password-hash,recipients,features,rls,schools,projects,execution-project-id,admin-sql,newsletters}.sql`
+Additional migrations (apply in order): `supabase-migration-{rls-improved,gallery-category,gallery-rls-fix,password-hash,recipients,features,rls,schools,projects,execution-project-id,admin-sql,newsletters,payee-rules}.sql`
 
 Note: migrations before the bf-schema switch (commit 014b8bb) target `public.`; `newsletters` onward target `bf.` directly.
 
@@ -158,6 +158,21 @@ HWPX templates in `api/hwpxskill_templates/{base,gonmun,report,minutes,proposal}
 - `bankImportRows` 행은 `_kind` (`'excel' | 'pdf' | 'fee'`)로 분기: 엑셀 행은 `_raw`+`bankColMap`에서 렌더 시 파생, PDF/수수료 행은 `execution_date`/`amount`/`recipient` 필드를 직접 편집. 행 편집은 미리보기 IIFE의 `updateRow(ri, patch)` 하나로 — 본 행 날짜는 수수료 행에 항상 전파, 소분류/항목은 `_feeLinked`일 때만, PDF 본 행은 편집 시 `_dup` 재검사
 - pdf.js 워커는 교차출처라 `blob:` 래퍼로 뜨므로 CSP에 `worker-src 'self' blob:`이 있어야 한다 (없으면 fake worker로 폴백, 동작은 함)
 
+### 거래처 → 예산항목 자동배정 (F-15)
+
+`bf.payee_budget_rules`(수취인·거래처 → 소분류·항목 규칙)와 과거 집행이력으로 예산항목을 자동 배정한다. 순수 함수는 F-14 파서 블록 바로 아래 모듈 수준에 있다.
+
+- `normalizePayee(s)`: `(주)`/`㈜`/`주식회사` 등 법인 표기·공백·괄호 제거 + 소문자화 — 규칙 저장·조회·이력 집계는 반드시 이 함수 하나로
+- `resolveBudgetAssignment({ payee, bizNo }, { ruleIndex, historyIndex })`: `biz_no` 규칙 → `exact` → `contains`(긴 패턴 우선) → 이력(같은 정규화 수취인의 최빈 항목, **최빈이 유일할 때만** 자동 배정, 동률이면 `candidates`만) → 미배정. 인덱스는 `indexPayeeRules`(활성·예산에 존재·**프로젝트 규칙이 공통 규칙보다 우선**)와 `indexPayeeHistory`로 만들고, 컴포넌트는 최상위 `useMemo`(`payeeAssignIndex`)로 한 번만 구성 — 행마다 집행 전체를 다시 정규화하지 말 것. 규칙 매칭은 `matchPayeeRule` 하나(규칙 제안의 "이미 규칙 있음" 판정도 공용). 컴포넌트에서는 `resolveAssign(payee, bizNo)` 래퍼 사용
+- `findBudgetItem(budgetData, subId, itemId)` → `{ cat, sub, item } | null`, `budgetSnapshot(subId, itemId)` → 집행 레코드 예산 필드, `budgetItemLabel` → "소분류 > 항목"
+- 미리보기 행 메타: `_assignSource`(`'rule'|'history'|null`), `_assignRuleId`, `_assignCandidates`, `_assignLocked`(사용자가 직접 고름 → 자동배정이 덮지 않음), `_saveRule`. 단건 폼은 `formAssign = { source, ruleId, candidates, locked }` + `formSaveRule`로 같은 의미
+- 행 자동배정 판정은 `autoAssignPatch(row, colMap, { refresh })` 하나 — 수수료 행·잠긴 행 제외, 엑셀 입금 행(`isWithdrawType` 아님) 제외. 엑셀 업로드·「빈 항목 채우기」·PDF 수취인 blur 재배정(`reassignRow`)이 공용. 패치 적용·수수료 전파는 미리보기 IIFE의 순수 함수 `applyRowPatch(rows, ri, patch)`(`updateRow`가 감쌈)
+- 직접 선택 시 규칙 저장 기본값은 `manualAssignMeta`가 처음 잠글 때 한 번만 정함: 규칙 배정을 이번 건만 바꾸면 해제(기존 규칙을 조용히 덮지 않음), 그 외엔 수취인이 있으면 체크
+- 등록 성공 후 `persistRuleEffects(entries)` → `{ saved, failed }`: `_saveRule` 행을 `upsert(onConflict: project_id,match_type,pattern)`하고 규칙 적중 `hit_count`를 병렬 갱신. 규칙 테이블이 없으면(`payeeRulesError`) 규칙 저장 UI를 숨기고 이력 배정만 동작 — `loadPayeeRules`는 전체 로딩 `Promise.all`과 분리돼 있다. 규칙 탭 CRUD는 반환 행으로 `payeeRules`를 로컬 갱신(재조회 없음)
+- 1차 입력 경로는 사업자번호를 공급하지 않는다 — `biz_no` 규칙은 2차(세금계산서·영수증)부터 매칭됨
+- 예산관리 「🔗 거래처 규칙」 탭(`budgetTab === 'rules'`): 규칙 CRUD + `computeRuleSuggestions`(같은 수취인 2건↑, 최빈 항목 80%↑, 규칙 미적용; 최상위 `useMemo` `ruleSuggestions`) 일괄 저장
+- 2·3차(세금계산서 파서·기존 건 매칭·영수증 OCR)는 설계서 `docs/02-design/features/증빙-예산항목-자동배정.design.md` §9 참조
+
 ### Authentication
 - SHA-256 hashed password check against `users` table (client-side, no Supabase Auth)
 - Session in `localStorage` (`bf_user_session`), 24h expiry
@@ -230,7 +245,7 @@ bkit PDCA workflow: `01-plan/features/*.plan.md` → `02-design/features/*.desig
 | `scripts/preprocess_templates.py` | templates/ → hwpxfill_templates/ 전처리 (재실행 가능) |
 | `vercel.json` | Deployment config + security headers |
 | `supabase-schema-safe.sql` | Database schema (bf schema) |
-| `supabase-migration-*.sql` | Incremental migrations |
+| `supabase-migration-*.sql` | Incremental migrations (`payee-rules` = F-15 거래처 규칙) |
 | `SUPABASE_SETUP.md` | Supabase project setup walkthrough |
 | `manifest.json` + `service-worker.js` | PWA support |
 | `docs/` | bkit PDCA docs — `01-plan/`, `02-design/`, `03-analysis/`, `04-report/`, `archive/` |

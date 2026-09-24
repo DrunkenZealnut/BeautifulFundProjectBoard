@@ -3557,6 +3557,112 @@
         };
 
         // ────────────────────────────────────────────────────────────
+        // 거래처 → 예산항목 자동배정 (F-15) — 규칙 → 이력 → 미배정
+        // ────────────────────────────────────────────────────────────
+        // 거래처명 정규화: 법인 표기·공백·괄호·특수문자 제거, 소문자화 — 규칙 저장·조회·이력 집계 공용
+        const PAYEE_CORP_RE = /\(주\)|㈜|주식회사|\(유\)|유한회사|\(재\)|재단법인|\(사\)|사단법인|\(합\)|합자회사/g;
+        const normalizePayee = (s) => String(s || '')
+            .replace(PAYEE_CORP_RE, '')
+            .replace(/[\s()\[\]{}·.,\-_'"]/g, '')
+            .toLowerCase();
+        // 사업자번호: 숫자 10자리만 유효
+        const normalizeBizNo = (s) => { const d = String(s || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; };
+
+        // 예산구조에서 소분류·항목·대분류를 한 번에 조회. 없으면 null
+        const findBudgetItem = (budgetData, subId, itemId) => {
+            for (const cat of budgetData?.categories || []) {
+                const sub = cat.subcategories.find(s => s.id === subId);
+                if (!sub) continue;
+                const item = sub.items.find(it => it.id === itemId);
+                return item ? { cat, sub, item } : null;
+            }
+            return null;
+        };
+
+        // 은행 엑셀 '구분' 값이 출금인지 (미리보기 출금 표시·자동배정 제외 공용)
+        const isWithdrawType = (v) => /출금|지급|이체/.test(String(v ?? ''));
+        const PAYEE_RULE_TYPES = { biz_no: '사업자번호', exact: '이름 일치', contains: '이름 포함' };
+        // 규칙 인덱스: 활성 + 예산에 존재하는 규칙만. 같은 패턴이면 현재 프로젝트 규칙이 공통(project_id NULL) 규칙보다 우선
+        const indexPayeeRules = (rules, budgetData) => {
+            const idx = { biz: new Map(), exact: new Map(), contains: [] };
+            (rules || [])
+                .filter(r => r.is_active && findBudgetItem(budgetData, r.subcategory_id, r.budget_item_id))
+                .sort((a, b) => (a.project_id ? 0 : 1) - (b.project_id ? 0 : 1))
+                .forEach(r => {
+                    if (r.match_type === 'contains') idx.contains.push(r);
+                    else { const m = r.match_type === 'biz_no' ? idx.biz : idx.exact; if (!m.has(r.pattern)) m.set(r.pattern, r); }
+                });
+            idx.contains.sort((a, b) => b.pattern.length - a.pattern.length); // 안정 정렬 → 같은 길이면 프로젝트 규칙 먼저
+            return idx;
+        };
+        // key: normalizePayee 결과, biz: normalizeBizNo 결과. 우선순위 biz_no → exact → contains(긴 패턴)
+        const matchPayeeRule = (idx, key, biz) =>
+            (biz && idx.biz.get(biz)) || (key && (idx.exact.get(key) || idx.contains.find(r => key.includes(r.pattern)))) || null;
+        // 이력 인덱스: 정규화 수취인 → (소분류|항목) 빈도·최근일 후보 목록(정렬 완료). 예산에 없는 항목은 제외
+        const indexPayeeHistory = (executions, budgetData) => {
+            const byPayee = new Map();
+            (executions || []).forEach(e => {
+                const key = normalizePayee(e.recipient);
+                if (!key || !findBudgetItem(budgetData, e.subcategory_id, e.budget_item_id)) return;
+                const tally = byPayee.get(key) || new Map();
+                const k = `${e.subcategory_id}|${e.budget_item_id}`;
+                const t = tally.get(k) || { subcategory_id: e.subcategory_id, budget_item_id: e.budget_item_id, count: 0, lastDate: '' };
+                t.count += 1;
+                if ((e.execution_date || '') > t.lastDate) t.lastDate = e.execution_date || '';
+                tally.set(k, t);
+                byPayee.set(key, tally);
+            });
+            const out = new Map();
+            byPayee.forEach((tally, key) => out.set(key,
+                [...tally.values()].sort((a, b) => b.count - a.count || b.lastDate.localeCompare(a.lastDate)).slice(0, 3)));
+            return out;
+        };
+        // 규칙 → 이력 → 미배정. 반환값의 subcategory_id/budget_item_id가 ''면 미배정
+        // 인덱스는 호출부에서 한 번 만들어 재사용 (컴포넌트는 useMemo로 payeeAssignIndex 보관)
+        const resolveBudgetAssignment = ({ payee, bizNo }, { ruleIndex, historyIndex }) => {
+            const none = { subcategory_id: '', budget_item_id: '', payment_method: null, source: null, ruleId: null, candidates: [] };
+            const key = normalizePayee(payee);
+            const biz = normalizeBizNo(bizNo);
+            if (!key && !biz) return none;
+            const rule = matchPayeeRule(ruleIndex, key, biz);
+            if (rule) return { ...none, subcategory_id: rule.subcategory_id, budget_item_id: rule.budget_item_id,
+                payment_method: rule.payment_method || null, source: 'rule', ruleId: rule.id };
+            const candidates = (key && historyIndex.get(key)) || [];
+            if (candidates.length === 0) return none;
+            // 최빈이 유일할 때만 자동 배정 (동명이인·여러 항목 거래처는 후보만 제시)
+            const [top, second] = candidates;
+            if (second && second.count === top.count) return { ...none, candidates };
+            return { ...none, subcategory_id: top.subcategory_id, budget_item_id: top.budget_item_id, source: 'history', candidates };
+        };
+
+        // 이력에서 규칙 후보: 같은 수취인 2건 이상 + 최빈 항목 비율 80% 이상 + 아직 규칙이 적용되지 않는 수취인
+        const computeRuleSuggestions = (executions, rules, budgetData) => {
+            const groups = new Map();
+            (executions || []).forEach(e => {
+                const key = normalizePayee(e.recipient);
+                if (key.length < 2 || key === '신한은행' || /^이체수수료/.test(e.description || '')) return;
+                if (!findBudgetItem(budgetData, e.subcategory_id, e.budget_item_id)) return;
+                const g = groups.get(key) || { key, total: 0, latest: '', display_name: '', items: new Map() };
+                g.total += 1;
+                if ((e.execution_date || '') >= g.latest) { g.latest = e.execution_date || ''; g.display_name = (e.recipient || '').trim(); }
+                const ik = `${e.subcategory_id}|${e.budget_item_id}`;
+                g.items.set(ik, (g.items.get(ik) || 0) + 1);
+                groups.set(key, g);
+            });
+            const ruleIndex = indexPayeeRules(rules, budgetData);
+            const covered = key => !!matchPayeeRule(ruleIndex, key, '');
+            return [...groups.values()]
+                .filter(g => g.total >= 2 && !covered(g.key))
+                .map(g => {
+                    const [ik, count] = [...g.items.entries()].sort((a, b) => b[1] - a[1])[0];
+                    const [subcategory_id, budget_item_id] = ik.split('|');
+                    return { key: g.key, display_name: g.display_name, count: g.total, subcategory_id, budget_item_id, ratio: count / g.total };
+                })
+                .filter(s => s.ratio >= 0.8)
+                .sort((a, b) => b.count - a.count);
+        };
+
+        // ────────────────────────────────────────────────────────────
         // Newsletter HTML generator
         // Newsletter template generators — 3 distinct styles
         // ────────────────────────────────────────────────────────────
@@ -5197,6 +5303,8 @@
                 setFormData(emptyExecutionForm());
                 setFormDocFiles({});
                 setFormPdfEvidence(null);
+                setFormAssign(null);
+                setFormSaveRule(false);
                 activeFormDocNameRef.current = null;
             };
             // ===== 은행 엑셀 일괄등록 상태 =====
@@ -5209,6 +5317,206 @@
             const [pdfParseProgress, setPdfParseProgress] = useState(null); // { done, total } | null
             const [bulkRegisterResult, setBulkRegisterResult] = useState(null); // { inserted, attached, failedDocs } — done 화면 (done 진입 직전 항상 설정)
             const resetBankImport = () => { setBankImportStep('upload'); setBankImportRows([]); setBankHeaders([]); };
+
+            // ===== 거래처 → 예산항목 자동배정 규칙 (F-15) =====
+            const [payeeRules, setPayeeRules] = useState([]); // bf.payee_budget_rules (현재 프로젝트 + project_id NULL)
+            const [payeeRulesError, setPayeeRulesError] = useState(null); // 테이블 미생성 등 → 규칙 저장 비활성, 규칙 탭에 안내
+            const [ruleEdit, setRuleEdit] = useState(null); // 규칙 탭 추가/수정 폼
+            const [ruleSuggestSel, setRuleSuggestSel] = useState({}); // 이력 제안 체크 { [key]: true }
+            const [formAssign, setFormAssign] = useState(null); // 단건 폼 배정 근거 { source, ruleId, candidates }
+            const [formSaveRule, setFormSaveRule] = useState(false); // 단건 폼 「규칙으로 저장」
+
+            const loadPayeeRules = async () => {
+                let q = supabase.from('payee_budget_rules').select('*').order('display_name');
+                q = activeProject?.id ? q.or(`project_id.eq.${activeProject.id},project_id.is.null`) : q.is('project_id', null);
+                const { data: rows, error } = await q;
+                if (error) {
+                    console.warn('payee_budget_rules 로드 실패:', error.message);
+                    setPayeeRulesError(error.message);
+                    setPayeeRules([]);
+                    return;
+                }
+                setPayeeRulesError(null);
+                setPayeeRules(rows || []);
+            };
+            // 전체 로딩(Promise.all)과 분리 — 테이블이 없어도 앱 로딩은 실패하지 않게
+            useEffect(() => { if (currentUser) loadPayeeRules(); }, [currentUser?.id, activeProject?.id]);
+
+            // 규칙·이력 인덱스는 규칙·집행·예산이 바뀔 때만 다시 만든다 (행마다 전체 집행을 정규화하지 않도록)
+            const payeeAssignIndex = useMemo(() => ({
+                ruleIndex: indexPayeeRules(payeeRules, effectiveBudgetData),
+                historyIndex: indexPayeeHistory(data?.budgetExecutions, effectiveBudgetData)
+            }), [payeeRules, data?.budgetExecutions, effectiveBudgetData]);
+            // 규칙 → 이력 → 미배정 (렌더 중 호출 가능한 일반 함수)
+            const resolveAssign = (payee, bizNo) => resolveBudgetAssignment({ payee, bizNo }, payeeAssignIndex);
+            // 거래처 규칙 탭 이력 제안 — 탭이 열렸을 때만, 입력마다 재계산하지 않도록 최상위 memo
+            const ruleSuggestions = useMemo(() => budgetTab === 'rules'
+                ? computeRuleSuggestions(data?.budgetExecutions, payeeRules, effectiveBudgetData) : [],
+                [budgetTab, data?.budgetExecutions, payeeRules, effectiveBudgetData]);
+
+            // 배정 결과 → 미리보기 행 패치 (소분류·항목 + 배정 메타). 엑셀 행만 규칙의 결제방법을 따름 (입금확인증은 계좌이체 고정)
+            const assignRowPatch = (a, row) => ({
+                subcategory_id: a.subcategory_id, budget_item_id: a.budget_item_id,
+                ...(row?._kind === 'excel' && a.payment_method ? { payment_method: a.payment_method } : {}),
+                _assignSource: a.source, _assignRuleId: a.ruleId, _assignCandidates: a.candidates, _assignLocked: false,
+                _saveRule: !!row?._saveRule
+            });
+            // 엑셀 행 셀 값 (열 매핑 기준) — 미리보기 렌더와 자동배정 공용
+            const excelCell = (row, colMap, key) => {
+                const idx = parseInt(colMap[key]);
+                return !isNaN(idx) && row._raw[idx] != null ? row._raw[idx] : '';
+            };
+            // 행 하나의 자동배정 패치. 배정 대상이 아니거나 바뀔 게 없으면 null
+            // - 수수료 행(본 행 연동)·직접 고른 행(_assignLocked)은 제외
+            // - 엑셀 입금 행(구분 열이 매핑돼 있고 출금이 아님)은 지출 항목으로 배정하지 않음
+            // - refresh: 수취인 수정 후 재배정 — 이미 채워진 자동값도 다시 계산
+            const autoAssignPatch = (row, colMap, { refresh = false } = {}) => {
+                if (row._kind === 'fee' || row._assignLocked) return null;
+                if (!refresh && row.subcategory_id && row.budget_item_id) return null;
+                const isExcel = row._kind === 'excel';
+                if (isExcel && colMap.type !== '' && !isWithdrawType(excelCell(row, colMap, 'type'))) return null;
+                const a = resolveAssign(isExcel ? String(excelCell(row, colMap, 'name') || '') : row.recipient);
+                if (a.subcategory_id === row.subcategory_id && a.budget_item_id === row.budget_item_id && a.source === row._assignSource) return null;
+                if (!refresh && !a.subcategory_id && a.candidates.length === 0) return null;
+                return assignRowPatch(a, row);
+            };
+            // 직접 선택 → 자동배정 잠금. 규칙 저장 기본값은 처음 잠글 때만 정함:
+            // 규칙 배정을 이번 건만 바꾸는 경우엔 해제(기존 규칙을 조용히 덮지 않음), 그 외엔 수취인이 있으면 체크
+            const manualAssignMeta = (locked, source, saveRule, payee) => ({
+                locked: true, source: null, ruleId: null,
+                saveRule: locked ? saveRule : (source !== 'rule' && !payeeRulesError && !!String(payee || '').trim())
+            });
+
+            // 단건 폼: 예산 분류가 비어 있거나 현재 값이 자동배정(잠기지 않음)일 때만 수취인으로 (재)배정
+            // formAssign: { source, ruleId, candidates, locked } — 미리보기 행의 _assign* 메타와 같은 의미
+            const autoAssignForm = (payee) => {
+                if (formData.subcategory_id && (!formAssign || formAssign.locked)) return;
+                if (!String(payee || '').trim()) { setFormAssign(null); return; }
+                const a = resolveAssign(payee);
+                const fields = budgetSnapshot(a.subcategory_id, a.budget_item_id);
+                const cleared = { subcategory_id: '', subcategory_name: '', category_name: '', budget_item_id: '', budget_item_name: '', type: '' };
+                setFormData(prev => ({ ...prev, ...(fields || cleared), ...(fields ? { payment_method: prev.payment_method || a.payment_method || '' } : {}) }));
+                setFormAssign(a.source || a.candidates.length > 0 ? { source: a.source, ruleId: a.ruleId, candidates: a.candidates, locked: false } : null);
+                setFormSaveRule(false);
+            };
+            // 단건 폼에서 예산 분류/항목을 직접 고름
+            const markFormAssignManual = () => {
+                const m = manualAssignMeta(!!formAssign?.locked, formAssign?.source, formSaveRule, formData.recipient);
+                setFormAssign(prev => ({ candidates: [], ...prev, source: m.source, ruleId: m.ruleId, locked: m.locked }));
+                setFormSaveRule(m.saveRule);
+            };
+
+            // 배지 (일괄등록 미리보기·배정 근거 공용)
+            const pill = (bg, color, text, key) => (
+                <span key={key} style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: bg, color, marginRight: 4, marginBottom: 2, whiteSpace: 'nowrap' }}>{text}</span>
+            );
+            // 배정 근거 배지 (📌 규칙 / 🕘 이력 n회 / ❓ 미배정) — 일괄등록 행·단건 폼 공용
+            const renderAssignBadge = ({ source, candidates, subcategory_id, budget_item_id }) => {
+                if (source === 'rule') return pill('#eff6ff', '#1d4ed8', '📌 규칙');
+                if (source === 'history') {
+                    const c = (candidates || []).find(x => x.subcategory_id === subcategory_id && x.budget_item_id === budget_item_id);
+                    return pill('#f3f4f6', '#374151', `🕘 이력${c ? ` ${c.count}회` : ''}`);
+                }
+                if (!subcategory_id || !budget_item_id) return pill('#fff7ed', '#c2410c', '❓ 미배정');
+                return null;
+            };
+            // "소분류 > 항목" 라벨 (예산에서 사라졌으면 null)
+            const budgetItemLabel = (subId, itemId) => {
+                const f = findBudgetItem(effectiveBudgetData, subId, itemId);
+                return f ? `${f.sub.name} > ${f.item.name}` : null;
+            };
+            const candidateLabel = (c) => `${budgetItemLabel(c.subcategory_id, c.budget_item_id) || ''} (${c.count}회)`;
+            // 소분류·항목 → 집행 레코드 예산 필드 스냅샷 (없으면 null)
+            const budgetSnapshot = (subId, itemId) => {
+                const found = subId ? findBudgetItem(effectiveBudgetData, subId, itemId) : null;
+                if (!found) return null;
+                return {
+                    subcategory_id: found.sub.id, subcategory_name: found.sub.name, category_name: found.cat.name,
+                    budget_item_id: found.item.id, budget_item_name: found.item.name, type: found.item.type || ''
+                };
+            };
+
+            // 등록 성공 후 규칙 저장 + 적중 갱신. 실패해도 등록 결과는 유지. 반환: { saved, failed } (규칙 수)
+            // entries: [{ payee, bizNo, subcategory_id, budget_item_id, saveRule, ruleId }]
+            // bizNo는 2차(세금계산서·영수증)에서 공급됨 — 1차 입력 경로는 이름(exact) 규칙만 만든다
+            const persistRuleEffects = async (entries) => {
+                if (payeeRulesError) return { saved: 0, failed: 0 };
+                const now = new Date().toISOString();
+                const hits = new Map();
+                const upserts = new Map();
+                entries.forEach(e => {
+                    if (e.ruleId) hits.set(e.ruleId, (hits.get(e.ruleId) || 0) + 1);
+                    if (!e.saveRule || !e.subcategory_id || !e.budget_item_id) return;
+                    const biz = normalizeBizNo(e.bizNo);
+                    const match_type = biz ? 'biz_no' : 'exact';
+                    const pattern = biz || normalizePayee(e.payee);
+                    if (pattern.length < 2) return;
+                    upserts.set(`${match_type}|${pattern}`, { // 같은 배치 안 중복은 마지막 값 우선
+                        project_id: activeProject?.id || null, match_type, pattern, display_name: String(e.payee || '').trim(),
+                        subcategory_id: e.subcategory_id, budget_item_id: e.budget_item_id, is_active: true, updated_at: now
+                    });
+                });
+                const upsertJob = upserts.size === 0 ? null : supabase.from('payee_budget_rules')
+                    .upsert([...upserts.values()], { onConflict: 'project_id,match_type,pattern' });
+                const hitJobs = [...hits].map(([id, n]) => {
+                    const r = payeeRules.find(x => x.id === id);
+                    return r ? supabase.from('payee_budget_rules').update({ hit_count: (r.hit_count || 0) + n, last_used_at: now }).eq('id', id) : null;
+                }).filter(Boolean);
+                const [upsertRes, ...hitRes] = await Promise.all([upsertJob, ...hitJobs]);
+                let saved = 0, failed = 0;
+                if (upsertRes?.error) { console.warn('규칙 저장 실패:', upsertRes.error.message); failed = upserts.size; }
+                else saved = upserts.size;
+                hitRes.forEach(r => { if (r.error) console.warn('규칙 사용횟수 갱신 실패:', r.error.message); });
+                if (upsertJob || hitJobs.length > 0) await loadPayeeRules();
+                return { saved, failed };
+            };
+
+            // 규칙 탭: 추가/수정 저장
+            const emptyRuleEdit = () => ({ id: null, display_name: '', match_type: 'exact', pattern: '', subcategory_id: '', budget_item_id: '', payment_method: '', notes: '' });
+            const saveRuleEdit = async () => {
+                const r = ruleEdit;
+                const pattern = r.match_type === 'biz_no' ? normalizeBizNo(r.pattern) : normalizePayee(r.pattern || r.display_name);
+                if (!r.display_name.trim()) { alert('표시명을 입력해주세요.'); return; }
+                if (r.match_type === 'biz_no' && !pattern) { alert('사업자번호 10자리를 입력해주세요.'); return; }
+                if (pattern.length < 2) { alert('매칭할 이름은 2글자 이상이어야 합니다.'); return; }
+                if (!findBudgetItem(effectiveBudgetData, r.subcategory_id, r.budget_item_id)) { alert('소분류와 예산항목을 선택해주세요.'); return; }
+                const row = {
+                    project_id: r.id ? (r.project_id ?? null) : (activeProject?.id || null), // 수정 시 원래 범위(공통/프로젝트) 유지
+                    match_type: r.match_type, pattern, display_name: r.display_name.trim(),
+                    subcategory_id: r.subcategory_id, budget_item_id: r.budget_item_id, payment_method: r.payment_method || null,
+                    notes: r.notes || '', updated_at: new Date().toISOString()
+                };
+                const { data: savedRow, error } = await (r.id
+                    ? supabase.from('payee_budget_rules').update(row).eq('id', r.id)
+                    : supabase.from('payee_budget_rules').insert([{ ...row, is_active: true }])).select().single();
+                if (error) {
+                    alert(/duplicate|unique/i.test(error.message) ? '같은 매칭 조건의 규칙이 이미 있습니다.' : '규칙 저장 실패: ' + error.message);
+                    return;
+                }
+                setRuleEdit(null);
+                setPayeeRules(prev => r.id ? prev.map(x => x.id === r.id ? savedRow : x) : [...prev, savedRow]);
+            };
+            const toggleRule = async (rule) => {
+                const is_active = !rule.is_active;
+                const { error } = await supabase.from('payee_budget_rules').update({ is_active, updated_at: new Date().toISOString() }).eq('id', rule.id);
+                if (error) alert('변경 실패: ' + error.message);
+                else setPayeeRules(prev => prev.map(x => x.id === rule.id ? { ...x, is_active } : x));
+            };
+            const deleteRule = async (rule) => {
+                if (!confirm(`「${rule.display_name}」 규칙을 삭제할까요?`)) return;
+                const { error } = await supabase.from('payee_budget_rules').delete().eq('id', rule.id);
+                if (error) alert('삭제 실패: ' + error.message);
+                else setPayeeRules(prev => prev.filter(x => x.id !== rule.id));
+            };
+            const saveRuleSuggestions = async (suggestions) => {
+                const picked = suggestions.filter(sg => ruleSuggestSel[sg.key]);
+                if (picked.length === 0) return;
+                const { saved } = await persistRuleEffects(picked.map(sg => ({
+                    payee: sg.display_name, bizNo: '', subcategory_id: sg.subcategory_id, budget_item_id: sg.budget_item_id, saveRule: true
+                })));
+                setRuleSuggestSel({});
+                alert(saved > 0 ? `규칙 ${saved}건을 저장했습니다.` : '규칙 저장에 실패했습니다. 콘솔을 확인해주세요.');
+            };
 
             // 단건 등록 폼: 입금확인증 PDF 1장 → formData 채움 + 이체 증빙 예약 (F-14)
             const handleFormPdfAutofill = async (file) => {
@@ -5230,6 +5538,7 @@
                         description: parsed.description || prev.description,
                         payment_method: '계좌이체'
                     }));
+                    if (parsed.recipient) autoAssignForm(parsed.recipient);
                     if (parsed.warnings.length > 0) alert('일부 항목을 읽지 못했습니다: ' + parsed.warnings.join(', ') + '\n직접 입력해주세요.');
                 } catch (err) {
                     console.error('입금확인증 PDF 읽기 실패:', file.name, err && err.name);
@@ -5256,9 +5565,10 @@
                             const dup = complete ? findDuplicateExecution(data.budgetExecutions, parsed) : null;
                             const dupInUpload = complete && seen.has(executionDupKey(parsed));
                             if (complete) seen.add(executionDupKey(parsed));
-                            const base = { _pdfFile: file, execution_date: parsed.execution_date, subcategory_id: '', budget_item_id: '', payment_method: '계좌이체' };
+                            const assign = resolveAssign(parsed.recipient); // 수수료 행은 base를 통해 본 행 배정을 그대로 받음
+                            const base = { _pdfFile: file, execution_date: parsed.execution_date, subcategory_id: assign.subcategory_id, budget_item_id: assign.budget_item_id, payment_method: '계좌이체' };
                             rows.push({
-                                ...base, _idx: rows.length, _kind: 'pdf', _bankIn: parsed.bankIn,
+                                ...base, _idx: rows.length, _kind: 'pdf', _bankIn: parsed.bankIn, ...assignRowPatch(assign),
                                 _warnings: dupInUpload ? [...parsed.warnings, '업로드 내 중복'] : parsed.warnings,
                                 _dup: dup, _selected: !dup && !dupInUpload,
                                 amount: parsed.amount != null ? String(parsed.amount) : '',
@@ -9022,6 +9332,12 @@
                                 📥 일괄등록
                             </button>
                             <button
+                                className={`tab-btn ${budgetTab === 'rules' ? 'active' : ''}`}
+                                onClick={() => setBudgetTab('rules')}
+                            >
+                                🔗 거래처 규칙
+                            </button>
+                            <button
                                 className={`tab-btn ${budgetTab === 'calculator' ? 'active' : ''}`}
                                 onClick={() => setBudgetTab('calculator')}
                             >
@@ -9502,11 +9818,15 @@
 
                                     <div className="form-grid">
                                         <div className="form-group">
-                                            <label>예산 분류</label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                예산 분류
+                                                {(formAssign || formData.recipient) && renderAssignBadge({ ...(formAssign || {}), subcategory_id: formData.subcategory_id, budget_item_id: formData.budget_item_id })}
+                                            </label>
                                             <select
                                                 value={formData.subcategory_id}
                                                 onChange={(e) => {
                                                     const subcategory = subcategories.find(s => s.id === e.target.value);
+                                                    markFormAssignManual();
                                                     setFormData({
                                                         ...formData,
                                                         subcategory_id: e.target.value,
@@ -9533,6 +9853,7 @@
                                                 value={formData.budget_item_id}
                                                 onChange={(e) => {
                                                     const item = selectedBudgetItems.find(i => i.id === e.target.value);
+                                                    markFormAssignManual();
                                                     setFormData({
                                                         ...formData,
                                                         budget_item_id: e.target.value,
@@ -9549,6 +9870,25 @@
                                                     </option>
                                                 ))}
                                             </select>
+                                            {formAssign && formAssign.candidates.length > 1 && (
+                                                <select value="" style={{ marginTop: 6, fontSize: 12 }}
+                                                    onChange={(e) => {
+                                                        const c = formAssign.candidates[Number(e.target.value)];
+                                                        const fields = c && budgetSnapshot(c.subcategory_id, c.budget_item_id);
+                                                        if (!fields) return;
+                                                        setFormData(prev => ({ ...prev, ...fields }));
+                                                        setFormAssign(prev => ({ ...prev, source: 'history', ruleId: null, locked: true }));
+                                                    }}>
+                                                    <option value="">🕘 이력 후보 {formAssign.candidates.length}개에서 선택…</option>
+                                                    {formAssign.candidates.map((c, i) => <option key={i} value={i}>{candidateLabel(c)}</option>)}
+                                                </select>
+                                            )}
+                                            {!payeeRulesError && formData.recipient.trim() && formData.budget_item_id && formAssign?.source !== 'rule' && (
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, fontWeight: 400, color: '#4b5563', cursor: 'pointer' }}>
+                                                    <input type="checkbox" checked={formSaveRule} onChange={(e) => setFormSaveRule(e.target.checked)} />
+                                                    「{formData.recipient.trim()}」을(를) 이 항목 규칙으로 저장 (다음부터 자동 배정)
+                                                </label>
+                                            )}
                                         </div>
 
                                         <div className="form-group">
@@ -9589,7 +9929,12 @@
                                                 type="text"
                                                 placeholder="수취인 입력 또는 목록에서 선택"
                                                 value={formData.recipient}
-                                                onChange={(e) => setFormData({...formData, recipient: e.target.value})}
+                                                onChange={(e) => {
+                                                    setFormData({...formData, recipient: e.target.value});
+                                                    // 수취인이 바뀌면 이전 배정 근거(규칙 id 등)는 무효 — 자동값이면 blur 때 다시 배정
+                                                    if (formAssign?.source) setFormAssign(prev => ({ ...prev, source: null, ruleId: null }));
+                                                }}
+                                                onBlur={(e) => autoAssignForm(e.target.value)}
                                                 list="recipient-datalist"
                                             />
                                             <datalist id="recipient-datalist">
@@ -9779,7 +10124,16 @@
                                                         }
                                                     }
 
-                                                    alert('예산 집행이 성공적으로 등록되었습니다.');
+                                                    // 거래처 규칙 저장·적중 갱신 (F-15)
+                                                    const ruleResult = await persistRuleEffects([{
+                                                        payee: formData.recipient, bizNo: '',
+                                                        subcategory_id: formData.subcategory_id, budget_item_id: formData.budget_item_id,
+                                                        saveRule: formSaveRule, ruleId: formAssign?.ruleId || null
+                                                    }]);
+
+                                                    alert('예산 집행이 성공적으로 등록되었습니다.'
+                                                        + (ruleResult.saved > 0 ? `\n「${formData.recipient.trim()}」 규칙을 저장했습니다.` : '')
+                                                        + (ruleResult.failed > 0 ? '\n⚠️ 거래처 규칙 저장에 실패했습니다. 거래처 규칙 탭에서 다시 추가해주세요.' : ''));
 
                                                     // 입금확인증 수수료 → 같은 예산항목으로 별도 건 추가 등록 (F-14)
                                                     const pdfFee = formPdfEvidence?.parsed?.fee || 0;
@@ -9924,7 +10278,9 @@
                                                                     budget_item_id: '',
                                                                     description: '',
                                                                     payment_method: '계좌이체',
-                                                                }));
+                                                                }))
+                                                                // 자동 감지된 열 매핑으로 규칙·이력 배정 (F-15) — 매핑을 바꾸면 「빈 항목 채우기」로 재적용
+                                                                .map(row => ({ ...row, ...autoAssignPatch(row, autoMap) }));
                                                             setBankImportRows(rows);
                                                             setBankImportStep('preview');
                                                         } catch (err) {
@@ -9944,10 +10300,7 @@
                                     {/* Step 2: Preview & Map */}
                                     {bankImportStep === 'preview' && bankImportRows.length > 0 && (() => {
                                         const cm = bankColMap;
-                                        const getVal = (row, key) => {
-                                            const idx = parseInt(cm[key]);
-                                            return (!isNaN(idx) && row._raw[idx] != null) ? row._raw[idx] : '';
-                                        };
+                                        const getVal = (row, key) => excelCell(row, cm, key);
                                         const parseAmt = (v) => {
                                             if (typeof v === 'number') return Math.abs(Math.round(v));
                                             return Math.abs(parseInt(String(v).replace(/[,\s원₩]/g, '')) || 0);
@@ -9956,10 +10309,10 @@
                                         const rowDate = r => r._kind === 'excel' ? normalizeDate(getVal(r, 'date')) : (r.execution_date || '');
                                         const rowAmount = r => parseAmt(r._kind === 'excel' ? getVal(r, 'amount') : r.amount);
                                         const rowName = r => r._kind === 'excel' ? String(getVal(r, 'name') || '') : (r.recipient || '');
-                                        const rowIsWithdraw = r => r._kind === 'excel' ? /출금|지급|이체/.test(String(getVal(r, 'type'))) : true;
+                                        const rowIsWithdraw = r => r._kind === 'excel' ? isWithdrawType(getVal(r, 'type')) : true;
                                         // 행 편집 단일 진입점: PDF 본 행은 중복 재검사, 수수료 행은 매핑 직접 지정 시 연동 해제,
                                         // 본 행 → 수수료 행 전파(날짜는 항상, 소분류/항목은 연동 중일 때만)
-                                        const updateRow = (ri, patch) => setBankImportRows(prev => prev.map((r, i) => {
+                                        const applyRowPatch = (rows, ri, patch) => rows.map((r, i) => {
                                             if (i === ri) {
                                                 const next = { ...r, ...patch };
                                                 if (r._kind === 'pdf') {
@@ -9979,16 +10332,34 @@
                                                 return Object.keys(follow).length ? { ...r, ...follow } : r;
                                             }
                                             return r;
-                                        }));
+                                        });
+                                        const updateRow = (ri, patch) => setBankImportRows(prev => applyRowPatch(prev, ri, patch));
+                                        // 수취인 입력을 마친 뒤(blur) 자동배정 행만 규칙·이력으로 다시 배정 (F-15)
+                                        const reassignRow = (ri) => { const p = autoAssignPatch(bankImportRows[ri], cm, { refresh: true }); if (p) updateRow(ri, p); };
+                                        // 사용자가 소분류/항목을 직접 고름 → 자동배정 잠금 (규칙 저장 기본값은 manualAssignMeta)
+                                        const manualAssign = (row) => {
+                                            if (row._kind === 'fee') return {};
+                                            const m = manualAssignMeta(row._assignLocked, row._assignSource, row._saveRule, rowName(row));
+                                            return { _assignLocked: m.locked, _assignSource: m.source, _assignRuleId: m.ruleId, _saveRule: m.saveRule };
+                                        };
+                                        // 🔗 규칙·이력으로 빈 항목 채우기 — 잠기지 않은 빈 행(엑셀 포함)에 일괄 적용. 수수료 행은 본 행 연동으로 따라감
+                                        const fillEmptyAssignments = () => {
+                                            let filled = 0;
+                                            const next = bankImportRows.reduce((rows, r, ri) => {
+                                                const p = autoAssignPatch(r, cm);
+                                                if (!p) return rows;
+                                                if (p.subcategory_id) filled++;
+                                                return applyRowPatch(rows, ri, p); // 연동 수수료 행 전파 포함
+                                            }, bankImportRows);
+                                            setBankImportRows(next);
+                                            if (filled === 0) alert('규칙·이력으로 채울 수 있는 빈 행이 없습니다.');
+                                        };
                                         const allSubcats = getAllSubcategories();
                                         const selectedCount = bankImportRows.filter(r => r._selected).length;
                                         const feeCount = bankImportRows.filter(r => r._kind === 'fee').length;
                                         const isPdfSource = bankImportSource === 'pdf';
                                         const thStyle = (extra) => ({ padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', ...extra });
                                         const cellInput = { width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 };
-                                        const pill = (bg, color, text, key) => (
-                                            <span key={key} style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: bg, color, marginRight: 4, marginBottom: 2, whiteSpace: 'nowrap' }}>{text}</span>
-                                        );
 
                                         return (
                                         <div>
@@ -10026,6 +10397,11 @@
                                                     <span style={{ fontSize: 13, color: '#666' }}>
                                                         총 {bankImportRows.length}건{feeCount > 0 ? ` (수수료 ${feeCount}건 포함)` : ''} 중 <strong>{selectedCount}건</strong> 선택
                                                     </span>
+                                                    <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}
+                                                        title="거래처 규칙과 과거 집행이력으로 비어 있는 소분류·항목을 채웁니다 (직접 고른 행은 그대로)"
+                                                        onClick={fillEmptyAssignments}>
+                                                        🔗 규칙·이력으로 빈 항목 채우기
+                                                    </button>
                                                 </div>
                                                 <button className="btn btn-primary" style={{ padding: '10px 24px', fontSize: 14 }}
                                                     disabled={selectedCount === 0}
@@ -10033,14 +10409,14 @@
                                                         const toInsert = bankImportRows.filter(r => r._selected && r.subcategory_id && r.budget_item_id);
                                                         if (toInsert.length === 0) { alert('예산항목이 매핑된 건이 없습니다. 소분류와 항목을 선택해주세요.'); return; }
                                                         const feeSel = toInsert.filter(r => r._kind === 'fee').length;
-                                                        if (!confirm(`${toInsert.length}건${feeSel > 0 ? ` (수수료 ${feeSel}건 포함)` : ''}을 일괄 등록하시겠습니까?`)) return;
+                                                        const skipped = selectedCount - toInsert.length;
+                                                        if (!confirm(`${toInsert.length}건${feeSel > 0 ? ` (수수료 ${feeSel}건 포함)` : ''}을 일괄 등록하시겠습니까?${skipped > 0 ? `\n예산항목이 지정되지 않은 ${skipped}건은 건너뜁니다.` : ''}`)) return;
                                                         try {
                                                             // id를 클라이언트에서 부여 → 증빙 첨부 시 서버 반환 순서에 의존하지 않음
                                                             const insertRows = toInsert.map(r => {
-                                                                const sub = allSubcats.find(s => s.id === r.subcategory_id);
-                                                                const item = sub ? sub.items.find(it => it.id === r.budget_item_id) : null;
-                                                                const cat = effectiveBudgetData.categories.find(c => c.subcategories.some(s => s.id === r.subcategory_id));
-                                                                if (!sub || !cat || !item) throw new Error(`행 ${r._idx + 1}: 필수 항목 매핑이 누락되었습니다.`);
+                                                                const found = findBudgetItem(effectiveBudgetData, r.subcategory_id, r.budget_item_id);
+                                                                if (!found) throw new Error(`행 ${r._idx + 1}: 필수 항목 매핑이 누락되었습니다.`);
+                                                                const { cat, sub, item } = found;
                                                                 const execDate = rowDate(r);
                                                                 const amount = rowAmount(r);
                                                                 if (r._kind !== 'excel' && (!execDate || !(amount > 0))) throw new Error(`행 ${r._idx + 1}: 날짜와 금액을 확인해주세요.`);
@@ -10074,7 +10450,13 @@
                                                             if (failedDocs.length > 0) console.error('증빙 첨부 실패:', failedDocs);
                                                             const docErr = await insertExecutionDocs(docsToInsert);
                                                             if (docErr) failedDocs.push(...docsToInsert.map(d => d.file_name));
-                                                            setBulkRegisterResult({ inserted: insertRows.length, attached: docErr ? 0 : docsToInsert.length, failedDocs });
+                                                            // 거래처 규칙 저장·적중 갱신 (F-15) — 수수료 행 제외
+                                                            const ruleResult = await persistRuleEffects(toInsert.filter(r => r._kind !== 'fee').map(r => ({
+                                                                payee: rowName(r), bizNo: r._bizNo || '',
+                                                                subcategory_id: r.subcategory_id, budget_item_id: r.budget_item_id,
+                                                                saveRule: !!r._saveRule, ruleId: r._assignRuleId
+                                                            })));
+                                                            setBulkRegisterResult({ inserted: insertRows.length, attached: docErr ? 0 : docsToInsert.length, failedDocs, rulesSaved: ruleResult.saved, rulesFailed: ruleResult.failed });
                                                             setBankImportStep('done');
                                                             await refreshExecutions();
                                                         } catch (err) {
@@ -10137,12 +10519,12 @@
                                                                 </td>
                                                                 <td style={{ padding: '8px', color: '#374151' }}>
                                                                     {isPdfRow
-                                                                        ? <input type="text" value={row.recipient} placeholder="수취인" style={cellInput} onChange={e => updateRow(ri, { recipient: e.target.value })} />
+                                                                        ? <input type="text" value={row.recipient} placeholder="수취인" style={cellInput} onChange={e => updateRow(ri, { recipient: e.target.value })} onBlur={() => reassignRow(ri)} />
                                                                         : nameVal}
                                                                 </td>
                                                                 <td style={{ padding: '8px' }}>
                                                                     <select value={row.subcategory_id} style={cellInput}
-                                                                        onChange={e => updateRow(ri, { subcategory_id: e.target.value, budget_item_id: '' })}>
+                                                                        onChange={e => updateRow(ri, { subcategory_id: e.target.value, budget_item_id: '', ...manualAssign(row) })}>
                                                                         <option value="">-- 선택 --</option>
                                                                         {allSubcats.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                                     </select>
@@ -10150,10 +10532,32 @@
                                                                 <td style={{ padding: '8px' }}>
                                                                     <select value={row.budget_item_id} style={cellInput}
                                                                         disabled={!row.subcategory_id}
-                                                                        onChange={e => updateRow(ri, { budget_item_id: e.target.value })}>
+                                                                        onChange={e => updateRow(ri, { budget_item_id: e.target.value, ...manualAssign(row) })}>
                                                                         <option value="">-- 선택 --</option>
                                                                         {rowItems.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
                                                                     </select>
+                                                                    {!isFee && (
+                                                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                                                            {renderAssignBadge({ source: row._assignSource, candidates: row._assignCandidates, subcategory_id: row.subcategory_id, budget_item_id: row.budget_item_id })}
+                                                                            {(row._assignCandidates || []).length > 1 && (
+                                                                                <select value="" style={{ ...cellInput, width: 'auto', padding: '1px 4px' }}
+                                                                                    onChange={e => {
+                                                                                        const c = row._assignCandidates[Number(e.target.value)];
+                                                                                        if (c) updateRow(ri, { subcategory_id: c.subcategory_id, budget_item_id: c.budget_item_id, _assignSource: 'history', _assignRuleId: null, _assignLocked: true });
+                                                                                    }}>
+                                                                                    <option value="">후보 {row._assignCandidates.length}개 ▾</option>
+                                                                                    {row._assignCandidates.map((c, ci) => <option key={ci} value={ci}>{candidateLabel(c)}</option>)}
+                                                                                </select>
+                                                                            )}
+                                                                            {!payeeRulesError && row.budget_item_id && row._assignSource !== 'rule' && nameVal.trim() && (
+                                                                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#4b5563', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                                                                    title={`「${nameVal.trim()}」 → 이 항목을 거래처 규칙으로 저장`}>
+                                                                                    <input type="checkbox" checked={!!row._saveRule} onChange={e => updateRow(ri, { _saveRule: e.target.checked })} />
+                                                                                    규칙 저장
+                                                                                </label>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
                                                                 </td>
                                                                 <td style={{ padding: '8px' }}>
                                                                     <input type="text" placeholder={nameVal || '설명 입력'} value={row.description}
@@ -10195,7 +10599,11 @@
                                             <p style={{ fontSize: 18, fontWeight: 700, color: '#059669', marginBottom: 8 }}>
                                                 {bulkRegisterResult.inserted}건 등록{bulkRegisterResult.attached > 0 ? ` · 📎 증빙 ${bulkRegisterResult.attached}건 첨부` : ''}
                                             </p>
-                                            <p style={{ fontSize: 13, color: '#666', marginBottom: 24 }}>등록된 내역은 집행내역 탭에서 확인할 수 있습니다.</p>
+                                            <p style={{ fontSize: 13, color: '#666', marginBottom: 24 }}>
+                                                등록된 내역은 집행내역 탭에서 확인할 수 있습니다.
+                                                {bulkRegisterResult.rulesSaved > 0 && <><br />🔗 거래처 규칙 {bulkRegisterResult.rulesSaved}건을 저장했습니다 — 다음 등록부터 자동 배정됩니다.</>}
+                                                {bulkRegisterResult.rulesFailed > 0 && <><br /><span style={{ color: '#b45309' }}>⚠️ 거래처 규칙 {bulkRegisterResult.rulesFailed}건 저장 실패 — 거래처 규칙 탭에서 다시 추가해주세요.</span></>}
+                                            </p>
                                             {bulkRegisterResult.failedDocs.length > 0 && (
                                                 <div style={{ display: 'inline-block', textAlign: 'left', background: '#FEF3CD', border: '1px solid #F6E05E', borderRadius: 8, padding: '10px 16px', marginBottom: 24, fontSize: 13 }}>
                                                     ⚠️ 증빙 첨부 실패 — 집행내역 탭에서 다시 첨부해주세요:
@@ -10216,6 +10624,189 @@
                                     )}
                                 </div>
                             )}
+
+                            {budgetTab === 'rules' && (() => {
+                                const allSubcats = getAllSubcategories();
+                                const suggestions = ruleSuggestions;
+                                const itemLabel = budgetItemLabel;
+                                const sortedRules = [...payeeRules].sort((a, b) => (b.is_active - a.is_active) || (b.hit_count || 0) - (a.hit_count || 0) || a.display_name.localeCompare(b.display_name));
+                                const th = { padding: '10px 8px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', fontSize: 12, whiteSpace: 'nowrap' };
+                                const td = { padding: '8px', borderBottom: '1px solid #f0f0f0', fontSize: 13, verticalAlign: 'middle' };
+                                const inp = { width: '100%', padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 };
+                                const smallBtn = { fontSize: 11, padding: '3px 8px' };
+                                const re = ruleEdit;
+                                const setRe = (patch) => setRuleEdit(prev => ({ ...prev, ...patch }));
+                                return (
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
+                                        <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>🔗 거래처 규칙</h2>
+                                        {!payeeRulesError && !re && (
+                                            <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={() => setRuleEdit(emptyRuleEdit())}>+ 규칙 추가</button>
+                                        )}
+                                    </div>
+                                    <p style={{ color: '#666', fontSize: 13, marginBottom: 20 }}>
+                                        이체대상·거래처를 예산항목에 연결해두면 집행등록·일괄등록에서 예산항목이 자동으로 배정됩니다.
+                                        규칙이 없으면 같은 수취인의 과거 집행에서 가장 많이 쓴 항목을 추천합니다.
+                                    </p>
+
+                                    {payeeRulesError && (
+                                        <div style={{ background: '#FEF3CD', border: '1px solid #F6E05E', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: 13 }}>
+                                            ⚠️ 규칙 테이블을 불러올 수 없습니다. Supabase SQL Editor에서 <code>supabase-migration-payee-rules.sql</code>을 실행해주세요.
+                                            지금은 과거 집행이력 기반 추천만 동작합니다.
+                                        </div>
+                                    )}
+
+                                    {re && (
+                                        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+                                            <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>{re.id ? '규칙 수정' : '규칙 추가'}</h3>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                                                <div>
+                                                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>표시명 (거래처·수취인)</label>
+                                                    <input style={inp} value={re.display_name} placeholder="예: (주)한빛인쇄"
+                                                        onChange={e => setRe({ display_name: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>매칭 방식</label>
+                                                    <select style={inp} value={re.match_type} onChange={e => setRe({ match_type: e.target.value, pattern: '' })}>
+                                                        <option value="exact">이름 일치 (권장)</option>
+                                                        <option value="contains">이름 포함 (업체 표기가 자주 바뀔 때)</option>
+                                                        <option value="biz_no">사업자번호</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                                                        {re.match_type === 'biz_no' ? '사업자번호' : re.match_type === 'contains' ? '포함할 이름' : '매칭 키 (자동)'}
+                                                    </label>
+                                                    {re.match_type === 'exact'
+                                                        ? <input style={{ ...inp, background: '#f9fafb', color: '#6b7280' }} readOnly value={normalizePayee(re.display_name)} />
+                                                        : <input style={inp} value={re.pattern} placeholder={re.match_type === 'biz_no' ? '123-45-67890' : '예: 한빛인쇄'}
+                                                            onChange={e => setRe({ pattern: e.target.value })} />}
+                                                    {re.match_type === 'contains' && <span style={{ fontSize: 11, color: '#9ca3af' }}>개인 이름에는 쓰지 마세요 (동명이인)</span>}
+                                                    {re.match_type === 'biz_no' && <span style={{ fontSize: 11, color: '#9ca3af' }}>세금계산서·영수증 인식 기능(추후)에서 적용됩니다</span>}
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>소분류</label>
+                                                    <select style={inp} value={re.subcategory_id} onChange={e => setRe({ subcategory_id: e.target.value, budget_item_id: '' })}>
+                                                        <option value="">-- 선택 --</option>
+                                                        {allSubcats.map(sc => <option key={sc.id} value={sc.id}>{sc.categoryName} &gt; {sc.name}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>예산항목</label>
+                                                    <select style={inp} value={re.budget_item_id} disabled={!re.subcategory_id} onChange={e => setRe({ budget_item_id: e.target.value })}>
+                                                        <option value="">-- 선택 --</option>
+                                                        {getAllBudgetItems(re.subcategory_id).map(it => <option key={it.id} value={it.id}>{it.name} ({it.type})</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>결제방법 (선택)</label>
+                                                    <select style={inp} value={re.payment_method || ''} onChange={e => setRe({ payment_method: e.target.value })}>
+                                                        <option value="">증빙에서 온 값 유지</option>
+                                                        <option value="계좌이체">계좌이체</option>
+                                                        <option value="카드">카드</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div style={{ marginTop: 12 }}>
+                                                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>메모</label>
+                                                <input style={inp} value={re.notes || ''} onChange={e => setRe({ notes: e.target.value })} />
+                                            </div>
+                                            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                                                <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={saveRuleEdit}>💾 저장</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: 13 }} onClick={() => setRuleEdit(null)}>취소</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {!payeeRulesError && (
+                                        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+                                            <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>규칙 목록 ({payeeRules.length})</h3>
+                                            {payeeRules.length === 0 ? (
+                                                <p style={{ fontSize: 13, color: '#9ca3af', margin: 0 }}>등록된 규칙이 없습니다. 아래 「이력에서 규칙 만들기」나 등록 화면의 「규칙 저장」 체크로 추가할 수 있습니다.</p>
+                                            ) : (
+                                            <div style={{ overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                    <thead>
+                                                        <tr style={{ background: '#f8f9fa' }}>
+                                                            <th style={th}>표시명</th><th style={th}>매칭</th><th style={th}>소분류 &gt; 항목</th>
+                                                            <th style={th}>결제</th><th style={{ ...th, textAlign: 'right' }}>사용</th><th style={th}>최근 사용</th><th style={th}></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {sortedRules.map(rule => {
+                                                            const label = itemLabel(rule.subcategory_id, rule.budget_item_id);
+                                                            return (
+                                                            <tr key={rule.id} style={{ background: !label ? '#fef2f2' : undefined, opacity: rule.is_active ? 1 : 0.5 }}>
+                                                                <td style={td}><strong>{rule.display_name}</strong>{rule.notes ? <div style={{ fontSize: 11, color: '#9ca3af' }}>{rule.notes}</div> : null}</td>
+                                                                <td style={td}>
+                                                                    <span style={{ fontSize: 11, color: '#4b5563' }}>{PAYEE_RULE_TYPES[rule.match_type]}</span>
+                                                                    {rule.match_type !== 'exact' && <div style={{ fontSize: 11, color: '#9ca3af' }}>{rule.pattern}</div>}
+                                                                </td>
+                                                                <td style={td}>{label || <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠ 항목 없음 (예산 변경됨)</span>}</td>
+                                                                <td style={td}>{rule.payment_method || '—'}</td>
+                                                                <td style={{ ...td, textAlign: 'right' }}>{rule.hit_count || 0}</td>
+                                                                <td style={td}>{rule.last_used_at ? rule.last_used_at.slice(0, 10) : '—'}</td>
+                                                                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                                                                    <button className="btn btn-secondary" style={smallBtn}
+                                                                        onClick={() => setRuleEdit({ ...emptyRuleEdit(), ...rule, payment_method: rule.payment_method || '', pattern: rule.match_type === 'exact' ? '' : rule.pattern })}>수정</button>{' '}
+                                                                    <button className="btn btn-secondary" style={smallBtn} onClick={() => toggleRule(rule)}>{rule.is_active ? '끄기' : '켜기'}</button>{' '}
+                                                                    <button className="btn btn-secondary" style={{ ...smallBtn, color: '#dc2626' }} onClick={() => deleteRule(rule)}>삭제</button>
+                                                                </td>
+                                                            </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {!payeeRulesError && (
+                                        <div className="card" style={{ padding: 16 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                                                <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>🕘 이력에서 규칙 만들기 ({suggestions.length})</h3>
+                                                <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}
+                                                    disabled={!suggestions.some(sg => ruleSuggestSel[sg.key])}
+                                                    onClick={() => saveRuleSuggestions(suggestions)}>
+                                                    선택 {suggestions.filter(sg => ruleSuggestSel[sg.key]).length}건 규칙으로 저장
+                                                </button>
+                                            </div>
+                                            <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 12px' }}>같은 수취인에게 2번 이상, 80% 이상 같은 항목으로 집행한 경우입니다. 이미 규칙이 있는 수취인은 제외됩니다.</p>
+                                            {suggestions.length === 0 ? (
+                                                <p style={{ fontSize: 13, color: '#9ca3af', margin: 0 }}>제안할 규칙이 없습니다.</p>
+                                            ) : (
+                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                <thead>
+                                                    <tr style={{ background: '#f8f9fa' }}>
+                                                        <th style={{ ...th, width: 36, textAlign: 'center' }}>
+                                                            <input type="checkbox" checked={suggestions.every(sg => ruleSuggestSel[sg.key])}
+                                                                onChange={e => setRuleSuggestSel(e.target.checked ? Object.fromEntries(suggestions.map(sg => [sg.key, true])) : {})} />
+                                                        </th>
+                                                        <th style={th}>수취인</th><th style={{ ...th, textAlign: 'right' }}>집행</th><th style={th}>소분류 &gt; 항목</th><th style={{ ...th, textAlign: 'right' }}>일치율</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {suggestions.map(sg => (
+                                                        <tr key={sg.key}>
+                                                            <td style={{ ...td, textAlign: 'center' }}>
+                                                                <input type="checkbox" checked={!!ruleSuggestSel[sg.key]}
+                                                                    onChange={e => setRuleSuggestSel(prev => ({ ...prev, [sg.key]: e.target.checked }))} />
+                                                            </td>
+                                                            <td style={td}>{sg.display_name}</td>
+                                                            <td style={{ ...td, textAlign: 'right' }}>{sg.count}건</td>
+                                                            <td style={td}>{itemLabel(sg.subcategory_id, sg.budget_item_id)}</td>
+                                                            <td style={{ ...td, textAlign: 'right' }}>{Math.round(sg.ratio * 100)}%</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                );
+                            })()}
 
                             {budgetTab === 'calculator' && (
                                 <div>
