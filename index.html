@@ -3650,7 +3650,12 @@
                 groups.set(key, g);
             });
             const ruleIndex = indexPayeeRules(rules, budgetData);
-            const covered = key => !!matchPayeeRule(ruleIndex, key, '');
+            // 사용자가 꺼둔 exact 규칙(항목이 아직 예산에 있는)의 수취인도 제외 — 제안 저장(upsert)이 규칙을 되살리고 항목을 덮지 않도록.
+            // 예산에서 사라진 항목을 가리키는 규칙은 제안으로 교체할 수 있게 둔다
+            const disabledExact = new Set((rules || [])
+                .filter(r => !r.is_active && r.match_type === 'exact' && findBudgetItem(budgetData, r.subcategory_id, r.budget_item_id))
+                .map(r => r.pattern));
+            const covered = key => disabledExact.has(key) || !!matchPayeeRule(ruleIndex, key, '');
             return [...groups.values()]
                 .filter(g => g.total >= 2 && !covered(g.key))
                 .map(g => {
@@ -5369,13 +5374,14 @@
             // 행 하나의 자동배정 패치. 배정 대상이 아니거나 바뀔 게 없으면 null
             // - 수수료 행(본 행 연동)·직접 고른 행(_assignLocked)은 제외
             // - 엑셀 입금 행(구분 열이 매핑돼 있고 출금이 아님)은 지출 항목으로 배정하지 않음
-            // - refresh: 수취인 수정 후 재배정 — 이미 채워진 자동값도 다시 계산
+            // - refresh: 수취인 수정·열 매핑 변경 후 재배정 — 이미 채워진 자동값도 다시 계산
             const autoAssignPatch = (row, colMap, { refresh = false } = {}) => {
                 if (row._kind === 'fee' || row._assignLocked) return null;
                 if (!refresh && row.subcategory_id && row.budget_item_id) return null;
                 const isExcel = row._kind === 'excel';
-                if (isExcel && colMap.type !== '' && !isWithdrawType(excelCell(row, colMap, 'type'))) return null;
-                const a = resolveAssign(isExcel ? String(excelCell(row, colMap, 'name') || '') : row.recipient);
+                // 입금 행은 미배정으로 해석 → 평소엔 null, refresh(열 매핑 변경)면 이전 자동배정을 비움
+                const isDeposit = isExcel && colMap.type !== '' && !isWithdrawType(excelCell(row, colMap, 'type'));
+                const a = resolveAssign(isDeposit ? '' : isExcel ? String(excelCell(row, colMap, 'name') || '') : row.recipient);
                 if (a.subcategory_id === row.subcategory_id && a.budget_item_id === row.budget_item_id && a.source === row._assignSource) return null;
                 if (!refresh && !a.subcategory_id && a.candidates.length === 0) return null;
                 return assignRowPatch(a, row);
@@ -10376,7 +10382,17 @@
                                                     ].map(f => (
                                                         <div key={f.key}>
                                                             <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' }}>{f.label}</label>
-                                                            <select value={cm[f.key]} onChange={e => setBankColMap(p => ({...p, [f.key]: e.target.value}))}
+                                                            <select value={cm[f.key]} onChange={e => {
+                                                                const nextMap = { ...cm, [f.key]: e.target.value };
+                                                                setBankColMap(nextMap);
+                                                                // 이름·구분 열이 바뀌면 잠기지 않은 자동배정 행을 새 매핑으로 다시 배정 (직접 고른 행은 유지)
+                                                                if (f.key === 'name' || f.key === 'type') {
+                                                                    setBankImportRows(bankImportRows.reduce((rows, r, ri) => {
+                                                                        const p = autoAssignPatch(r, nextMap, { refresh: true });
+                                                                        return p ? applyRowPatch(rows, ri, p) : rows;
+                                                                    }, bankImportRows));
+                                                                }
+                                                            }}
                                                                 style={{ width: '100%', padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12 }}>
                                                                 <option value="">-- 선택 --</option>
                                                                 {bankHeaders.map((h, i) => <option key={i} value={String(i)}>{h || `열 ${i+1}`}</option>)}
