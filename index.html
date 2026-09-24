@@ -3629,9 +3629,9 @@
                 payment_method: rule.payment_method || null, source: 'rule', ruleId: rule.id };
             const candidates = (key && historyIndex.get(key)) || [];
             if (candidates.length === 0) return none;
-            // 최빈이 유일할 때만 자동 배정 (동명이인·여러 항목 거래처는 후보만 제시)
+            // 최빈 항목이 2회 이상이고 유일할 때만 자동 배정 (1회 이력·동명이인·여러 항목 거래처는 후보만 제시)
             const [top, second] = candidates;
-            if (second && second.count === top.count) return { ...none, candidates };
+            if (top.count < 2 || (second && second.count === top.count)) return { ...none, candidates };
             return { ...none, subcategory_id: top.subcategory_id, budget_item_id: top.budget_item_id, source: 'history', candidates };
         };
 
@@ -9876,7 +9876,7 @@
                                                     </option>
                                                 ))}
                                             </select>
-                                            {formAssign && formAssign.candidates.length > 1 && (
+                                            {formAssign && (formAssign.candidates.length > 1 || (formAssign.candidates.length === 1 && !formData.budget_item_id)) && (
                                                 <select value="" style={{ marginTop: 6, fontSize: 12 }}
                                                     onChange={(e) => {
                                                         const c = formAssign.candidates[Number(e.target.value)];
@@ -10555,7 +10555,7 @@
                                                                     {!isFee && (
                                                                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 4 }}>
                                                                             {renderAssignBadge({ source: row._assignSource, candidates: row._assignCandidates, subcategory_id: row.subcategory_id, budget_item_id: row.budget_item_id })}
-                                                                            {(row._assignCandidates || []).length > 1 && (
+                                                                            {((row._assignCandidates || []).length > 1 || ((row._assignCandidates || []).length === 1 && !row.budget_item_id)) && (
                                                                                 <select value="" style={{ ...cellInput, width: 'auto', padding: '1px 4px' }}
                                                                                     onChange={e => {
                                                                                         const c = row._assignCandidates[Number(e.target.value)];
