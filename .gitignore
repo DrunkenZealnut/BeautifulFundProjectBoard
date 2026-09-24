@@ -5,6 +5,7 @@
 
 # Supabase
 supabase-storage-setup.sql
+supabase/.temp/
 
 # IDE
 .vscode/
