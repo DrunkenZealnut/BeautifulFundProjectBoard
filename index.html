@@ -37,6 +37,8 @@
 
     <!-- pdf.js: 입금확인증 PDF 텍스트 추출 (UMD 3.x — window.pdfjsLib) -->
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <!-- pdf-lib: 여러 장짜리 입금확인증 PDF를 페이지별 증빙으로 분리 (window.PDFLib) -->
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
     <style>
         * {
@@ -3451,15 +3453,17 @@
         // 계좌번호(출금계좌/입금계좌)는 라벨 소비용으로만 매칭하고 결과에 넣지 않는다.
         // ────────────────────────────────────────────────────────────
 
-        // PDF → 줄 문자열 배열. PDFium 출력은 글자 1개가 아이템 1개이고 순서가 읽기 순서와 다르므로
+        // PDF → 페이지별 줄 문자열 배열. PDFium 출력은 글자 1개가 아이템 1개이고 순서가 읽기 순서와 다르므로
         // y(±2pt)로 줄을 묶고 x로 정렬해 재구성한다. 글자 간격 3pt 초과는 공백으로 본다.
         // `worker`(pdfjsLib.PDFWorker)를 넘기면 여러 파일이 워커 1개를 재사용한다 (파일마다 새 워커는 ~70ms).
-        const extractPdfTextLines = async (file, worker) => {
+        // 반환: { pages: string[][] (텍스트 없는 페이지는 []), numPages } — maxPages 넘는 페이지는 읽지 않음
+        const MAX_PDF_PAGES = 200; // 실사용: 한 달치 이체확인증을 한 PDF로 출력(57쪽 확인)
+        const extractPdfPages = async (file, worker, maxPages = MAX_PDF_PAGES) => {
             const data = new Uint8Array(await file.arrayBuffer());
             const pdf = await window.pdfjsLib.getDocument({ data, worker }).promise;
-            const lines = [];
+            const pages = [];
             try {
-                const pageCount = Math.min(pdf.numPages, 2); // 확인증은 1p, 안전상 2p까지만
+                const pageCount = Math.min(pdf.numPages, maxPages);
                 for (let p = 1; p <= pageCount; p++) {
                     const page = await pdf.getPage(p);
                     const tc = await page.getTextContent();
@@ -3471,6 +3475,7 @@
                         if (!row) { row = { y, items: [] }; rows.push(row); }
                         row.items.push({ x, w: it.width, s: it.str });
                     });
+                    const lines = [];
                     rows.sort((a, b) => b.y - a.y).forEach(row => { // PDF 좌표계: y 클수록 위
                         row.items.sort((a, b) => a.x - b.x);
                         let s = '', lastEnd = null;
@@ -3482,11 +3487,32 @@
                         s = s.replace(/\s+/g, ' ').trim();
                         if (s) lines.push(s);
                     });
+                    pages.push(lines);
                 }
+                return { pages, numPages: pdf.numPages };
             } finally {
                 pdf.destroy(); // 외부 worker는 파괴하지 않음
             }
-            return lines;
+        };
+
+        // 원본 PDF에서 한 페이지(0-based)만 뽑아 새 File로 (pdf-lib). 같은 원본을 여러 번 자르면 cache(Map)로 로드·결과 재사용
+        // 파일명: 원본이름_p3.pdf
+        const extractPdfPageFile = (file, pageIndex, cache = new Map()) => {
+            let entry = cache.get(file);
+            if (!entry) {
+                entry = { doc: file.arrayBuffer().then(buf => window.PDFLib.PDFDocument.load(buf)), pages: new Map() };
+                cache.set(file, entry);
+            }
+            if (!entry.pages.has(pageIndex)) {
+                entry.pages.set(pageIndex, entry.doc.then(async src => {
+                    const out = await window.PDFLib.PDFDocument.create();
+                    const [pg] = await out.copyPages(src, [pageIndex]);
+                    out.addPage(pg);
+                    const base = file.name.replace(/\.pdf$/i, '');
+                    return new File([await out.save()], `${base}_p${pageIndex + 1}.pdf`, { type: 'application/pdf' });
+                }));
+            }
+            return entry.pages.get(pageIndex);
         };
         const pdfReadErrorMsg = (err) => err && err.name === 'PasswordException' ? '암호가 걸린 PDF입니다' : '읽을 수 없는 PDF입니다';
 
@@ -3544,6 +3570,7 @@
                 fee: num(raw.fee),
                 recipient,
                 description: memo || baseName || (recipient ? `${recipient} 계좌이체` : ''),
+                memo, // 원문 적요 (중복 판정용 — 일괄 이체는 일시·금액·수취인이 같고 적요만 다름)
                 bankIn: raw.bankIn || '',
                 warnings
             };
@@ -3554,6 +3581,21 @@
         const findDuplicateExecution = (executions, cand) => {
             const key = executionDupKey(cand);
             return (executions || []).find(e => executionDupKey(e) === key) || null;
+        };
+        // 업로드 묶음용 기존 집행 매칭: 같은 키(일자·금액·수취인)의 기존 집행을 1:1로 소비한다 (적요가 같은 건 우선).
+        // 같은 초·같은 금액·같은 수취인으로 여러 건을 일괄 이체한 경우, DB에 있는 건수만큼만 중복으로 본다
+        const createDuplicateMatcher = (executions) => {
+            const pool = new Map();
+            (executions || []).forEach(e => {
+                const k = executionDupKey(e);
+                pool.set(k, [...(pool.get(k) || []), e]);
+            });
+            return (cand) => {
+                const list = pool.get(executionDupKey(cand));
+                if (!list || list.length === 0) return null;
+                const i = Math.max(0, list.findIndex(e => (e.description || '').trim() === (cand.description || '').trim()));
+                return list.splice(i, 1)[0];
+            };
         };
 
         // ────────────────────────────────────────────────────────────
@@ -5530,9 +5572,18 @@
             // 단건 등록 폼: 입금확인증 PDF 1장 → formData 채움 + 이체 증빙 예약 (F-14)
             const handleFormPdfAutofill = async (file) => {
                 try {
-                    const lines = await extractPdfTextLines(file);
+                    const { pages, numPages } = await extractPdfPages(file, undefined, 1);
+                    const lines = pages[0] || [];
                     const parsed = parseDepositConfirmation(lines, file.name);
-                    setFormPdfEvidence({ file, parsed });
+                    // 여러 장짜리 PDF: 1쪽만 채우고 1쪽만 증빙으로 첨부 (나머지는 일괄등록 탭에서)
+                    let evidence = file;
+                    if (numPages > 1) {
+                        if (window.PDFLib) {
+                            evidence = await extractPdfPageFile(file, 0).catch(err => { console.error('PDF 쪽 분리 실패:', file.name, err && err.name); return file; });
+                        }
+                        alert(`이 PDF에는 ${numPages}쪽이 있습니다. 1쪽 내용만 채우고 ${evidence === file ? '파일 전체를' : '1쪽만'} 증빙으로 첨부합니다.\n여러 건을 한 번에 등록하려면 「일괄등록」 탭을 이용하세요.`);
+                    }
+                    setFormPdfEvidence({ file: evidence, parsed });
                     if (lines.length === 0) {
                         // 스캔본: 값은 못 읽지만 증빙으로는 보관 (수동 입력)
                         setFormData(prev => ({ ...prev, payment_method: '계좌이체' }));
@@ -5563,35 +5614,52 @@
                 setPdfParseProgress({ done: 0, total: files.length });
                 const rows = [];
                 const errors = [];
-                const seen = new Set(); // 업로드 내 중복 키
+                const notices = []; // 건너뛴 쪽·쪽수 제한 안내
+                const seen = new Set(); // 업로드 내 중복 키 (일자·금액·수취인·적요 — 같은 쪽이 두 번 들어간 경우만)
+                const matchExisting = createDuplicateMatcher(data.budgetExecutions);
                 const worker = new window.pdfjsLib.PDFWorker(); // 배치당 워커 1개 재사용
                 try {
                     for (let i = 0; i < files.length; i++) {
                         const file = files[i];
                         try {
-                            const parsed = parseDepositConfirmation(await extractPdfTextLines(file, worker), file.name);
-                            const complete = !!parsed.execution_date && parsed.amount != null;
-                            const dup = complete ? findDuplicateExecution(data.budgetExecutions, parsed) : null;
-                            const dupInUpload = complete && seen.has(executionDupKey(parsed));
-                            if (complete) seen.add(executionDupKey(parsed));
-                            const assign = resolveAssign(parsed.recipient); // 수수료 행은 base를 통해 본 행 배정을 그대로 받음
-                            const base = { _pdfFile: file, execution_date: parsed.execution_date, subcategory_id: assign.subcategory_id, budget_item_id: assign.budget_item_id, payment_method: '계좌이체' };
-                            rows.push({
-                                ...base, _idx: rows.length, _kind: 'pdf', _bankIn: parsed.bankIn, ...assignRowPatch(assign),
-                                _warnings: dupInUpload ? [...parsed.warnings, '업로드 내 중복'] : parsed.warnings,
-                                _dup: dup, _selected: !dup && !dupInUpload,
-                                amount: parsed.amount != null ? String(parsed.amount) : '',
-                                recipient: parsed.recipient,
-                                description: parsed.description
-                            });
-                            if (parsed.fee > 0) {
+                            const { pages, numPages } = await extractPdfPages(file, worker);
+                            if (numPages > MAX_PDF_PAGES) notices.push(`${file.name}: 앞 ${MAX_PDF_PAGES}쪽만 읽었습니다 (전체 ${numPages}쪽)`);
+                            // 여러 장짜리 PDF는 쪽마다 확인증 1건. 텍스트가 한 쪽도 없으면(스캔본) 파일 전체를 1건으로
+                            const multi = pages.length > 1 && pages.some(l => l.length > 0);
+                            const baseName = file.name.replace(/\.pdf$/i, '');
+                            (multi ? pages : [pages.flat()]).forEach((lines, pi) => {
+                                // 파일명 폴백 설명도 쪽 번호로 구분되도록 "원본 p3"을 넘긴다
+                                const parsed = parseDepositConfirmation(lines, multi ? `${baseName} p${pi + 1}.pdf` : file.name);
+                                if (multi && (lines.length === 0 || parsed.warnings.includes('입금확인증 형식을 인식하지 못했습니다'))) {
+                                    notices.push(`${file.name} ${pi + 1}쪽: 입금확인증이 아니어서 건너뜀`);
+                                    return;
+                                }
+                                const complete = !!parsed.execution_date && parsed.amount != null;
+                                const uploadKey = `${executionDupKey(parsed)}|${parsed.memo}`;
+                                const dupInUpload = complete && seen.has(uploadKey);
+                                if (complete) seen.add(uploadKey);
+                                const dup = complete && !dupInUpload ? matchExisting(parsed) : null;
+                                const assign = resolveAssign(parsed.recipient); // 수수료 행은 base를 통해 본 행 배정을 그대로 받음
+                                // _pdfPage: 등록 시 이 쪽만 잘라 증빙으로 첨부 (null = 파일 전체)
+                                const base = { _pdfFile: file, _pdfPage: multi ? pi : null, _pdfPageCount: pages.length,
+                                    execution_date: parsed.execution_date, subcategory_id: assign.subcategory_id, budget_item_id: assign.budget_item_id, payment_method: '계좌이체' };
                                 rows.push({
-                                    ...base, _idx: rows.length, _kind: 'fee', _feeOf: rows.length - 1, _feeLinked: true, _selected: !dup && !dupInUpload,
-                                    amount: String(parsed.fee),
-                                    recipient: '신한은행',
-                                    description: parsed.description ? `이체수수료 · ${parsed.description}` : '이체수수료'
+                                    ...base, _idx: rows.length, _kind: 'pdf', _bankIn: parsed.bankIn, ...assignRowPatch(assign),
+                                    _warnings: dupInUpload ? [...parsed.warnings, '업로드 내 중복'] : parsed.warnings,
+                                    _dup: dup, _selected: !dup && !dupInUpload,
+                                    amount: parsed.amount != null ? String(parsed.amount) : '',
+                                    recipient: parsed.recipient,
+                                    description: parsed.description
                                 });
-                            }
+                                if (parsed.fee > 0) {
+                                    rows.push({
+                                        ...base, _idx: rows.length, _kind: 'fee', _feeOf: rows.length - 1, _feeLinked: true, _selected: !dup && !dupInUpload,
+                                        amount: String(parsed.fee),
+                                        recipient: '신한은행',
+                                        description: parsed.description ? `이체수수료 · ${parsed.description}` : '이체수수료'
+                                    });
+                                }
+                            });
                         } catch (err) {
                             console.error('입금확인증 PDF 읽기 실패:', file.name, err && err.name);
                             errors.push(`${file.name}: ${pdfReadErrorMsg(err)}`);
@@ -5602,10 +5670,11 @@
                     worker.destroy();
                     setPdfParseProgress(null);
                 }
-                if (rows.length === 0) { alert('읽을 수 있는 PDF가 없습니다.' + (errors.length ? '\n' + errors.join('\n') : '')); return; }
+                if (rows.length === 0) { alert('읽을 수 있는 입금확인증이 없습니다.' + (errors.length || notices.length ? '\n' + [...errors, ...notices].join('\n') : '')); return; }
                 setBankImportRows(rows);
                 setBankImportStep('preview');
-                if (errors.length > 0) alert('읽지 못한 파일:\n' + errors.join('\n'));
+                const msgs = [...(errors.length ? ['읽지 못한 파일:', ...errors] : []), ...(notices.length ? ['안내:', ...notices] : [])];
+                if (msgs.length > 0) alert(msgs.join('\n'));
             };
 
             const [calculatorAmount, setCalculatorAmount] = useState('');
@@ -10461,11 +10530,19 @@
                                                             if (error) throw error;
 
                                                             // PDF 원본을 이체 증빙으로 첨부 (F-14)
+                                                            // 여러 장짜리 PDF는 해당 쪽만 잘라 첨부 (본 행·수수료 행이 같은 쪽을 공유 → 캐시). 분리 실패 시 파일 전체
+                                                            const pageCache = new Map();
+                                                            const evidenceFile = (r) => r._pdfPage == null || !window.PDFLib ? Promise.resolve(r._pdfFile)
+                                                                : extractPdfPageFile(r._pdfFile, r._pdfPage, pageCache).catch(err => {
+                                                                    console.error('PDF 쪽 분리 실패:', r._pdfFile.name, err && err.name);
+                                                                    return r._pdfFile;
+                                                                });
+                                                            const evidenceLabel = (r) => r._pdfPage == null ? r._pdfFile.name : `${r._pdfFile.name} ${r._pdfPage + 1}쪽`;
                                                             const jobs = toInsert.map((r, i) => ({ r, i })).filter(({ r }) => r._pdfFile);
-                                                            const results = await Promise.allSettled(jobs.map(({ r, i }) =>
-                                                                uploadExecutionDoc(insertRows[i].id, pickTransferDocName(insertRows[i].type), r._pdfFile, `${i}_`)));
+                                                            const results = await Promise.allSettled(jobs.map(async ({ r, i }) =>
+                                                                uploadExecutionDoc(insertRows[i].id, pickTransferDocName(insertRows[i].type), await evidenceFile(r), `${i}_`)));
                                                             const docsToInsert = results.filter(x => x.status === 'fulfilled').map(x => x.value);
-                                                            const failedDocs = results.map((x, k) => x.status === 'rejected' ? jobs[k].r._pdfFile.name : null).filter(Boolean);
+                                                            const failedDocs = results.map((x, k) => x.status === 'rejected' ? evidenceLabel(jobs[k].r) : null).filter(Boolean);
                                                             if (failedDocs.length > 0) console.error('증빙 첨부 실패:', failedDocs);
                                                             const docErr = await insertExecutionDocs(docsToInsert);
                                                             if (docErr) failedDocs.push(...docsToInsert.map(d => d.file_name));
@@ -10595,7 +10672,7 @@
                                                                 {isPdfSource && (
                                                                     <td style={{ padding: '8px' }}>
                                                                         {isFee && pill('#f3f4f6', '#4b5563', row._feeLinked ? '본 행 항목 연동' : '항목 직접 지정')}
-                                                                        {isPdfRow && pill('#eff6ff', '#1d4ed8', '📎 PDF')}
+                                                                        {isPdfRow && pill('#eff6ff', '#1d4ed8', row._pdfPage != null ? `📎 PDF ${row._pdfPage + 1}/${row._pdfPageCount}쪽` : '📎 PDF')}
                                                                         {isPdfRow && row._bankIn && pill('#f0fdf4', '#166534', `🏦 ${row._bankIn}`)}
                                                                         {isPdfRow && row._dup && pill('#fee2e2', '#991b1b', `⚠ 중복 의심 (기존 ${row._dup.execution_date} · ${fmt(row._dup.amount)})`)}
                                                                         {isPdfRow && row._warnings.map((w, wi) => pill('#fef3c7', '#92400e', `⚠ ${w}`, wi))}

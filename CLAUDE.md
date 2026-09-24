@@ -62,7 +62,7 @@ Top to bottom, `index.html` is:
    - `BUDGET_DATA` — budget hierarchy structure (~line 3059)
    - `DOCUMENT_RULES` — evidence requirements per expense type (~line 3195)
    - `downloadHwpxFill` — HWPX fill download dispatcher (~line 3408)
-   - 입금확인증 PDF parser (`extractPdfTextLines`/`DEPOSIT_PDF_LABELS`/`parseDepositConfirmation`/`executionDupKey`/`findDuplicateExecution`) (~line 3457)
+   - 입금확인증 PDF parser (`extractPdfPages`/`extractPdfPageFile`/`DEPOSIT_PDF_LABELS`/`parseDepositConfirmation`/`executionDupKey`/`findDuplicateExecution`) (~line 3457)
    - Newsletter template system (`_nlEsc` ~3437, `NL_FONTS`/`NL_EMAIL_FONT` ~3466, `NL_THEMES` ~3474, `generateNewsletterHTML` ~3730)
    - `LoginPage` — authentication component (~line 4195)
    - `ProjectManagementSystem` — root component (~line 4304, ~10,000 lines)
@@ -149,8 +149,10 @@ HWPX templates in `api/hwpxskill_templates/{base,gonmun,report,minutes,proposal}
 
 일괄등록 탭(`budgetTab === 'import'`, `bankImportSource: 'pdf' | 'excel'`)과 단건 등록 폼의 「📎 입금확인증 PDF로 자동입력」 버튼이 같은 파서를 쓴다. 모든 처리가 브라우저 안에서 끝난다 (서버 전송 없음).
 
-- `extractPdfTextLines(file, worker?)`: pdf.js `getTextContent()` 아이템을 y(±2pt)로 줄을 묶고 x로 정렬해 줄 문자열 배열로 재구성 — PDFium 출력은 글자 1개가 아이템 1개이고 순서가 읽기 순서와 다르므로 정렬이 필수. 다건 처리 시 `new pdfjsLib.PDFWorker()` 하나를 넘겨 재사용(파일마다 새 워커 ≈ 70ms)
+- `extractPdfPages(file, worker?, maxPages=MAX_PDF_PAGES(200))` → `{ pages: string[][], numPages }`: pdf.js `getTextContent()` 아이템을 y(±2pt)로 줄을 묶고 x로 정렬해 **페이지별** 줄 문자열 배열로 재구성 — PDFium 출력은 글자 1개가 아이템 1개이고 순서가 읽기 순서와 다르므로 정렬이 필수. 다건 처리 시 `new pdfjsLib.PDFWorker()` 하나를 넘겨 재사용(파일마다 새 워커 ≈ 70ms)
+- **여러 장짜리 PDF**: 일괄등록은 쪽마다 확인증 1건(행에 `_pdfPage` 0-based, `_pdfPageCount`), 확인증이 아닌 쪽·텍스트 없는 쪽은 건너뛰고 안내. 텍스트가 한 쪽도 없으면(스캔본) 파일 전체 1건. 등록 시 `extractPdfPageFile(file, pageIndex, cache)`(pdf-lib 1.17.1 CDN, `window.PDFLib`)로 해당 쪽만 잘라 `원본_p3.pdf`로 첨부 — 본 행·수수료 행이 같은 쪽을 공유하므로 cache 사용, 분리 실패·라이브러리 미로드 시 파일 전체 첨부. 단건 폼은 1쪽만 채우고 1쪽만 첨부
 - `parseDepositConfirmation(lines, fileName)`: `DEPOSIT_PDF_LABELS`(평문 라벨 → `_spaced`가 글자 사이 공백 허용 정규식 조립, 긴 라벨 우선)로 줄마다 라벨 위치를 찾고 "라벨 끝 ~ 다음 라벨 시작"을 값으로 취함. 빈 `lines`(스캔본)도 파서가 처리해 `'텍스트 없음(스캔본)'` 경고를 붙임. 신한은행 입금확인증만 검증됨. 매핑: 거래일시→`execution_date`(`normalizeDate`), 입금금액→`amount`(실지급액), 수취인성명→`recipient`, 출금통장표시내용→거래메모→파일명→`description`, 수수료→별도 집행 행(`_kind: 'fee'`, 본 행 예산항목 연동, 수취인 `신한은행`)
+- **중복 판정**: 일괄 이체는 같은 초·같은 금액·같은 수취인으로 여러 건이 나가고 적요만 다르다 (실사용 57쪽 PDF에서 5건 확인). 업로드 내 중복 키는 `executionDupKey + 적요(parsed.memo)`, 기존 집행과는 `createDuplicateMatcher`로 1:1 소비 매칭(적요 같은 건 우선) — DB에 있는 건수만큼만 중복 표시. 행 편집 시 재검사는 여전히 `findDuplicateExecution`(비소비)
 - 계좌번호(`acctOut`/`acctIn`)는 라벨 소비용으로만 매칭 — 결과 객체·state·로그에 넣지 말 것
 - 증빙 첨부는 컴포넌트 헬퍼 `uploadExecutionDoc(execId, docName, file, tag)` → `insertExecutionDocs(rows)`(documents insert + `mergeExecutionDocs`)로 통일 — 단건 폼·수수료 후속·일괄 등록·집행내역 탭 재첨부 4곳이 공용. 문서명은 `pickTransferDocName(type)` (유형별 필수 서류 중 `/이체(내역서|확인증|증)/`, 없으면 `'이체확인증'` → 집행내역 탭 "기타 첨부 증빙"에 표시)
 - 일괄 등록은 행마다 `id: crypto.randomUUID()`를 클라이언트에서 부여해 insert하므로 증빙 첨부가 서버 반환 순서에 의존하지 않는다
