@@ -10,4 +10,4 @@
 | check | check-report FAIL 0 / WARN은 사유 확인 후 응답에 기록 |
 | final | brief status=final / `promo.py index` / 사용자 확인 사항 목록: 로고 파일 · 학교 실명 · 연락처 · 사진 초상권 · 재단 배포 전 문의 (지원처 명기) · 보도자료는 재단 검수 |
 | kb-sync | 변경 후보 표 → 승인 → facts·07-변경이력·관련 kb 갱신 → pii-scan 0건 → 총계 검산(사업비+운영비=총계) |
-| 도구 변경 | `promo.py`·템플릿·facts.deprecated/forbidden을 고친 뒤에는 `promo.py selftest --render` PASS 확인 |
+| 도구 변경 | `promo.py`·템플릿·facts.deprecated/forbidden을 고친 뒤에는 `promo.py selftest --render` PASS 확인 (색인 재현성 포함) · kb를 고친 뒤에는 `promo.py kb-index --check` 0 |

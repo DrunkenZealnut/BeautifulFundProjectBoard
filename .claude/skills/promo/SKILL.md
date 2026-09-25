@@ -26,9 +26,9 @@ status  : 기준 시점 · 진행 중 산출물
 
 ## 라우팅
 
-`$ARGUMENTS` 첫 토큰 = 서브커맨드. 없으면 `status`. 두 번째 토큰이 `<id>`(= `content/out/` 폴더명)이면 그 작업, 없으면 `content/out/`에서 `status != final`인 최신 폴더.
+`$ARGUMENTS` 첫 토큰 = 서브커맨드. 없으면 `status`. 두 번째 토큰이 `<id>`(= `content/out/` 폴더명)이면 그 작업, 없으면 `content/out/`에서 `status != final`이고 `type ∈ {visual, doc, text}`인 최신 폴더 (`idea|plan|proposal|review`는 `/kihoek`의 것).
 
-시작 시 항상 읽기: `content/kb/facts.yaml`. 필요 시: 해당 단위사업 `content/kb/02-단위사업/*.md`, `content/kb/06-메시지.md`, `content/kb/08-재단규정.md`. 서브커맨드별 상세는 `references/` 참조.
+시작 시 항상 읽기: `content/kb/facts.yaml` + `content/kb/kb-index.yaml` (먼저 `promo.py kb-index --check` — 1이면 `promo.py kb-index`로 재생성, 2면 frontmatter 파싱 실패 파일을 보고하고 중단). 필요한 절은 색인의 앵커 `a`·줄 범위 `l`~`e`로 `Read(offset=l, limit=e-l+1)` — 보통 해당 단위사업 `02-단위사업/*.md`, `06-메시지.md`, `08-재단규정.md`. 서브커맨드별 상세는 `references/` 참조.
 
 | 서브커맨드 | 참조 |
 |---|---|
@@ -90,18 +90,19 @@ created: 2026-09-20
 
 ### `doc [<id>] [hwpx|docx]`
 
-`references/doc-export.md` 절차. 요약: 초안 확정 → hwpx는 `content/tools/md2hwpx.py draft.md --template <gonmun|report|proposal|base> --output final/<id>.hwpx` (내부에서 hwpx 스킬 build·validate 호출; 레퍼런스 양식이 있으면 `hwpx` 스킬 직접) / docx는 `document-skills:docx` → `content/out/<id>/final/<id>.hwpx|docx` → `promo.py check` → PASS면 `status: final`.
+`references/doc-export.md` 절차. 요약: 초안 확정 → `promo.py doc-stamp content/out/<id>` → hwpx는 doc-stamp가 출력한 최신 draft로 `content/tools/md2hwpx.py <최신 draft> --template <gonmun|report|proposal|base> --output final/<id>.hwpx` (내부에서 hwpx 스킬 build·validate 호출; 레퍼런스 양식이 있으면 `hwpx` 스킬 직접) / docx는 `document-skills:docx` → `content/out/<id>/final/<id>.hwpx|docx` → `promo.py check` → PASS면 `status: final`.
 
 ### `check [<id>]`
 
-`promo.py check content/out/<id>` 실행 결과를 표로 보고. 규칙: R1 개인정보 · R2 deprecated/forbidden · R3 credit_line · R4 금액 · R5 날짜 · R6 단체명 · R7 빈 슬롯. FAIL이 있으면 어떤 파일 몇 줄을 어떻게 고칠지 제안.
+`promo.py check content/out/<id>` 실행 결과를 표로 보고. 규칙: R0 brief · R1 개인정보(+denylist) · R2 deprecated/forbidden · R3 credit_line(`credit: exempt`면 생략) · R4 금액 · R5 날짜 · R6 단체명 · R7 빈 슬롯 · R8 facts 경로(WARN). `type`이 plan·proposal(또는 review_as)이면 R4b·R8b·R9·R7 빈 자리가 추가되고 R4·R5·R8이 FAIL로 오른다(`/kihoek`). final_from은 doc·plan·proposal에서 final/이 있을 때(`/promo doc`에는 INFO만), R1 추출 불가는 모든 산출물. FAIL이 있으면 어떤 파일 몇 줄을 어떻게 고칠지 제안.
 
 ### `kb-sync <data/새문서.md>`
 
 1. 새 문서를 읽고 `facts.yaml`과 비교 → 변경 후보 표 (facts 경로 / 현재값 / 새값 / 근거 줄).
 2. AskUserQuestion으로 반영 승인.
 3. 반영: `facts.yaml` 값·`meta.as_of`·`meta.source`·`changelog`·`deprecated` 갱신 → `kb/07-변경이력.md`에 새 절 추가 → 영향받는 `kb/02-단위사업/*.md`·`03-예산.md`·`04-성과지표.md`·`05-일정.md` 본문 수정.
-4. `promo.py kb-extract --pii-scan content/kb` 0건 확인 후 보고. 표 손상 문서는 `promo.py kb-extract tables <md> --out content/kb/_raw/…`로 먼저 변환.
+4. `promo.py kb-extract --pii-scan content/kb` 0건 확인 → `promo.py kb-index`(+`--raw`) 재생성 후 보고. 표 손상 문서는 `promo.py kb-extract tables <md> --out content/kb/_raw/…`로 먼저 변환.
+5. kb-sync는 **계획이 바뀐 것**(변경신청·확정 결정)만 다룬다. 결과·실적(한 일·산출물·집행 요약·교훈)은 `/kihoek learn`으로 `09-성과실적`·`10-교훈`·`facts.outcomes`에 반영한다.
 
 ### `status`
 

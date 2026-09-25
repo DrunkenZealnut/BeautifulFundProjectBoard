@@ -3,17 +3,17 @@
 ## 흐름
 
 ```
-draft.md (확정) ──▶ hwpx: 사용자 레벨 hwpx 스킬 ──▶ content/out/<id>/final/<id>.hwpx ──▶ promo.py check
+최신 draft (확정) ──▶ hwpx: 사용자 레벨 hwpx 스킬 ──▶ content/out/<id>/final/<id>.hwpx ──▶ promo.py check
               └──▶ docx: document-skills:docx     ──▶ content/out/<id>/final/<id>.docx ──▶ promo.py check
-              └──▶ text: draft.md 그대로 final/<id>.md
+              └──▶ text: 최신 draft 그대로 final/<id>.md
 ```
 
 ## HWPX
 
 1. 골격의 frontmatter `hwpx_template`로 템플릿 선택: 공문→`gonmun`, 보고서→`report`, 협력제안서→`proposal`, 안내문→`base`.
-2. **기본 경로 (레퍼런스 파일 없음)**: `content/tools/md2hwpx.py`가 draft.md(마크다운 부분집합)를 section0.xml로 변환하고 hwpx 스킬의 `build_hwpx.py` + `validate.py`를 호출한다.
+2. `content/.venv/bin/python3 content/tools/promo.py doc-stamp content/out/<id>` — 최신 draft의 sha1을 `brief.final_from`에 기록한다 (check가 final이 최신 draft에서 나왔는지 대조). 그다음 **기본 경로 (레퍼런스 파일 없음)**: `content/tools/md2hwpx.py`가 doc-stamp가 출력한 최신 draft(마크다운 부분집합 — `draft.md`만 있으면 그것)를 section0.xml로 변환하고 hwpx 스킬의 `build_hwpx.py` + `validate.py`를 호출한다.
    ```
-   content/.venv/bin/python3 content/tools/md2hwpx.py content/out/<id>/draft.md \
+   content/.venv/bin/python3 content/tools/md2hwpx.py content/out/<id>/<최신 draft> \
      --template proposal --output content/out/<id>/final/<id>.hwpx --title "제목"
    ```
    지원 문법: `# 제목`, `## 절`(proposal 녹색 번호바 / report 섹션 헤더선), `### 소절`(파란 배지), `- 불릿`, `  - 하위`, `| 표 |`, `<!-- -->` 제거. 셀 병합 없음.
