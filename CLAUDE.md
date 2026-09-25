@@ -127,6 +127,18 @@ Local-only workspace, independent of `index.html`. Source docs in `data/` (git-i
 - Runtime: `content/.venv` (playwright, pyyaml, lxml, pdfplumber). Rebuild with `python3 -m venv content/.venv && content/.venv/bin/pip install -r content/tools/requirements.txt && content/.venv/bin/playwright install chromium`
 - Never write contact info, seals, or real school names into `content/kb/` or drafts; leave `(연락처는 최종본에 기입)` placeholders
 
+### 사업기획 AI 도우미 (`/kihoek`, F-16)
+
+`/promo`가 "정해진 것을 알리는 문서"라면 `/kihoek`은 "다음에 무엇을 할지"(아이디어·사업계획·공모신청서·초안 감사·결과물 학습). 같은 kb·facts·`promo.py`·`content/out/` 규약을 쓴다. 설계: `docs/02-design/features/사업기획-AI-도우미.design.md`. 사람용 사용 매뉴얼: `docs/manual/사업기획-AI-도우미.md` — 명령·옵션·check 규칙을 바꾸면 함께 갱신.
+
+- **kb 3층**: 계획(01~08, `layer: plan|rule`) / 실적(`09-성과실적.md`, `layer: outcome`, 수치는 `facts.outcomes`) / 교훈(`10-교훈.md`, `layer: lesson`). 계획층에 실적 문장을 쓰지 말 것 — 09로. `facts.yaml`은 `schema_version: 2` (`kpi[].id` 12개 = 04 표 순서, `unit_costs` 단가 21개 — 계획서 예산 줄은 `unit_costs.<id>`만 인용, `outcomes`). 학교 실명은 kb에 쓰지 않고 `data/pii-denylist.txt`(git-ignored)로 관리
+- **kb frontmatter**: `[`·`#`·`,`·`:`가 든 값은 큰따옴표(값에 `"`가 있으면 작은따옴표). 안 지키면 `promo.py kb-index`가 종료코드 2로 파일명을 보고한다
+- **색인·읽기 예산**: `promo.py kb-index`(`content/kb/kb-index.yaml`, 파일별 sha1로 신선도 `--check`; `--raw`는 `_raw/_index.yaml`) → `promo.py kb-select --cmd <sub> [--unit] [--query] --emit basis`가 읽을 섹션(앵커 `kb/<파일>#<번호|텍스트>[/<하위>]`, `l`~`e` 줄)을 6만 자 안에서 정하고 그 출력을 `brief.basis`에 그대로 붙인다. 기본 앵커는 `content/kb/kb-select.yaml`(`units` 맵 포함). 색인·선택 결과는 결정적(2회 실행 동일)
+- **check 규칙 추가** (`type ∈ {plan, proposal}` 또는 `review_as`에만 FAIL. R1 denylist는 모든 산출물에 적용되므로 옛 산출물에 학교 실명이 남아 있으면 FAIL로 바뀔 수 있다 — brief·초안의 실명을 지역+유형으로 고친다): R0 brief 없음 · R1 denylist · R3 `credit: exempt`(골격 `credit_default`) · R4 금액/R5 날짜 FAIL 상향(예외 `(신규 단가 — 확인 필요)`·`(추정)`·`(산출: 식)`·`(예정)`·`(안)`) · **R4b 예산 검산**(`| 계정항목 | 금액 | 산출근거 |` 표, 단가×수량 식을 AST로 평가, 항목 행 0.1% 허용오차·소계/합계/총계 정확 일치, 범위 `3~4회`·배수 `1천만원`·나눗셈 `/`·뺄셈은 파싱 WARN; `(산출: 식)` 표식은 값 불일치·파싱 불가면 FAIL) · **R8 facts 경로**(`<!-- facts: a.b, units[id=x].c -->` — 리스트는 `.id`로도 접근, 쉼표 뒤 형제 약식 허용, `[n]` 정수 인덱스는 WARN) · R8b 실적 인용(실적 표지어 + `outcomes.*` 밖 경로) · R7 빈 자리(초안에 남은 골격 `{{…}}`, WARN) · R1 추출 불가(hwpx·docx 텍스트 못 읽음, WARN) · **R9 필수 절**(골격 `required_sections`, 번호·기호 무시 부분 일치, `brief.section_map`) · `final_from`(`promo.py doc-stamp`가 최신 draft sha1 기록). 규칙은 최신 draft(`draft(-vN).md` 최고 버전)에만 — 옛 draft·ideas·requirements는 R1/R2/R6만
+- **도구**: `kb-index`·`kb-select`·`kb-outline`·`kb-extract hwpx|docx [--headings]`(문단 단위, 안전한 lxml 파서 — 병합 셀은 그리드로 정렬·상한, 글상자 문단은 한 번만, 탭·줄바꿈은 공백, Strict docx 지원, 깨진 파일은 종료 2)·`exec-summary <xlsx|csv> --map content/kb/unit-map.yaml`(수급자·설명 미출력, `대기`·`pending` 제외)·`doc-stamp`. `selftest`는 promo·plan·nobrief 픽스처(`_samples/_check-fixture*`, denylist는 가상 토큰으로 바꿔 끼움) + R4b 평가기·예산표 케이스 + 리뷰 결함·테스트 공백 회귀 + kb-index 재현성·신선도 — 개수는 selftest 출력을 볼 것(문서에 적지 않는다). `PROMO_DENYLIST`/`PROMO_ALLOWLIST` 환경변수로 목록 경로 대체 가능(selftest 용)
+- **스킬**: `.claude/skills/kihoek/SKILL.md` + `references/{context-budget,ideation,plan-rules,proposal-mapping,learn,checklist}.md`. 골격 `content/templates/docs/{사업계획,공모신청서,아이디어보드}.md`(`budget_table`·`credit_default` 키). `learn`은 승인형 — kb 09·10·`facts.outcomes`는 learn(과 `/promo kb-sync`)만 쓴다. `learn-log.md`는 반영 이력(PII 없음)
+- `/promo` 변경: 시작 시 `kb-index --check` + 색인 우선 읽기, 라우팅 기본 선택은 `type ∈ {visual, doc, text}`, `kb-sync` 끝에 `kb-index`, `doc` 직전 `doc-stamp`(변환은 doc-stamp가 출력한 최신 draft로)
+
 ### Serverless API Functions (`api/`)
 
 | File | Endpoint | Purpose | Timeout |
@@ -250,14 +262,14 @@ bkit PDCA workflow: `01-plan/features/*.plan.md` → `02-design/features/*.desig
 | `supabase-migration-*.sql` | Incremental migrations (`payee-rules` = F-15 거래처 규칙) |
 | `SUPABASE_SETUP.md` | Supabase project setup walkthrough |
 | `manifest.json` + `service-worker.js` | PWA support |
-| `docs/` | bkit PDCA docs — `01-plan/`, `02-design/`, `03-analysis/`, `04-report/`, `archive/` |
+| `docs/` | bkit PDCA docs — `01-plan/`, `02-design/`, `03-analysis/`, `04-report/`, `archive/`; `manual/` = 사용 매뉴얼 (PDCA archive 대상 아님) |
 | `_archive/` | Reference JSX modules (not used by running app) |
 | `.claude/agents/` | Project agents: `budget-domain-expert`, `code-reviewer`, `feature-planner`, `sql-migration-validator` |
 | `.claude/skills/promo/` | `/promo` skill — 홍보물·문서 생성 워크플로 |
 | `data/` | 사업 원천 문서 (신청서·사업계획·예산·변경신청서·수행가이드). git-ignored, read-only |
-| `content/kb/` | 정제된 지식베이스 — `facts.yaml` (단일 진실 원천) + `01`~`08` md |
-| `content/templates/` | `visual/` HTML 템플릿 6종, `docs/` 문서 골격 6종 |
-| `content/tools/` | `promo.py` (fill/render/check/index/kb-extract), `md2hwpx.py` |
+| `content/kb/` | 정제된 지식베이스 — `facts.yaml` (단일 진실 원천, v2) + `01`~`10` md (09 실적·10 교훈은 `/kihoek learn`만 갱신) + `kb-index.yaml`(생성물)·`kb-select.yaml`·`unit-map.yaml` |
+| `content/templates/` | `visual/` HTML 템플릿 6종, `docs/` 문서 골격 9종 (사업계획·공모신청서·아이디어보드 = `/kihoek`) |
+| `content/tools/` | `promo.py` (fill/render/check/index/kb-extract/kb-index/kb-select/kb-outline/exec-summary/doc-stamp/selftest), `md2hwpx.py` |
 | `content/brand/` | `tokens.css`, Pretendard font, `logo/` (user-supplied) |
 | `content/out/` | 산출물 (git-ignored), `INDEX.md` generated |
 
@@ -269,6 +281,7 @@ bkit PDCA workflow: `01-plan/features/*.plan.md` → `02-design/features/*.desig
 - `/find-component` — Locate component/function in index.html
 - `/review-changes` — Review current changes
 - `/promo <brief|draft|visual|render|doc|check|kb-sync|status>` — 홍보물·문서 생성 (see `.claude/skills/promo/SKILL.md`)
+- `/kihoek <idea|plan|proposal|review|learn|doc|status>` — 기획: 아이디어·사업계획·공모신청서·감사·학습 (see `.claude/skills/kihoek/SKILL.md`)
 
 ## Skill routing
 
