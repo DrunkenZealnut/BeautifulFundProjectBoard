@@ -8,5 +8,5 @@
 | proposal | 추출본 PII 정리 / `⚠ 자격` 첫 줄 / `requirements.md` 상태 3종 / `section_map` / `credit` 결정 / check PASS |
 | review | `brief.review_as`·`templates` / hwpx·docx는 `--headings` 추출 / check 표 + Claude 표 / **원본 무수정** / `status: final` |
 | learn | 마스킹 diff 승인 / 후보 표 4종 승인(행 단위) / 반영 → as_of → learn-log → pii-scan 0 → kb-index / `--kind summary`는 exec-summary 출력만 |
-| doc | `promo.py doc-stamp` / hwpx VALID / check PASS(final_from 경고 없음) / `status: final` / `promo.py index` |
+| doc | hwpx VALID / 그 뒤 `promo.py doc-stamp` / check PASS(final_from 경고 없음) / `status: final` / `promo.py index` |
 | 도구 변경 | `promo.py`·골격·`kb-select.yaml`을 고친 뒤에는 `promo.py selftest` PASS · `kb-select --cmd <각각> --unit research` missing 없음 |

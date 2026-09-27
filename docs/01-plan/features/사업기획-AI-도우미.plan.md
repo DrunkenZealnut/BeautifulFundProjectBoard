@@ -65,7 +65,7 @@
 | FR-06 | **`/plan-lab review <파일>`**: 사용자가 쓴 계획·제안 초안을 kb·facts·08-재단규정 기준으로 감사 — 수치 불일치, 변경 전 표현, 비목 규칙 위반, 근거 없는 주장, 빠진 필수 절. 표로 보고, 수정안 제시 (파일은 고치지 않음) | Medium |
 | FR-07 | **`/plan-lab learn <결과물 파일>`**: 보고서·회의록·산출물·집행 요약을 읽어 `09-성과실적`·`10-교훈`·`facts.outcomes` 갱신 후보를 표로 제시 → 승인 후 반영 → `kb-extract --pii-scan` 0건 확인 → `kb-index` 재생성. `/promo kb-sync`(계획 변경)와 역할 분리: sync=계획이 바뀜, learn=결과가 생김 | High |
 | FR-08 | **`/plan-lab status`**: kb 층별 as_of, 색인 갱신일, 진행 중 기획(idea/plan/proposal), 미달 KPI 요약, 다음 권장 행동 | Low |
-| FR-09 | **HWPX 출력**: plan·proposal 초안을 `md2hwpx.py --template proposal|report`로 변환 (`/promo doc` 절차 재사용). 재단 서식 원본이 `templates/`에 있으면 `hwpx-fill` 경로 검토 | Medium |
+| FR-09 | **HWPX 출력**: plan·proposal 초안을 `md2hwpx.py --template` proposal 또는 report로 변환 (`/promo doc` 절차 재사용). 재단 서식 원본이 `templates/`에 있으면 `hwpx-fill` 경로 검토 | Medium |
 | FR-10 | **초기 kb 적재**: 현재까지의 결과물로 09·10 1판 작성 — `content/out/INDEX.md` 6건, 기초연구보고서 초안 요지, 8월 변경의 이유(07 보강), 집행률(앱 데이터는 사용자가 붙여준 요약만) | High |
 
 ### 2.2 비기능 요구사항
@@ -76,7 +76,7 @@
 | 규정 | `08-재단규정` 게이트: 비목 규칙(인건비·회의비 한도, 계좌이체 원칙), 표기('지원', 붙여쓰기), 변경 절차. 위반 시 초안 상단 경고 |
 | 개인정보 | `/promo` 규칙 4 동일. `learn` 입력(회의록 등)은 반영 전 성명·연락처·학교 실명 마스킹, `kb-extract --pii-scan` 0건 |
 | 컨텍스트 | 색인 우선 읽기. 한 서브커맨드가 읽는 kb 총량 상한(60KB) 초과 시 섹션을 줄이고 보고 |
-| 재현성 | 산출물은 `content/out/<id>/`에 파일로 남김(브리프·초안·검사 리포트). `INDEX.md`에 type `idea|plan|proposal|review` 추가 |
+| 재현성 | 산출물은 `content/out/<id>/`에 파일로 남김(브리프·초안·검사 리포트). `INDEX.md`에 type `idea`, `plan`, `proposal`, `review` 추가 |
 | 도구 | 새 CLI 기능은 `promo.py`에 서브커맨드로 추가(`kb-index`, `kb-outline`) — 별도 스크립트 난립 금지. 의존성 추가 없음(pyyaml 기존) |
 | 비용 | 서버·API 키 없음. Claude Code 세션 안에서만 실행 |
 

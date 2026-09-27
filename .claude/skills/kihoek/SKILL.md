@@ -53,7 +53,7 @@ status ─┬─ idea <주제> ──▶ plan <제목> ──▶ doc <id> ──
 4. 사용자 입력 파일은 data/_extract/ 텍스트를 promo.py kb-outline 으로 나눠 15,000자 조각으로
 ```
 
-응답 첫 줄: `기준: {facts.meta.as_of} 계획 · {facts.meta.outcomes_as_of} 실적`.
+응답 첫 줄: `기준: {facts.meta.as_of} 계획 · {facts.meta.outcomes_as_of} 실적`. 경고가 있는 서브커맨드(proposal의 자격 게이트)는 같은 줄 뒤에 ` · ⚠ 자격: …` 순서로 붙인다.
 
 ## 서브커맨드
 
@@ -67,7 +67,7 @@ facts·색인만 읽고 표시: 계획·실적 기준일(실적 30일 경과 시
 1. 시작 절차 (`--unit` 없으면 `--from`의 unit, 그것도 없으면 물어봄). 2. `content/templates/docs/사업계획.md` 골격을 `references/plan-rules.md` 절 규칙으로 채움 — 예산표는 단가×수량·소계·합계, 날짜는 확정 일자만 연-월-일. 3. 상단 `⚠ 규정` 블록(08 §3·§4·§7 대조, 미확인 단가·`(가정)` 목록). 4. `content/out/<id>/{brief.md(type: plan, credit: exempt), draft.md}` → `promo.py check content/out/<id>` → FAIL이면 고쳐서 재검사(최대 2회) → PASS면 `status: draft`. 5. 응답: 초안 전문 + 인용 경로 목록 + check 결과 + "확정 후 `/kihoek doc <id>`".
 
 ### `proposal <요강 파일> [--title …] [--unit <id>]`
-1. 텍스트화 `promo.py kb-extract pdf|hwpx|docx <src> --out data/_extract/요강-<slug>.md` (실패 경로·PII 정리는 `references/proposal-mapping.md`). 2. **자격 게이트** → 응답 첫 줄 `⚠ 자격: …`. 3. `requirements.md`(요구항목 ↔ 우리 근거 ↔ 상태 있음/부족/없음). 4. `공모신청서.md` 골격을 요강 순서로 재배열해 `draft.md`(절 제목을 바꾸면 `brief.section_map`). 5. check → 응답: 자격 + requirements 표 + 초안 + 부족·없음 목록.
+1. 텍스트화 `promo.py kb-extract pdf|hwpx|docx <src> --out data/_extract/요강-<slug>.md` (실패 경로·PII 정리는 `references/proposal-mapping.md`). 2. **자격 게이트** → 응답 첫 줄 `기준: … · ⚠ 자격: …` (기준일 먼저, 자격 경고 뒤). 3. `requirements.md`(요구항목 ↔ 우리 근거 ↔ 상태 있음/부족/없음). 4. `공모신청서.md` 골격을 요강 순서로 재배열해 `draft.md`(절 제목을 바꾸면 `brief.section_map`). 5. check → 응답: 자격 + requirements 표 + 초안 + 부족·없음 목록.
 
 ### `review <파일> [--as plan|proposal]`
 1. 대상을 `content/out/<id>/src/`에 복사(hwpx/docx는 `kb-extract … --headings --out src/<name>.md`) + `brief.md(type: review, review_as, templates: [골격], audience: internal, credit: exempt)`. 2. `promo.py check` (R4b·R9·R4/R5 상향 적용). 3. Claude 검토(근거 없는 주장·변경 전 표현·계정/집행 규칙·필수 절·계획/실적 혼동·재단 표기). 4. `review.md` 표 `| 심각도 | 위치 | 문제 | 근거 | 수정안 |`. **원본 무수정**, `status: final`.
@@ -76,7 +76,7 @@ facts·색인만 읽고 표시: 계획·실적 기준일(실적 30일 경과 시
 1. 텍스트화(`data/_extract/`). 2. 마스킹 diff 표 → 승인. 3. 갱신 후보 표 4종(09 절 · 10 항목 · facts.outcomes · 10↔07 링크) → AskUserQuestion 승인(행 단위). 4. 반영 → `09` `as_of`·`outcomes.as_of`·`meta.outcomes_as_of` → `learn-log.md` 1줄 → `promo.py kb-extract --pii-scan content/kb` **0건** → `promo.py kb-index`(+`--raw`) → 보고. `--kind summary`는 `promo.py exec-summary` 출력만 읽는다 (원본 xlsx Read 금지).
 
 ### `doc <id> [hwpx|docx]`
-`promo.py doc-stamp content/out/<id>` (변환 대상 = 출력된 최신 draft 파일) → `/promo doc` 절차(`promo/references/doc-export.md`; 사업계획→`report`, 공모신청서→`proposal`) → `promo.py check` PASS → `status: final` → `promo.py index`.
+`/promo doc` 절차(`promo/references/doc-export.md`; 최신 draft 변환, 사업계획→`report`, 공모신청서→`proposal`) → `VALID`면 `promo.py doc-stamp content/out/<id>` (출력 draft가 변환한 파일과 다르면 재변환; 실패 시 stamp 금지) → `promo.py check` PASS → `status: final` → `promo.py index`.
 
 ## 파일 규약
 

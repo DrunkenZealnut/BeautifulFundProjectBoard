@@ -5,7 +5,7 @@
 | 코드 | 빈틈 | 계산 | 근거 경로 (refs 에 쓰는 형식) |
 |---|---|---|---|
 | G1 | KPI 미달·위험 | `facts.outcomes.kpi_status`에서 `at_risk`, 또는 `planned`인데 **due가 90일 이내이거나 이미 지남**(지난 planned는 at_risk 취급) | `facts.outcomes.kpi_status[id=kpi-…]` |
-| G2 | 예산 미집행 | 기준일 = min(오늘, `program.period.year1_end`). unit 기간 = `units[id].period.start`~`end`(없으면 연초~연말). 경과 비율 = (기준일−start)/(end−start) (0~1). `executed/budget.total`이 경과 비율보다 **30%p 이상 낮으면** G2. `budget_execution.by_unit`에 없는 unit·`budget: null`·start가 기준일 이후인 unit은 건너뜀. 판정에 쓴 as_of를 적는다 | `facts.units[id=…].budget.total`, `facts.outcomes.budget_execution.by_unit[unit=…]` |
+| G2 | 예산 미집행 | 기준일 = min(`facts.outcomes.budget_execution.as_of`, `program.period.year1_end`) — 집행액과 같은 시점으로 경과 비율을 잰다(오늘 기준이면 오래된 집행 자료가 미집행으로 과다 판정됨). as_of가 없으면 G2를 건너뛰고 "집행 기준일 없음"을 적는다. unit 기간 = `units[id].period.start`~`end`(없으면 연초~연말). 경과 비율 = (기준일−start)/(end−start) (0~1). `executed/budget.total`이 경과 비율보다 **30%p 이상 낮으면** G2. `budget_execution.by_unit`에 없는 unit·`budget: null`·start가 기준일 이후인 unit은 건너뜀. 판정에 쓴 as_of를 적는다. as_of가 오늘보다 30일 이상 지났으면 G2 판정과 별도로 `⚠ 집행 자료 오래됨(as_of, N일 경과) — /kihoek learn --kind summary 권장`을 표시한다 | `facts.units[id=…].budget.total`, `facts.outcomes.budget_execution.by_unit[unit=…]` |
 | G3 | 문제정의 미대응 대상 | 01 §1·§2의 대상·문제 목록 ↔ 02 활동 매핑. 1차는 색인의 02 섹션 `s`·`k`로, 대응 후보가 없는 대상만 해당 02 파일을 Read해 확인 | `kb/01-사업개요.md#1`, `kb/02-단위사업/<파일>.md#<앵커>` |
 | G4 | 일정 여백·미확정 | 05 §3 미확정 항목, 05 §1 표에서 하반기 빈 달 | `kb/05-일정.md#3`, `kb/05-일정.md#1` |
 | G5 | 교훈 "다음에" 미반영 | 10 §4의 `- [ ]` 항목 | `kb/10-교훈.md#4` |

@@ -425,7 +425,7 @@ defaults:
 
 ### 4.8 `doc <id> [hwpx|docx]`
 
-`/promo doc` 절차(`promo/references/doc-export.md`)를 그대로 따른다. 골격 `hwpx_template`(사업계획→`report`, 공모신청서→`proposal`). 변환 직전 `promo.py doc-stamp content/out/<id>`가 최신 draft의 sha1을 `brief.final_from`에 기록(§6.7). 재단 양식 hwpx가 있으면 hwpx 스킬 레퍼런스 모드.
+`/promo doc` 절차(`promo/references/doc-export.md`)를 그대로 따른다. 골격 `hwpx_template`(사업계획→`report`, 공모신청서→`proposal`). 변환 성공(`VALID`) 뒤 `promo.py doc-stamp content/out/<id>`가 최신 draft의 sha1을 `brief.final_from`에 기록(§6.7). 재단 양식 hwpx가 있으면 hwpx 스킬 레퍼런스 모드.
 
 ### 4.9 `status`
 
@@ -576,7 +576,7 @@ idx   := INT | ID | 'id=' ID
 
 ### 6.7 `doc-stamp content/out/<id>` 와 final_from
 
-`promo.py doc-stamp content/out/<id>`(인자는 산출물 폴더 경로): 최신 draft(latest 규칙)의 sha1 앞 12자·파일명·오늘 날짜를 `brief.final_from`에 기록(frontmatter 텍스트 치환 — 인라인·블록 매핑을 통째로 바꾸고 쓰기 전에 YAML 재파싱으로 검증, sha1은 따옴표). 변환(md2hwpx)은 doc-stamp가 출력한 draft 파일로 한다 — 옛 `draft.md`를 변환하면 final_from과 어긋난다. `/kihoek doc`·`/promo doc`이 변환 직전 호출. R4b·R9는 final(hwpx·docx)에 적용하지 않는다 — 표 복원이 불완전하기 때문. 대신 final은 검산이 끝난 draft에서만 만들어진다는 것을 sha1로 보장한다.
+`promo.py doc-stamp content/out/<id>`(인자는 산출물 폴더 경로): 최신 draft(latest 규칙)의 sha1 앞 12자·파일명·오늘 날짜를 `brief.final_from`에 기록(frontmatter 텍스트 치환 — 인라인·블록 매핑을 통째로 바꾸고 쓰기 전에 YAML 재파싱으로 검증, sha1은 따옴표). 변환(md2hwpx)은 최신 draft로 하고, doc-stamp가 출력한 draft가 변환한 파일과 다르면 재변환한다. `/kihoek doc`·`/promo doc`이 변환 **성공 뒤** 호출 — 변환 전에 찍으면 변환 실패 시 옛 final이 최신 draft와 같은 stamp로 check를 통과한다(CodeRabbit PR #42). R4b·R9는 final(hwpx·docx)에 적용하지 않는다 — 표 복원이 불완전하기 때문. 대신 final은 검산이 끝난 draft에서만 만들어진다는 것을 sha1로 보장한다.
 
 ### 6.8 R4b 산출근거 식 평가기 (2차 검증 N4 반영 — 처리 순서가 규칙이다)
 

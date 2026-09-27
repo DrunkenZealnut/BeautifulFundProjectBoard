@@ -90,7 +90,7 @@ created: 2026-09-20
 
 ### `doc [<id>] [hwpx|docx]`
 
-`references/doc-export.md` 절차. 요약: 초안 확정 → `promo.py doc-stamp content/out/<id>` → hwpx는 doc-stamp가 출력한 최신 draft로 `content/tools/md2hwpx.py <최신 draft> --template <gonmun|report|proposal|base> --output final/<id>.hwpx` (내부에서 hwpx 스킬 build·validate 호출; 레퍼런스 양식이 있으면 `hwpx` 스킬 직접) / docx는 `document-skills:docx` → `content/out/<id>/final/<id>.hwpx|docx` → `promo.py check` → PASS면 `status: final`.
+`references/doc-export.md` 절차. 요약: 초안 확정 → hwpx는 최신 draft로 `content/tools/md2hwpx.py <최신 draft> --template <gonmun|report|proposal|base> --output final/<id>.hwpx` (내부에서 hwpx 스킬 build·validate 호출; 레퍼런스 양식이 있으면 `hwpx` 스킬 직접) / docx는 `document-skills:docx` → `content/out/<id>/final/<id>.hwpx|docx` → 성공(`VALID`) 뒤에만 `promo.py doc-stamp content/out/<id>` → `promo.py check` → PASS면 `status: final`.
 
 ### `check [<id>]`
 

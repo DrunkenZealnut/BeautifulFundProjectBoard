@@ -255,8 +255,8 @@ learn은 **계획 수치를 새로 쓰지 않습니다.** 계획이 바뀐 것(�
 /kihoek doc <id> [hwpx|docx]
 ```
 
-1. `promo.py doc-stamp content/out/<id>` — 최신 초안의 지문(sha1)을 `brief.final_from`에 기록
-2. doc-stamp가 알려 준 **최신 초안 파일**(`draft-v2.md` 등)을 `/promo doc` 절차로 변환 — 사업계획은 `report` 서식, 공모신청서는 `proposal` 서식
+1. **최신 초안 파일**(`draft-v2.md` 등 가장 높은 버전)을 `/promo doc` 절차로 변환 — 사업계획은 `report` 서식, 공모신청서는 `proposal` 서식
+2. 변환이 `VALID`로 끝난 뒤에만 `promo.py doc-stamp content/out/<id>` — 최신 초안의 지문(sha1)을 `brief.final_from`에 기록. 알려 준 파일명이 변환한 파일과 다르면 그 파일로 다시 변환. 변환이 실패했는데 먼저 기록하면 옛 한글 파일이 최신본으로 통과하므로 순서를 지킵니다
 3. 검사 PASS → `status: final` → `content/out/INDEX.md` 갱신
 
 나중에 초안을 다시 고치면 검사가 `final 갱신 필요` 경고를 냅니다. 그때 `doc`을 다시 실행하세요. 재단 공식 양식 HWPX를 구하면 그 양식을 레퍼런스로 쓸 수 있습니다(현재 미확보).

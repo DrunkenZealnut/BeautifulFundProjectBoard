@@ -12,7 +12,7 @@ promo.py — 홍보콘텐츠 생성시스템 단일 CLI
   kb-index    kb 섹션 색인 (kb-index.yaml · --raw → _raw/_index.yaml · --check 신선도)      [F-16]
   kb-select   서브커맨드별 읽을 섹션 선택 (읽기 예산 6만 자, --emit plan|basis)             [F-16]
   kb-outline  md 헤딩·줄 범위 표 (조각 읽기용)                                              [F-16]
-  doc-stamp   최신 draft sha1 → brief.final_from (doc 변환 직전)                            [F-16]
+  doc-stamp   최신 draft sha1 → brief.final_from (doc 변환 성공 뒤)                         [F-16]
   exec-summary 앱 집행내역 xlsx/csv → 단위사업·계정 합계 (learn --kind summary 입력)          [F-16]
 
 실행: content/.venv/bin/python3 content/tools/promo.py <cmd> …
@@ -2498,7 +2498,7 @@ def main(argv=None) -> int:
     es.add_argument("--out")
     es.set_defaults(fn=cmd_exec_summary)
 
-    ds = sub.add_parser("doc-stamp", help="최신 draft 의 sha1 을 brief.final_from 에 기록 (doc 변환 직전)")
+    ds = sub.add_parser("doc-stamp", help="최신 draft 의 sha1 을 brief.final_from 에 기록 (doc 변환 성공 뒤)")
     ds.add_argument("out_dir")
     ds.set_defaults(fn=cmd_doc_stamp)
 

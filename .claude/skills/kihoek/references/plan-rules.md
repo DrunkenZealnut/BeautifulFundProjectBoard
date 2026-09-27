@@ -57,7 +57,7 @@
 
 1. `promo.py check content/out/<id>` — FAIL이면 해당 줄을 고쳐 재검사(최대 2회). R8 FAIL(경로 없음)은 facts에 실제로 있는 경로로, R4 FAIL은 unit_costs 인용 또는 표식으로, R9 FAIL은 헤딩 이름을 골격 표기로.
 2. PASS → brief `status: draft`. 응답에 check 결과 표 요약(FAIL/WARN 수 + WARN 사유).
-3. `doc`: `promo.py doc-stamp content/out/<id>` (출력 `doc-stamp  <draft 파일> <sha1>` — 변환은 반드시 이 파일로) → `content/tools/md2hwpx.py content/out/<id>/<그 draft 파일> --template report --output content/out/<id>/final/<id>.hwpx --title "…"` (`/promo doc` 절차) → `promo.py check` PASS → `status: final` → `promo.py index`. 재단 양식 hwpx가 있으면 hwpx 스킬 레퍼런스 모드.
+3. `doc`: `content/tools/md2hwpx.py content/out/<id>/<최신 draft> --template report --output content/out/<id>/final/<id>.hwpx --title "…"` (`/promo doc` 절차) → `VALID`면 `promo.py doc-stamp content/out/<id>` (출력 `doc-stamp  <draft 파일> <sha1>`이 변환한 파일과 다르면 재변환; 실패 시 stamp 금지) → `promo.py check` PASS → `status: final` → `promo.py index`. 재단 양식 hwpx가 있으면 hwpx 스킬 레퍼런스 모드.
 
 ## 6. review 에서의 쓰임
 
