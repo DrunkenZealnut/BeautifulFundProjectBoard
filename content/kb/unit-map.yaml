@@ -1,0 +1,13 @@
+# 앱 집행내역 엑셀의 소분류명 → facts.units[].id  (promo.py exec-summary --map)
+# 운영비 소분류는 operating, 예비비는 reserve 로 묶는다 (G2 판정 대상 아님, by_account 로만 본다)
+노동안전보건 교과서 기초연구: research
+노동안전보건 APP: app
+캠페인: campaign
+AI 학습동아리: ai-club
+청소년 참견위원회: ai-club          # 변경 전 명칭 (8월 전환) — 집행 건은 AI 학습동아리로 귀속
+예비비: reserve
+운영인건비: operating
+임차료: operating
+일반관리비: operating
+교육훈련비: operating
+홍보비: operating

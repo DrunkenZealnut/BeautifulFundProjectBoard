@@ -1,11 +1,12 @@
 # facts.yaml — 단일 진실 원천 (숫자·명칭·날짜는 반드시 여기서 인용)
 # 기준: 2026-08-23 사업변경신청서 "변경 후". 검산: 사업비 13,200,000+3,000,000+8,000,000+5,600,000+500,000 = 30,300,000
 #       운영비 33,780,000+3,700,000+660,000+1,000,000+560,000 = 39,700,000 / 총계 70,000,000
-# 금지: 연락처·주소·계좌·직인·학교 실명. 갱신은 /promo kb-sync 로만.
+# 금지: 연락처·주소·계좌·직인·학교 실명. 갱신은 /promo kb-sync(계획 변경)·/kihoek learn(실적·outcomes) 로만.
 meta:
   as_of: 2026-08-23
   source: data/아름다운재단_2026_공익단체인큐베이팅_(1년차)사업변경신청서0823.md
-  schema_version: 1
+  schema_version: 2
+  outcomes_as_of: 2026-09-25            # 실적 기준일 (facts.outcomes · 09-성과실적). as_of 는 계획 기준일
 
 org:
   name: 청년노동자인권센터
@@ -39,6 +40,7 @@ program:
     press: "이 사업은 아름다운재단과 함께 합니다. 아름다운재단은 모두를 위한 변화, 변화를 만드는 연결을 꿈꾸며 공익단체 인큐베이팅 지원사업을 추진합니다."
   hashtags: ["#청년노동자인권센터", "#공익단체인큐베이팅", "#아름다운재단과 함께", "#모두를위한변화", "#변화를만드는연결"]
   cibi_url: "https://beautifulfund.org/aboutus/cibi/"
+  withholding_threshold: 125000         # 동일인 일 지급액 초과 시 원천징수 (수행가이드 p.14, 08 §7)
   period:
     year1_start: 2026-01-01
     year1_end: 2026-12-31
@@ -183,8 +185,8 @@ units:
     short: 지역협력
     budget: null                        # 별도 계정 없음 (캠페인·동아리 예산 내)
     centers:
-      - { region: 밀양, school_type: 한국나노마이스터고 소재, partner_type: 노동자종합지원센터(민간위탁) }
-      - { region: 동대문, school_type: 서울반도체고 소재, year: 2027, partner_type: 노동자종합지원센터(민간위탁) }
+      - { region: 밀양, school_type: 마이스터고(나노 분야) 소재, partner_type: 노동자종합지원센터(민간위탁) }
+      - { region: 동대문, school_type: 반도체고(2027 개교 예정) 소재, year: 2027, partner_type: 노동자종합지원센터(민간위탁) }
       - { region: 아산, note: 반도체업체 밀집, partner_type: 노동자종합지원센터(민간위탁) }
     activist_training: [서울, 대구]
     activities:
@@ -226,8 +228,8 @@ plans_2027:                             # 2차년도 계획 — 연속지원 심
 
 schools:                                # 반도체고 현황 (신청서 §4·사업계획 §13 기준, 2026)
   operating_2026: { count: 5, regions: [인천, 충북(음성), 충남(예산), 경북(경주), 대구] }
-  planned: [서울(2027, 서울반도체고), 용인]
-  related: [밀양 한국나노마이스터고]
+  planned: [서울(2027 개교 예정 반도체고), 용인]
+  related: [밀양 마이스터고(나노 분야)]
   visited_2026_h1: 5                    # 상반기 전수 방문
   note: 학교 실명은 대외 산출물에 쓰지 않음 (지역명까지)
 
@@ -238,15 +240,78 @@ partners:
   regional: [대구노동세상, 음성노동인권센터, 인천청소년노동인권네트워크, 우리동네노동권찾기]
   expert: [반올림, 노동인권실현을 위한 노무사모임, 한국비정규노동센터, 참여연대, 서울노동광장, 사단법인 희망씨]
 
-kpi:                                    # 04-성과지표.md와 동기화 (변경 후 기준)
-  - { unit: research, indicator: 기초연구 보고서 발간 및 집필 방향안 도출, evidence: 연구보고서·인터뷰 녹취록, due: 2026-Q4 }
-  - { unit: research, indicator: 성과공유 교육·토론회 4회 운영, evidence: 회차별 결과보고·참여자 수, due: 2026-11 }
-  - { unit: app, indicator: MVP 시연 및 학습용 영상·이미지 제작, evidence: 시연 APP·기능 테스트 결과, due: 2026-Q4 }
-  - { unit: campaign, indicator: 커피차 캠페인 3개교 각 1회 + 교사 홍보 캠페인, evidence: 결과보고서·사진·만족도, due: 2026-12 }
-  - { unit: ai-club, indicator: 1개교 AI 학습동아리 모델 구축, evidence: 명단·활동일지·산출물, due: 2026-12 }
-  - { unit: org, indicator: 운영위원회·자문위원단 체계, evidence: 회의록·워크샵 보고서·면담 보고서, due: 연중 }
-  - { unit: org, indicator: 후원구조 구축·후원금 월 100만원, evidence: CMS 내역·후원회원 명단, due: 2026-12 }
-  - { unit: org, indicator: 홍보활동, evidence: SNS 게시글 수·카드뉴스·뉴스레터 개수·조회수, due: 연중 }
+kpi:                                    # 04-성과지표.md 12행과 동기화 (변경 후 기준). id 는 outcomes.kpi_status·초안 인용(kpi[id=…])의 키
+  - { id: kpi-org-governance,       unit: org,      indicator: 운영위원회 체계 확립, evidence: 운영위원회 회의록·워크샵 개최 및 결과보고서, due: "1분기~연중" }
+  - { id: kpi-org-advisory,         unit: org,      indicator: 자문위원단을 통한 전문성 보강, evidence: 자문위원 면담 보고서·1년 평가서, due: 연중, cadence: 분기 1회 }
+  - { id: kpi-org-registration,     unit: org,      indicator: 법적·행정적 단체 등록 완료, evidence: 고유번호증·정관 및 총회 회의록, due: 2026-Q1 }
+  - { id: kpi-org-promotion,        unit: org,      indicator: 홍보활동, evidence: 홍보대사 위촉 사진·SNS 게시글 수·카드뉴스·뉴스레터 개수 및 조회수, due: 연중 }
+  - { id: kpi-org-donation,         unit: org,      indicator: 후원구조 구축 · 후원금 월 100만원, evidence: CMS 또는 정기이체 내역·후원회원 관리 명단, due: "2분기 구축, 4분기 달성" }
+  - { id: kpi-research-report,      unit: research, indicator: "기초연구 보고서 발간 및 교과서 집필 방향안 도출 — 기존 교과서 분석 완료, 인터뷰(학생·졸업생·노동자) 10회", evidence: 연구보고서·인터뷰 녹취록, due: 2026-Q4 }
+  - { id: kpi-research-forum,       unit: research, indicator: 성과공유 교육·토론회 '일하는 열아홉' 4회 운영, evidence: 회차별 결과보고(참여자 수·사진)·온라인 송출 기록, due: "10~11월" }
+  - { id: kpi-app-mvp,              unit: app,      indicator: "MVP 시연 — 핵심 기능(MSDS 검색, 현장 분석) 작동, 학습용 영상·이미지 제작, 챗봇 활성화", evidence: 시연 APP·기능 테스트 결과·safefactory.kr 자료 수, due: 2026-Q4 }
+  - { id: kpi-campaign-coffee,      unit: campaign, indicator: "커피차 캠페인 3개교 각 1회, 만족도 중심 성공모델", evidence: 결과보고서(사진·일시·장소·참여 인원)·만족도 조사·홍보물 소진 수량, due: "8~12월" }
+  - { id: kpi-campaign-teacher,     unit: campaign, indicator: 교사 대상 노동안전교육컨텐츠 홍보 캠페인, evidence: 홍보물 제작·배포 수량·교사 관계망(연락 가능 교사 수), due: "8~12월" }
+  - { id: kpi-aiclub-model,         unit: ai-club,  indicator: "1개교 동아리 모델 구축 — 학생 5명 내외, 담당교사", evidence: 명단·활동일지·학생 제작 산출물, due: "8~12월" }
+  - { id: kpi-regional-partnership, unit: regional, indicator: "위탁기관 협력 논의 착수, 교육활동가 양성과정 참여 안내", evidence: 간담회 기록·협력 제안서 발송 내역, due: 하반기 }
+
+unit_costs:                             # 단가표 — 03-예산.md 산출근거에서 그대로 옮김. 계획서 예산 줄은 여기서만 인용 (unit_costs.<id>). note: 미확인 = 대표 확인(O-2) 전
+  - { id: lecture_fee,      name: 토론회 강사비,          amount: 300000,  unit: 회,   account: 사업인건비, source: "03 §1 기초연구", note: 미확인 }
+  - { id: advisor_fee,      name: 자문비,                 amount: 150000,  unit: 회,   account: 사업인건비, source: "03 §1 캠페인·AI학습동아리", note: 미확인 }
+  - { id: interview_fee,    name: 인터뷰 사례비,          amount: 100000,  unit: 회,   account: 사업인건비, source: "03 §1 기초연구", note: 미확인 }
+  - { id: proofreading,     name: 기술교정,               amount: 10000,   unit: 쪽,   account: 사업인건비, source: "03 §1 기초연구", note: 미확인 }
+  - { id: venue,            name: 토론회 대관,            amount: 200000,  unit: 회,   account: 사업회의비, source: "03 §1 기초연구", note: 미확인 }
+  - { id: refreshments,     name: 다과,                   amount: 100000,  unit: 회,   account: 사업회의비, source: "03 §1 기초연구", note: 미확인 }
+  - { id: meeting_snack_pp, name: 학생모임 다과(1인),     amount: 20000,   unit: 인회, account: 사업회의비, source: "03 §1 AI학습동아리", note: 미확인 }
+  - { id: print_report,     name: 보고서 인쇄,            amount: 2000,    unit: 부,   account: 도서인쇄비, source: "03 §1 기초연구", note: 미확인 }
+  - { id: streaming,        name: 온라인 송출 기술지원,   amount: 125000,  unit: 회,   account: 지급수수료, source: "03 §1 기초연구", note: 미확인 }
+  - { id: coffee_truck,     name: 커피차 대여(300인분),   amount: 1000000, unit: 회,   account: 지급수수료, source: "03 §1 캠페인", note: 미확인 }
+  - { id: beverage,         name: 음료(커피차 1인분),     amount: 2000,    unit: 인분, account: 지급수수료, source: "03 §1 캠페인", note: 미확인 }
+  - { id: school_visit,     name: 학교방문 교통비,        amount: 100000,  unit: 회,   account: 여비교통비, source: "03 §1 AI학습동아리", note: 미확인 }
+  - { id: student_book,     name: 학생 AI 활용 도서(1인), amount: 100000,  unit: 인,   account: 물품구매비, source: "03 §1 AI학습동아리", note: 미확인 }
+  - { id: ai_seat,          name: AI 코딩 서비스(1인·월), amount: 100000,  unit: 인월, account: 지급수수료, source: "03 §1 AI학습동아리", note: 미확인 }
+  - { id: server_month,     name: 서버(월),               amount: 50000,   unit: 월,   account: 지급수수료, source: "03 §1 AI학습동아리", note: 미확인 }
+  - { id: db_month,         name: DB(월),                 amount: 50000,   unit: 월,   account: 지급수수료, source: "03 §1 AI학습동아리", note: 미확인 }
+  - { id: claude_max,       name: 클로드코드 Max(월),     amount: 160000,  unit: 월,   account: 일반관리비, source: "03 §2", note: 미확인 }
+  - { id: pinecone,         name: pinecone(월),           amount: 30000,   unit: 월,   account: 일반관리비, source: "03 §2", note: 미확인 }
+  - { id: figma,            name: Figma(월),              amount: 60000,   unit: 월,   account: 일반관리비, source: "03 §2", note: 미확인 }
+  - { id: living_wage_hour, name: 서울시 생활임금(시급),  amount: 12121,   unit: 시간, account: 운영인건비, source: "03 §2", note: "미확인 · 2026 기준, 연도별 갱신" }
+  - { id: rent_month,       name: 임차료(월),             amount: 55000,   unit: 월,   account: 임차료, source: "03 §2", note: 미확인 }
+
+outcomes:                               # 실적 — 09-성과실적.md 와 동기화. 계획 수치는 두지 않는다 (갱신은 /kihoek learn 으로만)
+  as_of: 2026-09-25
+  kpi_status:                           # kpi[].id 12개. status: planned | in_progress | done | at_risk | dropped
+    - { id: kpi-org-governance,       status: planned }
+    - { id: kpi-org-advisory,         status: planned }
+    - { id: kpi-org-registration,     status: planned, progress: "고유번호증 발급 시점 확인 필요 (org.founded null)" }
+    - { id: kpi-org-promotion,        status: planned }
+    - { id: kpi-org-donation,         status: planned }
+    - { id: kpi-research-report,      status: in_progress, progress: "초안 2026-09-11 (교정 코멘트 포함), 발간 11월 예정", evidence_ref: "kb/09-성과실적.md#1/1.1" }
+    - { id: kpi-research-forum,       status: planned, progress: "4회 일정 확정 (2026-10-14 ~ 11-04)", evidence_ref: "kb/09-성과실적.md#1/1.1" }
+    - { id: kpi-app-mvp,              status: planned }
+    - { id: kpi-campaign-coffee,      status: planned, progress: "학교 협의 중", evidence_ref: "kb/09-성과실적.md#1/1.3" }
+    - { id: kpi-campaign-teacher,     status: planned }
+    - { id: kpi-aiclub-model,         status: planned }
+    - { id: kpi-regional-partnership, status: planned }
+  deliverables:                         # /kihoek learn 으로 적재 (2026-09-25: content/out/INDEX.md final 6건 승인)
+    - { id: promo-forum-19-poster,          unit: research, name: 열아홉 토론회 포스터·카드뉴스·OG배너, date: 2026-09-14, type: visual, ref: "content/out/2026-09-14-열아홉-토론회-포스터" }
+    - { id: promo-coffee-truck-poster,      unit: campaign, name: 커피차 캠페인 포스터·카드, date: 2026-09-14, type: visual, ref: "content/out/2026-09-14-커피차-캠페인-포스터" }
+    - { id: promo-teacher-leaflet,          unit: campaign, name: 교사용 노동안전교육컨텐츠 리플릿(3단), date: 2026-09-14, type: visual, ref: "content/out/2026-09-14-교사용-컨텐츠-리플릿" }
+    - { id: promo-regional-center-proposal, unit: regional, name: 노동자종합지원센터 협력제안서(HWPX), date: 2026-09-14, type: doc, ref: "content/out/2026-09-14-노동자지원센터-협력제안서" }
+    - { id: promo-textbook-support-proposal, unit: research, name: 반도체고 신규 전공교과서 제작비 지원제안서(HWPX), date: 2026-09-15, type: doc, ref: "content/out/2026-09-15-교과서제작비-지원제안서" }
+    - { id: promo-safety-section-example,   unit: research, name: 안전 소절 예시(습식 식각) 안내문, date: 2026-09-17, type: doc, ref: "content/out/2026-09-17-안전소절-예시-습식식각" }
+  activity_counts:                      # 사용자 제공·승인 값만. 계획층 값(schools.visited_2026_h1)은 중복 저장하지 않음
+    forum_sessions_done: 0
+    coffee_truck_done: 0
+  budget_execution:                     # 계획 대비 진행률 판단용 (G2). 회계 원천은 관리시스템(앱)
+    as_of: 2026-06-30                   # 자료 기준일 — 03-예산 산출근거의 "상반기 기집행"
+    source: "03-예산 §1·§2 산출근거 (변경신청서 0823)"
+    by_unit:                            # 값이 없는 unit 은 G2 판정에서 건너뜀
+      - { unit: research, executed: 6500500 }
+      - { unit: app,      executed: 556412 }
+      - { unit: campaign, executed: 987821, note: "여비 402,821 + 물품 361,300 + 회의 223,700" }
+      - { unit: ai-club,  executed: 134000 }
+    by_account: {}                      # promo.py exec-summary 결과를 learn --kind summary 로 반영
+  lessons_ref: "kb/10-교훈.md"
 
 deprecated:                             # 산출물에서 발견 시 FAIL (07-변경이력·internal 제외)
   - { text: "30회", reason: 캠페인 횟수 변경 전 (→ 3개교 각 1회) }
@@ -272,3 +337,4 @@ changelog:
   - { date: 2026-09-16, doc: 검토 의견 2차, summary: "2027 교과서 제작 지원 규모 2천만원(2차년도 편성)·학교당 1천만원, 지원 방식 = 센터 제작·부수 제공, 전국 반도체고 현황(운영 5·신설 예정) 추가. deprecated '5개교' → '5개 학교 구성'으로 축소" }
   - { date: 2026-09-17, doc: 대표 지정, summary: "교과서 안전 소절 검수·전문가 자문 주체 = 노동환경건강연구소·관련 대학교수 (partners.review). 반올림·노무사모임은 검수 역할에서 제외 (신청서 협력 네트워크 기록은 유지)" }
   - { date: 2026-09-16, doc: 기초연구 보고서 초안 2026-09-11 + 대표 결정, summary: "보고서 주요 결과(사고 사례 0건, 설문 48명 77.1% 필요, 해외 통합형 대부분, 5단계 통합 구조, 공정별 화학물질 표) 반영. 사업 방향 = 통합형 노동안전보건교과서 (strategy)" }
+  - { date: 2026-09-25, doc: F-16 kb v2 정리, summary: "학교 실명 2건(밀양 마이스터고·서울 반도체고)을 지역+유형 표기로 변경(이후 학교 실명은 data/pii-denylist.txt 관리). facts v2: kpi 12개 id(04 기준), unit_costs 21개(note 미확인), outcomes 골격(kpi_status seed·상반기 집행), 09-성과실적·10-교훈 신설, 08 §7 계정별 집행 규칙" }

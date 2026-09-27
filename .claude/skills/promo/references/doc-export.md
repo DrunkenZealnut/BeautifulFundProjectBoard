@@ -3,29 +3,30 @@
 ## 흐름
 
 ```
-draft.md (확정) ──▶ hwpx: 사용자 레벨 hwpx 스킬 ──▶ content/out/<id>/final/<id>.hwpx ──▶ promo.py check
+최신 draft (확정) ──▶ hwpx: 사용자 레벨 hwpx 스킬 ──▶ content/out/<id>/final/<id>.hwpx ──▶ promo.py check
               └──▶ docx: document-skills:docx     ──▶ content/out/<id>/final/<id>.docx ──▶ promo.py check
-              └──▶ text: draft.md 그대로 final/<id>.md
+              └──▶ text: 최신 draft 그대로 final/<id>.md
 ```
 
 ## HWPX
 
 1. 골격의 frontmatter `hwpx_template`로 템플릿 선택: 공문→`gonmun`, 보고서→`report`, 협력제안서→`proposal`, 안내문→`base`.
-2. **기본 경로 (레퍼런스 파일 없음)**: `content/tools/md2hwpx.py`가 draft.md(마크다운 부분집합)를 section0.xml로 변환하고 hwpx 스킬의 `build_hwpx.py` + `validate.py`를 호출한다.
+2. **기본 경로 (레퍼런스 파일 없음)**: `content/tools/md2hwpx.py`가 최신 draft(`draft(-vN).md` 최고 버전, 마크다운 부분집합 — `draft.md`만 있으면 그것)를 section0.xml로 변환하고 hwpx 스킬의 `build_hwpx.py` + `validate.py`를 호출한다.
    ```
-   content/.venv/bin/python3 content/tools/md2hwpx.py content/out/<id>/draft.md \
+   content/.venv/bin/python3 content/tools/md2hwpx.py content/out/<id>/<최신 draft> \
      --template proposal --output content/out/<id>/final/<id>.hwpx --title "제목"
    ```
    지원 문법: `# 제목`, `## 절`(proposal 녹색 번호바 / report 섹션 헤더선), `### 소절`(파란 배지), `- 불릿`, `  - 하위`, `| 표 |`, `<!-- -->` 제거. 셀 병합 없음.
    ※ `build_hwpx.py --template`에 `proposal`이 없어 `--header templates/proposal/header.xml`로 넘긴다 (md2hwpx가 처리).
-3. 결과가 `VALID`가 아니면 완료 처리하지 않는다. 표가 복잡하면(병합·다단) `hwpx` 스킬을 직접 호출해 XML을 손으로 작성.
+3. 결과가 `VALID`가 아니면 완료 처리하지 않는다 — **doc-stamp도 하지 않는다**. 표가 복잡하면(병합·다단) `hwpx` 스킬을 직접 호출해 XML을 손으로 작성.
 4. **레퍼런스 hwpx가 있을 때** (재단 양식 등): md2hwpx 대신 `hwpx` 스킬(Skill 도구)의 "기본 동작 모드(레퍼런스 복원)"를 따르고 `page_guard.py`까지 통과. 환경: `VENV=content/.venv/bin/activate`, `SKILL_DIR=~/.claude/skills/hwpx`.
+5. **변환 성공(`VALID`) 뒤에만** `content/.venv/bin/python3 content/tools/promo.py doc-stamp content/out/<id>` — 최신 draft의 sha1을 `brief.final_from`에 기록한다. 출력된 draft 파일명이 방금 변환한 파일과 다르면 그 파일로 다시 변환한다. 변환이 실패했는데 stamp를 찍으면 옛 final이 최신본으로 통과하므로, 순서를 바꾸지 않는다 (check는 `final_from` ≠ 최신 draft일 때만 경고).
 
 주의: 재단 제출 양식(급여명세서·영수증빙·회의일지)은 `index.html` 앱의 F-13 서식채우기가 담당 — 여기서 만들지 않는다.
 
 ## DOCX
 
-`document-skills:docx` 스킬 호출. md 표는 그대로 표로, 제목 계층 유지. 보도자료·협력제안서에 사용. 산출: `content/out/<id>/final/<id>.docx`.
+`document-skills:docx` 스킬 호출. md 표는 그대로 표로, 제목 계층 유지. 보도자료·협력제안서에 사용. 산출: `content/out/<id>/final/<id>.docx`. 생성에 성공한 뒤 HWPX 5단계와 같이 doc-stamp.
 
 ## 공통 마무리
 
