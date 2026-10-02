@@ -944,6 +944,50 @@
             background: rgba(255, 255, 255, 0.25);
         }
 
+        /* F-17: 사용 매뉴얼 도움말 드로어 (공용 모달 z-index 1000 아래) */
+        .help-drawer {
+            position: fixed; top: 0; right: 0; height: 100vh; height: 100dvh;
+            width: min(520px, 92vw); background: #fff; z-index: 900;
+            display: flex; flex-direction: column;
+            box-shadow: -8px 0 24px rgba(19, 78, 66, 0.18);
+            transform: translateX(100%); visibility: hidden;
+            transition: transform 0.2s ease, visibility 0s linear 0.2s;
+        }
+        .help-drawer.open { transform: none; visibility: visible; transition: transform 0.2s ease; }
+        .help-drawer:focus { outline: none; }
+        .help-drawer-bar {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 12px 16px; color: #fff;
+            background: linear-gradient(135deg, #134E42 0%, #1B6B5A 100%);
+        }
+        .help-drawer-actions { display: flex; gap: 6px; }
+        .help-drawer-actions button {
+            padding: 4px 10px; font-size: 13px; color: #fff; cursor: pointer;
+            background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px;
+        }
+        .help-drawer-actions button:hover { background: rgba(255, 255, 255, 0.25); }
+        .help-drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px 40px; }
+        .help-status { color: #6B6560; font-size: 14px; }
+        .help-retry { margin-left: 6px; padding: 4px 10px; border: 1px solid #1B6B5A; border-radius: 6px; background: #fff; color: #1B6B5A; cursor: pointer; }
+        .help-raw { white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+        .help-md { font-size: 14px; line-height: 1.7; color: #2D2A26; word-break: keep-all; overflow-wrap: anywhere; }
+        .help-md h1 { font-size: 20px; margin: 0 0 12px; }
+        .help-md h2 { font-size: 18px; margin: 28px 0 10px; padding-top: 12px; border-top: 1px solid #E5E7EB; }
+        .help-md h3 { font-size: 16px; margin: 22px 0 8px; }
+        .help-md h4 { font-size: 15px; margin: 18px 0 6px; }
+        .help-md h2, .help-md h3, .help-md h4 { scroll-margin-top: 8px; }
+        .help-md table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+        .help-md th, .help-md td { border: 1px solid #E5E7EB; padding: 6px 8px; vertical-align: top; }
+        .help-md th { background: #F0F7F5; }
+        .help-md code { background: #F3F4F6; padding: 1px 4px; border-radius: 4px; font-size: 12.5px; }
+        .help-md pre { background: #F3F4F6; padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
+        .help-md pre code { background: none; padding: 0; }
+        .help-md blockquote { margin: 10px 0; padding: 4px 12px; border-left: 3px solid #1B6B5A; background: #F8FAF9; color: #4B5563; }
+        .help-md ul, .help-md ol { padding-left: 22px; }
+        .help-md a { color: #1B6B5A; }
+        @media (max-width: 768px) { .help-drawer { width: 100vw; } }
+        @media print { .help-drawer { display: none !important; } }
+
         @media (max-width: 768px) {
             .container {
                 padding: 12px;
@@ -4480,6 +4524,175 @@
 
             return _nlBaseHTML(config.title || '뉴스레터', style, body);
         };
+
+        // ── F-17: 사용 매뉴얼 도움말 ──────────────────────────────
+        const HELP_MANUAL_URL = 'docs/manual/관리시스템.md';
+        const HELP_MARKED_SRC = 'https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js';
+        const HELP_MARKED_SRI = 'sha384-2vpGtuKqJvFlwJqYnf/wUMuzUfhUnYBt9oay0e2yaFcq0Dh6/aEbQ8YAOeKGzlYo';
+        // 화면 맥락(currentPage, budget.<탭>, admin.<탭>) → 매뉴얼 헤딩 slug. scripts/check_manual.py가 누락·오타를 잡는다
+        const HELP_ANCHORS = {
+            'dashboard': '41-대시보드',
+            'budget.dashboard': '421-예산-대시보드',
+            'budget.breakdown': '422-예산편성표',
+            'budget.register': '423-집행등록',
+            'budget.import': '424-일괄등록',
+            'budget.rules': '425-거래처-규칙',
+            'budget.calculator': '426-원천징수계산',
+            'budget.history': '427-집행내역',
+            'budget.ratio': '428-비용비율',
+            'budget.calendar': '429-캘린더',
+            'schedule': '43-일정관리',
+            'gallery': '44-갤러리',
+            'board': '45-게시판',
+            'guide': '46-회계가이드',
+            'newsletter': '47-뉴스레터',
+            'schools': '48-학교관리',
+            'admin.users': '491-사용자-관리',
+            'admin.recipients': '492-수급자-관리',
+            'admin.orgSettings': '493-기관-정보',
+            'admin.projects': '494-프로젝트-관리',
+            'admin.logs': '495-활동-로그'
+        };
+        // GitHub 헤딩 slug와 같은 규칙 — 유니코드 속성 이스케이프는 Babel이 변환하지 않도록 RegExp 생성자로 만든다
+        const HELP_SLUG_STRIP = new RegExp('[^\\p{L}\\p{M}\\p{N}\\p{Pc} -]', 'gu');
+        const helpSlug = (text) => text.trim().toLowerCase().replace(HELP_SLUG_STRIP, '').replace(/ /g, '-');
+        const _scriptLoads = {};
+        const loadScriptOnce = (src, integrity) => {
+            if (!_scriptLoads[src]) {
+                _scriptLoads[src] = new Promise((resolve, reject) => {
+                    const s = document.createElement('script');
+                    s.src = src;
+                    if (integrity) { s.integrity = integrity; s.crossOrigin = 'anonymous'; }
+                    s.onload = () => resolve();
+                    s.onerror = () => { delete _scriptLoads[src]; reject(new Error('script load failed: ' + src)); };
+                    document.head.appendChild(s);
+                });
+            }
+            return _scriptLoads[src];
+        };
+
+        // 도움말 상태는 루트 컴포넌트 밖에 둔다. 루트 상태로 두면 열고 닫을 때마다 루트가 다시 그려지고,
+        // 루트 안에서 정의된 컴포넌트(댓글·갤러리 상세 등)가 새로 마운트되어 쓰던 내용이 사라진다
+        const helpBus = {
+            open: false, btn: null, toggle: null, listeners: new Set(),
+            setOpen(open) { this.open = open; this.listeners.forEach(l => l(open)); }
+        };
+        function HelpButton() {
+            const [open, setOpen] = useState(helpBus.open);
+            const ref = useRef(null);
+            useEffect(() => {
+                helpBus.btn = ref.current;
+                helpBus.listeners.add(setOpen);
+                return () => { helpBus.listeners.delete(setOpen); if (helpBus.btn === ref.current) helpBus.btn = null; };
+            }, []);
+            return (
+                <button ref={ref} className="logout-btn help-btn" onClick={() => helpBus.toggle?.()}
+                    aria-expanded={open} aria-controls="help-drawer">
+                    ❓ 도움말
+                </button>
+            );
+        }
+        function HelpDrawer({ helpKey }) {
+            const [open, setOpen] = useState(false);
+            const [doc, setDoc] = useState({ status: 'idle', html: '', text: '' }); // idle | loading | ready | error
+            const [target, setTarget] = useState({ slug: null, n: 0 });              // n: 같은 slug로 다시 이동해도 스크롤이 돌게
+            const bodyRef = useRef(null);
+            const drawerRef = useRef(null);
+            const show = (o) => { setOpen(o); helpBus.setOpen(o); };
+            const go = (slug) => setTarget(t => ({ slug, n: t.n + 1 }));
+            const close = () => { show(false); helpBus.btn?.focus(); };
+            const load = async () => {
+                setDoc({ status: 'loading', html: '', text: '' });
+                try {
+                    const res = await fetch(encodeURI(HELP_MANUAL_URL));
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const md = await res.text();
+                    try { await loadScriptOnce(HELP_MARKED_SRC, HELP_MARKED_SRI); }
+                    catch (e) { console.warn('[help] marked 로드 실패 — 원문으로 표시', e); }
+                    if (window.marked?.parse) setDoc({ status: 'ready', html: DOMPurify.sanitize(window.marked.parse(md, { gfm: true })), text: '' });
+                    else setDoc({ status: 'ready', html: '', text: md });
+                } catch (e) {
+                    console.error('[help] 매뉴얼 로드 실패', e);
+                    setDoc({ status: 'error', html: '', text: '' });
+                }
+            };
+            // 헤더 버튼이 부르는 토글 — 렌더마다 최신 상태·맥락을 쥔 함수로 바꿔 끼운다
+            useEffect(() => {
+                helpBus.toggle = () => {
+                    if (open) { close(); return; }
+                    show(true);
+                    go(HELP_ANCHORS[helpKey] || null);
+                    if (doc.status === 'idle' || doc.status === 'error') load();
+                };
+            });
+            const onBodyClick = (e) => {
+                const a = e.target.closest('a[href^="#"]');
+                if (!a) return;
+                e.preventDefault();
+                go(decodeURIComponent(a.getAttribute('href').slice(1)));
+            };
+            // 렌더된 헤딩에 id(중복은 -1, -2), 외부 링크는 새 탭 — 아래 스크롤 이펙트보다 먼저 돌아야 한다
+            useEffect(() => {
+                const root = bodyRef.current;
+                if (!root || !doc.html) return;
+                const seen = {};
+                root.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
+                    let id = helpSlug(h.textContent);
+                    if (seen[id] !== undefined) { seen[id] += 1; id = `${id}-${seen[id]}`; } else seen[id] = 0;
+                    h.id = 'help-' + id; // 앱 요소 id와 겹치지 않게 접두사
+                });
+                root.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+            }, [doc.html]);
+            useEffect(() => {
+                if (!open || doc.status !== 'ready') return;
+                const el = target.slug && document.getElementById('help-' + target.slug);
+                if (el) el.scrollIntoView({ block: 'start' });
+                else if (bodyRef.current) bodyRef.current.scrollTop = 0;
+            }, [target.n, doc.status, open]);
+            useEffect(() => {
+                if (!open) return;
+                drawerRef.current?.focus({ preventScroll: true });
+                // 다른 입력(댓글 수정 등)이 Esc를 이미 처리했으면 무시, 포커스는 드로어 안에 있었을 때만 버튼으로 돌려준다
+                const onKey = (e) => {
+                    if (e.key !== 'Escape' || e.defaultPrevented) return;
+                    const inside = drawerRef.current?.contains(document.activeElement);
+                    show(false);
+                    if (inside) helpBus.btn?.focus();
+                };
+                document.addEventListener('keydown', onKey);
+                return () => document.removeEventListener('keydown', onKey);
+            }, [open]);
+
+            // 처음 열 때 마운트하고, 닫으면 숨기기만 한다(다시 불러오지 않음)
+            if (!open && doc.status === 'idle') return null;
+            return (
+                <aside id="help-drawer" ref={drawerRef} tabIndex={-1} aria-label="사용 매뉴얼" aria-hidden={!open}
+                    className={`help-drawer ${open ? 'open' : ''}`}>
+                    <div className="help-drawer-bar">
+                        <strong>📘 사용 매뉴얼</strong>
+                        <div className="help-drawer-actions">
+                            <button onClick={() => go('목차')}>목차</button>
+                            <button onClick={() => go(HELP_ANCHORS[helpKey] || null)}>이 화면</button>
+                            <button onClick={close} aria-label="도움말 닫기">✕</button>
+                        </div>
+                    </div>
+                    <div className="help-drawer-body" ref={bodyRef} onClick={onBodyClick}>
+                        {doc.status === 'loading' && <p className="help-status">매뉴얼을 불러오는 중…</p>}
+                        {doc.status === 'error' && (
+                            <div className="help-status">
+                                매뉴얼을 불러오지 못했습니다. <button className="help-retry" onClick={load}>다시 시도</button>
+                            </div>
+                        )}
+                        {doc.status === 'ready' && (doc.html
+                            ? <div className="help-md" dangerouslySetInnerHTML={{ __html: doc.html }} />
+                            : <>
+                                <p className="help-status">서식 없이 원문으로 보여 줍니다.</p>
+                                <pre className="help-raw">{doc.text}</pre>
+                            </>)}
+                    </div>
+                </aside>
+            );
+        }
 
         // 로그인 컴포넌트
         function LoginPage({ onLogin }) {
@@ -8382,7 +8595,7 @@
                                         {editingCmtId === c.id ? (
                                             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                                                 <input type="text" className="form-input" value={editCmtText} onChange={e => setEditCmtText(e.target.value)}
-                                                    onKeyDown={e => { if (e.key === 'Enter') handleEdit(c.id); if (e.key === 'Escape') setEditingCmtId(null); }} style={{ flex: 1, fontSize: 13 }} autoFocus />
+                                                    onKeyDown={e => { if (e.key === 'Enter') handleEdit(c.id); if (e.key === 'Escape') { e.preventDefault(); setEditingCmtId(null); } }} style={{ flex: 1, fontSize: 13 }} autoFocus />
                                                 <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => handleEdit(c.id)}>저장</button>
                                                 <button className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => setEditingCmtId(null)}>취소</button>
                                             </div>
@@ -12161,6 +12374,12 @@
                 applicationDate: new Date().toISOString().slice(0, 10)
             });
 
+            // ── F-17: 도움말이 열 절 — 화면 맥락만 계산하고, 열기·닫기 상태는 HelpDrawer가 가진다(루트를 다시 그리지 않도록)
+            // 관리자가 아니면 admin 페이지 요청이 대시보드로 그려지므로(renderContent) 도움말도 대시보드 절로
+            const helpKey = currentPage === 'budget' ? `budget.${budgetTab}`
+                : currentPage === 'admin' ? (currentUser?.role === 'admin' ? `admin.${adminTab}` : 'dashboard')
+                : currentPage;
+
             // ── 기관 정보 저장 ────────────────────────────────────────────
             const saveOrgSettings = async () => {
                 setOrgSettingsSaving(true);
@@ -15174,6 +15393,7 @@
                                 </p>
                             </div>
                             <div className="header-user-info">
+                                <HelpButton />
                                 <div style={{ textAlign: 'right' }}>
                                     <div className="user-name" style={{ cursor: 'pointer', textDecoration: 'underline dotted' }} onClick={openProfileModal} title="프로필 수정">{currentUser.name}</div>
                                     <div className="user-role">{roleLabels[currentUser.role] || currentUser.role}</div>
@@ -15698,6 +15918,9 @@
                             </div>
                         </div>
                     )}
+
+                    {/* F-17: 사용 매뉴얼 드로어 — 상태는 HelpDrawer 안에 (루트를 다시 그리지 않음) */}
+                    <HelpDrawer helpKey={helpKey} />
                 </div>
             );
         }
