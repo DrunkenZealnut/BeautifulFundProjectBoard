@@ -2396,7 +2396,15 @@
             PERIODS: {
                 h1: { start: '2026-01-01', end: '2026-06-30' },
                 h2: { start: '2026-07-01', end: '2026-12-31' }
-            }
+            },
+            // 재단 마감 — 수행가이드(2026 신규선정단체) p.5·p.9·p.21. 연차가 바뀌면 갱신. 10-31·12-31·01-29는 content/kb/facts.yaml program.deadlines와 같은 값으로 유지
+            DEADLINES: [
+                { date: '2026-06-30', label: '상반기 결과보고 도착 마감' },
+                { date: '2026-07-31', label: '상반기 결과보고 보완 기한' },
+                { date: '2026-10-31', label: '사업변경신청 마감' },
+                { date: '2026-12-31', label: '1년차 지원금 잔액 환급 기한' },
+                { date: '2027-01-29', label: '1년 전체 결과보고 도착 마감 (온라인·우편)' }
+            ]
         };
 
         const DEFAULT_ORG_NAME = '청년노동자인권센터';
@@ -5898,13 +5906,13 @@
                 const pendingCount = (data?.budgetExecutions || []).filter(e => e.status === 'pending').length;
                 if (pendingCount > 0 && !dismissedAlerts.includes('pending-execs'))
                     alerts.push({ id: 'pending-execs', level: 'warning', text: `미승인 집행건 ${pendingCount}건 처리 필요`, sort: 2 });
-                [{ date: `${today.getFullYear()}-06-30`, label: '상반기 정산 마감' }, { date: `${today.getFullYear()}-12-31`, label: '하반기 정산 마감' }, { date: `${today.getFullYear()}-07-15`, label: '중간보고서 제출 마감' }, { date: `${today.getFullYear()}-12-15`, label: '결과보고서 제출 마감' }].forEach(h => {
+                CONFIG.DEADLINES.forEach(h => {
                     const diff = Math.ceil((new Date(h.date) - today) / 86400000);
                     if (diff >= 0 && diff <= 30 && !dismissedAlerts.includes(`dl-${h.date}`))
                         alerts.push({ id: `dl-${h.date}`, level: diff <= 3 ? 'urgent' : diff <= 7 ? 'warning' : 'info', text: `[D-${diff}] ${h.label} (${h.date})`, sort: diff });
                 });
                 effectiveBudgetData.categories.forEach(cat => cat.subcategories.forEach(sub => {
-                    const totalBudget = sub.items.reduce((s, i) => s + i.amount, 0);
+                    const totalBudget = sub.items.reduce((s, i) => s + (i.budget || 0), 0);
                     const spent = (data?.budgetExecutions || []).filter(e => e.subcategory_id === sub.id).reduce((s, e) => s + (e.amount || 0), 0);
                     const rate = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
                     if (rate >= 85 && !dismissedAlerts.includes(`bw-${sub.id}`))
@@ -5943,6 +5951,9 @@
                 setProfileForm({ name: currentUser?.name || '', email: currentUser?.email || '', phone: currentUser?.phone || '', currentPassword: '', newPassword: '', confirmPassword: '' });
                 setProfileMsg('');
                 setProfileModal(true);
+                // 로그인 세션에는 전화번호가 없다 — DB에서 읽어 채우고, 못 읽었으면 저장 때 전화번호를 건드리지 않는다
+                supabase.from('users').select('phone').eq('id', currentUser?.id).single()
+                    .then(({ data }) => { if (data) setProfileForm(p => ({ ...p, phone: p.phone || data.phone || '', phoneLoaded: true })); });
             };
             const getPasswordStrength = (pw) => {
                 if (!pw) return null;
@@ -5968,7 +5979,8 @@
                         const { data: userRow } = await supabase.from('users').select('password_hash').eq('id', currentUser.id).single();
                         if (userRow?.password_hash !== hashedCurrent) { setProfileMsg('현재 비밀번호가 일치하지 않습니다.'); return; }
                     }
-                    const updates = { name: profileForm.name, email: profileForm.email, phone: profileForm.phone };
+                    const updates = { name: profileForm.name, email: profileForm.email };
+                    if (profileForm.phoneLoaded || profileForm.phone) updates.phone = profileForm.phone; // 못 읽은 전화번호를 빈 값으로 덮지 않음
                     if (profileForm.newPassword) updates.password_hash = await hashPassword(profileForm.newPassword);
                     const { error } = await supabase.from('users').update(updates).eq('id', currentUser.id);
                     if (error) throw error;
@@ -6011,7 +6023,7 @@
                 setAttendanceData(updated);
                 localStorage.setItem('bf_attendance', JSON.stringify(updated));
                 // F-07: Supabase 영속 저장
-                supabase.from('system_settings').upsert({ setting_key: 'attendance_data', setting_value: JSON.stringify(updated) }, { onConflict: 'setting_key' }).catch(() => {});
+                supabase.from('system_settings').upsert({ setting_key: 'attendance_data', setting_value: JSON.stringify(updated) }, { onConflict: 'setting_key' }).then(() => {}, () => {});
             };
             // F-07: 앱 시작 시 Supabase에서 출석 데이터 로딩
             React.useEffect(() => {
@@ -6208,7 +6220,7 @@
                             loadGalleries(),
                             loadBoards(),
                             loadBudgetExecutions(),
-                            supabase.from('recipients').select('id,name,birth_date,address,phone')
+                            supabase.from('recipients').select('id,name,birth_date,address,phone,notes')
                                 .eq('is_active', true).order('name').then(r => r.data || []),
                             supabase.from('system_settings').select('setting_key,setting_value')
                                 .in('setting_key', [
@@ -6554,7 +6566,7 @@
                         // Build subcategory budget from BUDGET_DATA
                         const subcatBudgets = {};
                         effectiveBudgetData.categories.forEach(cat => cat.subcategories.forEach(sc => {
-                            const budget = sc.items.reduce((s, i) => s + i.amount, 0);
+                            const budget = sc.items.reduce((s, i) => s + (i.budget || 0), 0);
                             subcatBudgets[sc.name] = (subcatBudgets[sc.name] || 0) + budget;
                         }));
                         // Sum spent per subcategory_name
@@ -6844,7 +6856,7 @@
                                         tabIndex={0}
                                         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 }); setBoardView('detail'); setCurrentPage('board'); } }}
                                         onClick={() => {
-                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).then(({ error }) => { if (error) console.error('조회수 업데이트 실패:', error); }); // v2 쿼리에는 .catch가 없다
                                             setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
                                             setBoardView('detail');
                                             setCurrentPage('board');
@@ -6949,7 +6961,7 @@
                                         <DashboardGalleryThumb key={item.id} item={item} catInfo={catInfo}
                                             onClick={() => {
                                                 // Fire-and-forget view count increment
-                                                supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id).catch(console.error);
+                                                supabase.from('galleries').update({ view_count: (item.view_count || 0) + 1 }).eq('id', item.id).then(({ error }) => { if (error) console.error(error); });
                                                 setSelectedGalleryItem({ ...item, view_count: (item.view_count || 0) + 1 });
                                                 setGalleryView('detail');
                                                 setCurrentPage('gallery');
@@ -9098,7 +9110,7 @@
                                         key={board.id}
                                         className={`board-list-item ${board.is_pinned ? 'pinned' : ''}`}
                                         onClick={() => {
-                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).catch(err => console.error('조회수 업데이트 실패:', err));
+                                            supabase.from('boards').update({ view_count: (board.view_count || 0) + 1 }).eq('id', board.id).then(({ error }) => { if (error) console.error('조회수 업데이트 실패:', error); }); // v2 쿼리에는 .catch가 없다
                                             setSelectedPost({ ...board, view_count: (board.view_count || 0) + 1 });
                                             setBoardView('detail');
                                             loadAttachments('board', board.id).then(setDetailAttachments);
@@ -11320,7 +11332,7 @@
                                             <button
                                                 className="btn btn-secondary"
                                                 style={{ fontSize: '12px', padding: '6px 12px' }}
-                                                onClick={handleExportExcel}
+                                                onClick={() => handleExportExcel()}
                                             >📊 Excel 내보내기</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}
                                                 onClick={() => { const pw = window.open('', '_blank'); pw.document.write(getSettlementReportHTML()); pw.document.close(); pw.print(); }}
@@ -12290,7 +12302,7 @@
                     const attsByGallery = await Promise.all(
                         galleries.map(item =>
                             supabase.from('attachments')
-                                .select('file_path, file_name')
+                                .select('file_path, original_filename')
                                 .eq('gallery_id', item.id)
                                 .not('file_type', 'eq', 'document')
                                 .then(({ data }) => ({ item, atts: data || [] }))
@@ -12303,7 +12315,7 @@
                                     .from('attachments').download(att.file_path);
                                 if (blob) {
                                     const safeTitle = (item.title || '기타').replace(/[/\\:*?"<>|]/g, '_');
-                                    const safeFilename = (att.file_name || 'image').replace(/[/\\:*?"<>|]/g, '_');
+                                    const safeFilename = (att.original_filename || 'image').replace(/[/\\:*?"<>|]/g, '_');
                                     zip.file(`${safeTitle}/${safeFilename}`, blob);
                                 }
                             } catch (e) {
