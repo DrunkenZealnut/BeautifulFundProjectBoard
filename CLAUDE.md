@@ -217,10 +217,10 @@ Category (사업비/운영비) → Subcategory → Line Item → Executions
 `DOCUMENT_RULES` maps each expense type to required proof documents. `getRequiredDocuments(type, paymentMethod)` returns the list. `executionDocsMap` tracks upload status per execution.
 
 ### Dashboard Alerts
-`getDashboardAlerts()` generates D-day alerts for: upcoming schedules, pending executions, 재단 마감 `CONFIG.DEADLINES` (수행가이드 2026 일정 5건, D-30부터 — 연차가 바뀌면 갱신. 사업변경신청·잔액 환급·결과보고 3건은 `content/kb/facts.yaml` `program.deadlines`와 같은 값으로), and budget burn warnings (85%+, 95%+).
+`getDashboardAlerts()` generates D-day alerts for: upcoming schedules, pending executions, 재단 마감 `CONFIG.DEADLINES` (수행가이드 2026 일정 5건, D-30부터 — 연차가 바뀌면 갱신. 사업변경신청·잔액 환급·결과보고 3건은 `content/kb/facts.yaml` `program.deadlines`와 같은 값으로), and budget burn warnings (85%+, 95%+, 분모는 다른 예산 화면과 같은 `sub.budget`). 남은 날은 `daysUntil(dateStr)`(달력 날짜 — 날짜 문자열을 `new Date()`로 읽으면 UTC 자정이라 KST 오전 9시 전에 하루 어긋남)로 센다. 배너는 5칸이지만 재단 마감(`pinned`)은 칸 수와 상관없이 늘 보이고 나머지가 남은 칸을 채운다.
 
 ### 사용 매뉴얼·도움말 (F-17)
-`docs/manual/관리시스템.md`가 사용 매뉴얼의 단일 원천이다. 헤더 「❓ 도움말」이 같은 파일을 fetch해 우측 드로어에 렌더한다(marked + DOMPurify, 헤딩 id는 `helpSlug` = GitHub slug 규칙에 `help-` 접두사). 현재 화면(`currentPage`·`budgetTab`·`adminTab`)은 `HELP_ANCHORS`로 해당 절에 연결된다. 화면 라벨·탭·흐름을 바꾸면 매뉴얼을 함께 고치고 `python3 scripts/check_manual.py`(라벨·앵커·맥락 21개·개인정보·재단 표기, `--selftest`)를 PASS시킬 것. 매뉴얼은 정적 배포로 공개되므로 계정·연락처·실명을 쓰지 않는다.
+`docs/manual/관리시스템.md`가 사용 매뉴얼의 단일 원천이다. 헤더 「❓ 도움말」이 같은 파일을 fetch해 우측 드로어에 렌더한다(marked + DOMPurify `HELP_PURIFY` — style·form 태그와 style 속성 금지, 링크는 https·#만. marked는 매뉴얼과 동시에 받고 `HELP_MARKED_TIMEOUT_MS` 안에 못 받으면 원문 표시. 헤딩 id는 `helpSlug` = GitHub slug 규칙에 `help-` 접두사 — 검사기의 Python slug와 맞추려고 헤딩에 단어 안 `_`·HTML 엔티티를 쓸 때는 selftest에 케이스를 더할 것). 현재 화면(`currentPage`·`budgetTab`·`adminTab`)은 `HELP_ANCHORS`로 해당 절에 연결된다. 화면 라벨·탭·흐름을 바꾸면 매뉴얼을 함께 고치고 `python3 scripts/check_manual.py`(라벨·앵커·맥락 21개·개인정보·재단 표기, `--selftest`)를 PASS시킬 것. 매뉴얼은 정적 배포로 공개되므로 계정·연락처·실명을 쓰지 않는다.
 
 ## Supabase Patterns
 
@@ -235,7 +235,7 @@ All tables use `bf` schema (not `public`) — the client is configured with `db:
 ## Code Conventions
 
 - Korean commit messages: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`
-- Utility functions: `fmt(n)` (number formatting), `pct(spent, budget)`, `parseInput(s)`, `fmtInput(v)`, `esc(s)` (HTML escape)
+- Utility functions: `fmt(n)` (number formatting), `pct(spent, budget)`, `parseInput(s)`, `fmtInput(v)`, `esc(s)` (HTML escape), `daysUntil(dateStr)` (D-day), `zipPathPart(name, fallback)`·`uniqueZipPath(used, folder, file)` (ZIP 안 경로 — `..`·제어/방향 문자 제거, 같은 이름은 ` (2)`)
 - All code is inline in `index.html` — styles, components, logic coexist
 - New report/export logic should go in `api/` as serverless functions when possible to avoid growing index.html further
 - JSZip pattern for batch downloads: create zip → loop items → add files → `generateAsync({type:'blob'})` → download
