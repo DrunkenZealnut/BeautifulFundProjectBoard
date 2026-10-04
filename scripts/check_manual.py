@@ -127,6 +127,13 @@ def mask(value):
     return value[:3] + '…'
 
 
+def mask_pii(text):
+    """진단에 원문을 찍을 때도 개인정보형 값은 가린다(M4와 같은 기준)."""
+    for _, value in pii_hits(text):
+        text = text.replace(value, mask(value))
+    return text
+
+
 # ── index.html 에서 읽는 것 ──
 def js_block(app, name, opener, closer):
     i = app.find(f'const {name} = {opener}')
@@ -185,7 +192,7 @@ def check(manual_path, app_path, strict=False):
                 stats['라벨'] += 1
                 missing = [f for f in frags if f not in app_norm]
                 if missing:
-                    fails.append(f'M1 라벨   L{n} 「{label}」 — index.html에 없음 (조각 "{missing[0]}")')
+                    fails.append(f'M1 라벨   L{n} 「{mask_pii(label)}」 — index.html에 없음 (조각 "{mask_pii(missing[0])}")')
         for bang, target in LINK_RE.findall(line):        # M2·M6
             stats['링크'] += 1
             if bang:
@@ -360,6 +367,7 @@ def selftest():
          ['메뉴 모듈 목록을 읽지 못함', '예산 탭 목록을 읽지 못함'], []),
         ('M2 고정 이동 go()', [(md, app + "const toNope = () => go('없는-절');\n")], ["go('없는-절') — 해당 헤딩 없음"], []),
         ('M4 개인정보는 가려서 보고', [(md + '문의 010-1234-5678\n', app)], ['FAIL M4 개인정보'], ['1234-5678']),
+        ('M1 진단도 개인정보를 가림', [(md + '「문의 010-1234-5678」\n', app)], ['FAIL M1 라벨', '010…'], ['1234-5678']),
         ('M5 재단 표기', [(md + '아름다운 재단의 지원\n', app)], ['FAIL M5 표기'], []),
         ('M6 이미지·상대 링크', [(md + '![그림](a.png) [파일](b.md)\n', app)], ['이미지 금지 (a.png)', 'b.md — #앵커나'], []),
         ('M7 헤딩 이모지·코드', [(md + '## 🚀 시작\n## `x` 설명\n', app)], ['"🚀 시작"', '"`x` 설명"'], []),
