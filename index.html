@@ -4553,7 +4553,8 @@
         const HELP_MARKED_SRI = 'sha384-2vpGtuKqJvFlwJqYnf/wUMuzUfhUnYBt9oay0e2yaFcq0Dh6/aEbQ8YAOeKGzlYo';
         const HELP_MARKED_TIMEOUT_MS = 8000; // CDN이 응답하지 않으면 이만큼만 기다리고 원문으로 보여 준다
         // 매뉴얼 HTML에서 앱 화면에 영향을 줄 수 있는 태그·속성은 버리고, 링크는 https와 문서 안 #앵커만 남긴다
-        const HELP_PURIFY = { FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'], FORBID_ATTR: ['style'], ALLOWED_URI_REGEXP: /^(?:https:|#)/i };
+        const HELP_PURIFY = { FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'], FORBID_ATTR: ['style'], ALLOWED_URI_REGEXP: /^(?:https:|#)/i,
+            ADD_URI_SAFE_ATTR: ['align', 'start'] }; // URI 규칙이 표 정렬(align)·번호 목록 시작(start)까지 지우지 않게
         // 화면 맥락(currentPage, budget.<탭>, admin.<탭>) → 매뉴얼 헤딩 slug. scripts/check_manual.py가 누락·오타를 잡는다
         const HELP_ANCHORS = {
             'dashboard': '41-대시보드',
