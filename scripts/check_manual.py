@@ -22,12 +22,16 @@ Usage:
 Exit: 0 PASS · 1 FAIL (--strict 이면 WARN 도) · 2 입력 파일 없음
 """
 import argparse
+import contextlib
+import html
+import io
 import re
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MANUAL = 'docs/manual/관리시스템.md'
@@ -59,8 +63,9 @@ FORBIDDEN = [
 def heading_text(raw):
     t = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', raw)       # 링크 → 글자
     t = t.replace('`', '')                                  # 코드 표시
-    t = re.sub(r'(\*\*|__|\*|_)(?=\S)(.+?)(?<=\S)\1', r'\2', t)  # 강조
-    return t
+    t = re.sub(r'(\*\*|\*)(?=\S)(.+?)(?<=\S)\1', r'\2', t)  # * 강조
+    t = re.sub(r'(?<!\w)(__|_)(?=\S)(.+?)(?<=\S)\1(?!\w)', r'\2', t)  # _ 강조는 단어 경계에서만 (GFM — a_b_c는 그대로)
+    return html.unescape(t)                                 # &amp; 같은 엔티티는 렌더된 글자로
 
 
 def slug(text):
@@ -136,7 +141,8 @@ def parse_help_anchors(app):
     return dict(re.findall(r"'([^']+)'\s*:\s*'([^']+)'", block)) if block else None
 
 
-def expected_contexts(app):
+def context_groups(app):
+    """(메뉴 모듈, 예산 탭, 관리자 탭) — index.html 소스에서 긁어 온다. 표식이 바뀌면 빈 목록이 된다."""
     modules = []
     for name in ('COMMON_MODULES', 'CUSTOM_MODULES'):
         block = js_block(app, name, '[', '];') or ''
@@ -144,6 +150,11 @@ def expected_contexts(app):
     budget_tabs = sorted(set(re.findall(r"setBudgetTab\('(\w+)'\)", app)))
     i, j = app.find('const renderAdmin = () =>'), app.find('const renderContent = () =>')
     admin_tabs = re.findall(r"\{\s*key:\s*'(\w+)',\s*label:", app[i:j]) if 0 <= i < j else []
+    return modules, budget_tabs, admin_tabs
+
+
+def expected_contexts(app):
+    modules, budget_tabs, admin_tabs = context_groups(app)
     ctx = {m for m in modules if m != 'budget'}
     ctx |= {f'budget.{t}' for t in budget_tabs}
     ctx |= {f'admin.{t}' for t in admin_tabs}
@@ -196,6 +207,14 @@ def check(manual_path, app_path, strict=False):
     for key, s in anchors.items():
         if s not in slugs:
             fails.append(f'M2 앵커   HELP_ANCHORS[{key}] = {s} — 해당 헤딩 없음')
+    for target in sorted(set(re.findall(r"\bgo\('([^']+)'\)", app))):  # 「목차」처럼 드로어가 고정으로 가는 절
+        if target not in slugs:
+            fails.append(f"M2 앵커   go('{target}') — 해당 헤딩 없음")
+    modules, budget_tabs, admin_tabs = context_groups(app)
+    for name, items, marker in [('메뉴 모듈', modules, None), ('예산 탭', budget_tabs, 'budgetTab'),
+                                ('관리자 탭', admin_tabs, 'adminTab')]:
+        if not items and (marker is None or marker in app):  # 화면은 있는데 목록을 못 읽음 → 검사가 빈 채로 통과하지 않게
+            fails.append(f'M3 맥락   index.html에서 {name} 목록을 읽지 못함 — 화면 구조가 바뀌었으면 이 검사기의 추출 표식을 고칠 것')
     expected = expected_contexts(app)
     for key in sorted(expected - anchors.keys()):
         fails.append(f'M3 맥락   HELP_ANCHORS에 {key} 없음')
@@ -273,6 +292,9 @@ def selftest():
         ('부록 A. 파일 지도', '부록-a-파일-지도'),
         ('4.2.10 사업변경신청서', '4210-사업변경신청서'),
         ('6. 알림·표시 읽는 법', '6-알림표시-읽는-법'),
+        ('payee_budget_rules 테이블', 'payee_budget_rules-테이블'),  # 단어 안 _는 강조가 아님 (marked와 같게)
+        ('A &amp; B', 'a--b'),                                          # 엔티티는 렌더된 글자로
+        ('_강조_ 제목', '강조-제목'),
     ]:
         case(f'slug {text}', slug(heading_text(text)) == want)
     dup = [s for _, _, s in heading_slugs(['## 요약', '본문', '## 요약'])]
@@ -301,6 +323,62 @@ def selftest():
     case('금지 표기 잡음', FORBIDDEN[0][1].search('아름다운 재단 지원') and FORBIDDEN[1][1].search('아름다운재단 후원'))
     case('금지 표기 통과', not any(rx.search(t) for t in ['아름다운재단의 지원으로 진행합니다', '센터 후원회원 모집', '청년노동자인권센터'] for _, rx in FORBIDDEN))
 
+    hs = [s for _, _, s in heading_slugs(['## [링크](#x) **굵게** `코드` 제목 ##', '```', '# 펜스 안', '```', '## 요약', '## 요약', '## 요약'])]
+    case('헤딩 slug 보조 (링크·강조·코드·펜스·닫는 #·중복 -2)', hs == ['링크-굵게-코드-제목', '요약', '요약-1', '요약-2'])
+
+    # check() 규칙별 탐지 — 임시 매뉴얼·앱 픽스처. HELP_MANUAL_URL은 실제 추적 파일을 가리켜 M8을 통과시킨다
+    def run(md_text, app_text, strict=False):
+        with tempfile.TemporaryDirectory() as d:
+            mp, ap = Path(d) / 'manual.md', Path(d) / 'app.html'
+            mp.write_text(md_text, encoding='utf-8')
+            ap.write_text(app_text, encoding='utf-8')
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check(str(mp), str(ap), strict)
+        return rc, buf.getvalue()
+
+    md = '\n'.join(['# 견본', '', '> **기준일**: 2026-10-02', '', '## 목차', '',
+                    f"1. [대시보드](#1-대시보드) · [인코딩](#{quote('1-대시보드')}) · [외부](https://example.org)", '',
+                    '## 1. 대시보드', '', '「🏠 대시보드」를 누릅니다.', '<!-- 「주석 안 라벨」 -->', '<!-- src: renderDash -->', ''])
+    app = '\n'.join([f"const HELP_MANUAL_URL = '{DEFAULT_MANUAL}';",
+                     "const HELP_ANCHORS = {", "    'dashboard': '1-대시보드'", "};",
+                     "const COMMON_MODULES = [", "    { id: 'dashboard', label: '🏠 대시보드' }", "];",
+                     "const renderDash = () => null;", "const toToc = () => go('목차');", ''])
+    rc, out = run(md, app)
+    case('픽스처 기준 PASS (인코딩 앵커·https·주석 안 라벨·src)', rc == 0 and 'RESULT: PASS (FAIL 0 ' in out and '라벨 1 ·' in out and '맥락 1/1' in out)
+    nfd_app = app.replace(DEFAULT_MANUAL, unicodedata.normalize('NFD', DEFAULT_MANUAL))
+    for name, runs, want, unwanted in [
+        ('M1 라벨 없음', [(md + '「없는 버튼」\n', app)], ['FAIL M1 라벨'], []),
+        ('M2 문서 링크·HELP_ANCHORS 값', [(md + '[깨진](#없는-절)\n', app.replace("'1-대시보드'", "'9-없는-절'"))],
+         ['FAIL M2 앵커   L', 'HELP_ANCHORS[dashboard] = 9-없는-절'], []),
+        ('M3 맥락 누락·HELP_ANCHORS 없음', [(md, app.replace("'🏠 대시보드' }", "'🏠 대시보드' }, { id: 'board' }")),
+                                          (md, app.replace('HELP_ANCHORS', 'HELP_MAP'))],
+         ['HELP_ANCHORS에 board 없음', 'index.html에 HELP_ANCHORS 없음'], []),
+        ('M3 추출 표식이 바뀌면 빈 채로 통과하지 않음',
+         [(md, app.replace('COMMON_MODULES', 'BASE_MODULES')),
+          (md, app + "const [budgetTab, setBudgetTab] = useState('dashboard');\n")],
+         ['메뉴 모듈 목록을 읽지 못함', '예산 탭 목록을 읽지 못함'], []),
+        ('M2 고정 이동 go()', [(md, app + "const toNope = () => go('없는-절');\n")], ["go('없는-절') — 해당 헤딩 없음"], []),
+        ('M4 개인정보는 가려서 보고', [(md + '문의 010-1234-5678\n', app)], ['FAIL M4 개인정보'], ['1234-5678']),
+        ('M5 재단 표기', [(md + '아름다운 재단의 지원\n', app)], ['FAIL M5 표기'], []),
+        ('M6 이미지·상대 링크', [(md + '![그림](a.png) [파일](b.md)\n', app)], ['이미지 금지 (a.png)', 'b.md — #앵커나'], []),
+        ('M7 헤딩 이모지·코드', [(md + '## 🚀 시작\n## `x` 설명\n', app)], ['"🚀 시작"', '"`x` 설명"'], []),
+        ('M8 파일 없음·NFC 아님', [(md, app.replace(DEFAULT_MANUAL, 'docs/manual/없는-문서.md')), (md, nfd_app)],
+         ['없는-문서.md 파일 없음', 'NFC가 아님'], []),
+        ('M9 기준일 없음', [(md.replace('**기준일**', '**작성일**'), app)], ['FAIL M9 머리'], []),
+    ]:
+        outs = [run(m, a) for m, a in runs]
+        text = ''.join(o for _, o in outs)
+        case(f'규칙 탐지 {name}', all(r == 1 for r, _ in outs) and all(w in text for w in want) and not any(u in text for u in unwanted))
+    warn_md = md + '<!-- src: renderNope#nopeTab -->\n'
+    warn_app = app.replace("'dashboard': '1-대시보드'", "'dashboard': '1-대시보드',\n    'extra': '1-대시보드'")
+    (rc_n, out_n), (rc_s, _) = run(warn_md, warn_app), run(warn_md, warn_app, strict=True)
+    case('WARN(M3 남는 맥락·M10 근거)은 통과, --strict는 실패',
+         rc_n == 0 and rc_s == 1 and 'WARN M3 맥락   HELP_ANCHORS의 extra' in out_n and out_n.count('WARN M10') == 2)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = check('docs/manual/없는-매뉴얼.md', 'index.html')
+    case('입력 파일 없음 → 종료 2', rc == 2)
+
     for name, ok in results:
         if not ok:
             print(f'FAIL {name}')
@@ -309,14 +387,23 @@ def selftest():
     return 0 if passed == len(results) else 1
 
 
+def app_manual_url(app_path):
+    """앱이 실제로 불러오는 매뉴얼 경로(HELP_MANUAL_URL) — 기본 검사 대상을 앱과 맞춘다."""
+    p = ROOT / app_path
+    m = re.search(r"const HELP_MANUAL_URL = '([^']+)'", p.read_text(encoding='utf-8')) if p.exists() else None
+    return m.group(1) if m else None
+
+
 def main():
     ap = argparse.ArgumentParser(description='관리시스템 사용 매뉴얼 검사 (F-17)')
-    ap.add_argument('--manual', default=DEFAULT_MANUAL)
+    ap.add_argument('--manual', default=None, help=f'기본: 앱의 HELP_MANUAL_URL (없으면 {DEFAULT_MANUAL})')
     ap.add_argument('--app', default='index.html')
     ap.add_argument('--strict', action='store_true', help='WARN도 실패로')
     ap.add_argument('--selftest', action='store_true')
     args = ap.parse_args()
-    sys.exit(selftest() if args.selftest else check(args.manual, args.app, args.strict))
+    if args.selftest:
+        sys.exit(selftest())
+    sys.exit(check(args.manual or app_manual_url(args.app) or DEFAULT_MANUAL, args.app, args.strict))
 
 
 if __name__ == '__main__':
