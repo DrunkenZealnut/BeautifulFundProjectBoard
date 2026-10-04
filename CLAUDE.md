@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: React 18 (no-build, CDN via unpkg/jsdelivr) + Babel standalone transpiler
 - **Backend**: Supabase (PostgreSQL + RLS, `bf` schema) — anon key hardcoded in `index.html`
 - **Serverless**: Vercel Python functions (`api/`) — HWPX 생성/서식채우기, NEIS 프록시, AI 재작성, 관리 API
-- **CDN Libraries**: Chart.js, DOMPurify, JSZip, SheetJS, html2pdf.js, pdf.js (pdfjs-dist 3.11.174 UMD), Google APIs (Calendar + GSI)
+- **CDN Libraries**: Chart.js, DOMPurify, JSZip, SheetJS, html2pdf.js, pdf.js (pdfjs-dist 3.11.174 UMD), Google APIs (Calendar + GSI), marked 18.0.14 (도움말 드로어를 처음 열 때만 SRI로 지연 로드)
 - **Language**: Korean-first UI, English code comments
 
 ## Running the Application
@@ -48,7 +48,7 @@ Note: migrations before the bf-schema switch (commit 014b8bb) target `public.`; 
 
 ### Single-file SPA
 
-The entire app lives in `index.html` (~14,600 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
+The entire app lives in `index.html` (~16,000 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
 
 Top to bottom, `index.html` is:
 
@@ -56,7 +56,7 @@ Top to bottom, `index.html` is:
 2. **Inline `<style>` block** (~2300 lines) — includes `@media print` for dashboard printing
 3. **Single `<script type="text/babel">` block** (from ~line 2369) containing:
    - Supabase client init with `db: { schema: 'bf' }` (~line 2381) — so `.from('table')` needs no schema prefix
-   - `CONFIG` constant — budget, tax rates, periods (~line 2386)
+   - `CONFIG` constant — budget, tax rates, periods, 재단 마감 `DEADLINES` (~line 2386)
    - `EXECUTION_STATUS` — approval workflow states (~line 2400)
    - HWPX fill builders (`buildSalaryFillDocs`/`buildReceiptFillDocs`/`buildMinutesFillDocs`) (~line 2766)
    - `BUDGET_DATA` — budget hierarchy structure (~line 3059)
@@ -64,6 +64,7 @@ Top to bottom, `index.html` is:
    - `downloadHwpxFill` — HWPX fill download dispatcher (~line 3408)
    - 입금확인증 PDF parser (`extractPdfPages`/`extractPdfPageFile`/`DEPOSIT_PDF_LABELS`/`parseDepositConfirmation`/`executionDupKey`/`matchDuplicateExecutions`) (~line 3457)
    - Newsletter template system (`_nlEsc` ~3437, `NL_FONTS`/`NL_EMAIL_FONT` ~3466, `NL_THEMES` ~3474, `generateNewsletterHTML` ~3730)
+   - F-17 도움말 (`HELP_MANUAL_URL`/`HELP_ANCHORS`/`helpSlug`/`loadScriptOnce`, 모듈 수준 컴포넌트 `HelpButton`/`HelpDrawer` + `helpBus`) — `LoginPage` 바로 위
    - `LoginPage` — authentication component (~line 4195)
    - `ProjectManagementSystem` — root component (~line 4304, ~10,000 lines)
 4. **Service worker** registration and offline handlers (`service-worker.js`, network-first with cache fallback; Supabase/Google requests bypass it)
@@ -75,6 +76,7 @@ Use `/find-component <name>` to locate symbols — line numbers above drift with
 Code is transpiled by Babel standalone in the browser. This means:
 - **Do NOT use React hooks (`useMemo`, `useCallback`, `useEffect`) inside `render*()` helper functions** — only at the top level of `ProjectManagementSystem()`. The `render*()` functions are regular functions called during render, not React components, so hooks inside them violate React's rules and cause a white screen. (`renderMonthlyChart` is the one existing `useCallback` — it is declared at top level, not inside another renderer.)
 - `catch {}` (without parameter) works in the CDN Babel version but avoid if possible.
+- **Components defined inside `ProjectManagementSystem` and used as JSX (`<CommentSection/>`, `<GalleryDetailView/>` …) remount on every root re-render** (new function identity each render), losing their own `useState` (typed comment, slide index). Put new stateful components at module level (like `HelpDrawer`), and don't add root state that changes while the user is typing in such components.
 - No source maps, no linter: a syntax error anywhere in the babel block yields a blank page with the error only in the browser console.
 
 ### Root component structure
@@ -87,11 +89,11 @@ Code is transpiled by Babel standalone in the browser. This means:
 | `renderSchedule()` | 6741 | 일정 관리 | Calendar view, list view, Google Calendar sync |
 | `renderBoard()` | 8330 | 게시판 | 4 categories (공지/자료/보고서/자유), rich text, comments |
 | `renderGallery()` | 8551 | 갤러리 | Categorized images, ZIP download, newsletter integration |
-| `renderBudget()` | 8704 | 예산 관리 | 8 sub-tabs (dashboard, breakdown, register, import, calculator, history, ratio, calendar) — `import` = 일괄등록 (입금확인증 PDF / 은행 엑셀) |
+| `renderBudget()` | 8704 | 예산 관리 | 9 sub-tabs (dashboard, breakdown, register, import, rules, calculator, history, ratio, calendar) — `import` = 일괄등록 (입금확인증 PDF / 은행 엑셀) |
 | `renderGuide()` | 11511 | 회계가이드 | Accounting rules, withholding tax calculator, FAQ |
-| `renderNewsletter()` | 12028 | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 7 templates, AI rewrite, iframe preview (desktop/mobile), save/load drafts (`bf.newsletters`), color/font customization, inline editing |
+| `renderNewsletter()` | 12028 | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 7 templates, AI rewrite (`handleRewriteBoard`만 남고 진입 버튼 없음 — #36 리뉴얼에서 빠짐), iframe preview (desktop/mobile), save/load drafts (`bf.newsletters`), color/font customization, inline editing |
 | `renderSchools()` | 12778 | 학교관리 | NEIS API school search, timetable viewer, textbook management |
-| `renderAdmin()` | 13170 | 관리자 | Users, recipients, org settings, project management (admin-only) |
+| `renderAdmin()` | 13170 | 관리자 | Users, recipients, org settings, project management, activity logs (admin-only) |
 | `renderContent()` | 14019 | — | `currentPage` switch |
 
 Navigation is state-driven via `currentPage` (no URL routing).
@@ -105,7 +107,7 @@ Navigation is state-driven via `currentPage` (no URL routing).
 - **Grid**: `generateNewsletterGrid()` — Hoom-style 3-column card grid with featured center
 
 `generateNewsletterHTML(template, config, sections, orgName, assets)` is the unified dispatcher.
-- `sections`: `[{ type: 'boards'|'schedules'|'gallery', label, items }]` — ordering AND labels controlled by user in Step 3 (`sec.label` flows into `sectionLabel()`; email/grid take a `labels` param)
+- `sections`: `[{ type: 'boards'|'schedules'|'gallery', label, items }]` — ordering AND labels controlled by user in Step 3 (`sec.label` flows into `sectionLabel()`; email/grid take a `labels` param but ignore section order and `itemLinks` — email은 소식→일정→갤러리 고정, grid는 카드로 합침)
 - `assets`: `{ boardImageUrls, rewrittenContents, galleryThumbUrls, itemLinks }`
 
 To add a new themed template: add an entry to `NL_THEMES` with the required render functions AND add a matching card to the template picker list in `renderNewsletter` (`{ id, name, desc, color, preview }`). For custom layouts (like email/grid), add a standalone generate function and a layout check in the dispatcher.
@@ -215,7 +217,10 @@ Category (사업비/운영비) → Subcategory → Line Item → Executions
 `DOCUMENT_RULES` maps each expense type to required proof documents. `getRequiredDocuments(type, paymentMethod)` returns the list. `executionDocsMap` tracks upload status per execution.
 
 ### Dashboard Alerts
-`getDashboardAlerts()` generates D-day alerts for: upcoming schedules, pending executions, 정산 마감 (06-30, 12-31), 보고서 마감 (07-15, 12-15), and budget burn warnings (85%+, 95%+).
+`getDashboardAlerts()` generates D-day alerts for: upcoming schedules, pending executions, 재단 마감 `CONFIG.DEADLINES` (수행가이드 2026 일정 5건, D-30부터 — 연차가 바뀌면 갱신. 사업변경신청·잔액 환급·결과보고 3건은 `content/kb/facts.yaml` `program.deadlines`와 같은 값으로), and budget burn warnings (85%+, 95%+, 분모는 다른 예산 화면과 같은 `sub.budget`). 남은 날은 `daysUntil(dateStr)`(달력 날짜 — 날짜 문자열을 `new Date()`로 읽으면 UTC 자정이라 KST 오전 9시 전에 하루 어긋남)로 센다. 배너는 5칸이지만 재단 마감(`pinned`)은 칸 수와 상관없이 늘 보이고 나머지가 남은 칸을 채운다.
+
+### 사용 매뉴얼·도움말 (F-17)
+`docs/manual/관리시스템.md`가 사용 매뉴얼의 단일 원천이다. 헤더 「❓ 도움말」이 같은 파일을 fetch해 우측 드로어에 렌더한다(marked + DOMPurify `HELP_PURIFY` — style·form 태그와 style 속성 금지, 링크는 https·#만. `ALLOWED_URI_REGEXP`는 href가 아닌 일반 속성 값에도 적용되므로 매뉴얼에 필요한 속성(`align`·`start`)은 `ADD_URI_SAFE_ATTR`에 둔다. marked는 매뉴얼과 동시에 받고 `HELP_MARKED_TIMEOUT_MS` 안에 못 받으면 원문 표시. 헤딩 id는 `helpSlug` = GitHub slug 규칙에 `help-` 접두사 — 검사기의 Python slug와 맞추려고 헤딩에 단어 안 `_`·HTML 엔티티를 쓸 때는 selftest에 케이스를 더할 것). 현재 화면(`currentPage`·`budgetTab`·`adminTab`)은 `HELP_ANCHORS`로 해당 절에 연결된다. 화면 라벨·탭·흐름을 바꾸면 매뉴얼을 함께 고치고 `python3 scripts/check_manual.py --strict`(라벨·앵커·맥락 21개·개인정보·재단 표기 — WARN도 실패)와 `--selftest`를 PASS시킬 것. 매뉴얼은 정적 배포로 공개되므로 계정·연락처·실명을 쓰지 않는다.
 
 ## Supabase Patterns
 
@@ -223,12 +228,14 @@ Category (사업비/운영비) → Subcategory → Line Item → Executions
 const { data, error } = await supabase.from('table').select('*').order('created_at', { ascending: false });
 ```
 
+Supabase v2 query builders are thenables without `.catch` — `supabase.from(...).update(...).eq(...).catch(...)` throws synchronously (this broke board/gallery clicks until F-17). Use `await` + `{ error }`, or `.then(({ error }) => …)`.
+
 All tables use `bf` schema (not `public`) — the client is configured with `db: { schema: 'bf' }`. RLS enabled. Public anon key client-side. UUID primary keys.
 
 ## Code Conventions
 
 - Korean commit messages: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`
-- Utility functions: `fmt(n)` (number formatting), `pct(spent, budget)`, `parseInput(s)`, `fmtInput(v)`, `esc(s)` (HTML escape)
+- Utility functions: `fmt(n)` (number formatting), `pct(spent, budget)`, `parseInput(s)`, `fmtInput(v)`, `esc(s)` (HTML escape), `daysUntil(dateStr)` (D-day), `zipPathPart(name, fallback)`·`uniqueZipPath(used, folder, file)` (ZIP 안 경로 — `..`·제어/방향 문자 제거, 같은 이름은 ` (2)`)
 - All code is inline in `index.html` — styles, components, logic coexist
 - New report/export logic should go in `api/` as serverless functions when possible to avoid growing index.html further
 - JSZip pattern for batch downloads: create zip → loop items → add files → `generateAsync({type:'blob'})` → download
@@ -248,7 +255,7 @@ bkit PDCA workflow: `01-plan/features/*.plan.md` → `02-design/features/*.desig
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Primary application (~14,600 lines, edit this) |
+| `index.html` | Primary application (~16,000 lines, edit this) |
 | `api/neis.py` | NEIS school/timetable proxy |
 | `api/hwpx.py` | HWPX document generator (from scratch) |
 | `api/hwpx-fill.py` | HWPX 서식 채우기 (F-13) |
@@ -257,6 +264,8 @@ bkit PDCA workflow: `01-plan/features/*.plan.md` → `02-design/features/*.desig
 | `api/hwpxfill_templates/` | Placeholder-preprocessed HWPX form templates (generated, do not hand-edit) |
 | `templates/` | 재단 서식 원본 (무수정 보존) |
 | `scripts/preprocess_templates.py` | templates/ → hwpxfill_templates/ 전처리 (재실행 가능) |
+| `scripts/check_manual.py` | 사용 매뉴얼 검사 — 화면 라벨·앵커·도움말 맥락·개인정보 (F-17) |
+| `docs/manual/관리시스템.md` | 관리시스템 사용 매뉴얼 — 앱 「❓ 도움말」이 그대로 렌더 (F-17) |
 | `vercel.json` | Deployment config + security headers |
 | `supabase-schema-safe.sql` | Database schema (bf schema) |
 | `supabase-migration-*.sql` | Incremental migrations (`payee-rules` = F-15 거래처 규칙) |
