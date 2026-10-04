@@ -48,7 +48,7 @@ Note: migrations before the bf-schema switch (commit 014b8bb) target `public.`; 
 
 ### Single-file SPA
 
-The entire app lives in `index.html` (~14,600 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
+The entire app lives in `index.html` (~16,000 lines). **Only `index.html` is the live app.** Root also contains older standalone prototypes — `index-simple.html`, `index-supabase.html`, `budget-management-advanced.html` — and superseded schema files (`supabase-schema.sql`, `database-schema.sql`). Do NOT edit these; the canonical schema is `supabase-schema-safe.sql`.
 
 Top to bottom, `index.html` is:
 
@@ -89,11 +89,11 @@ Code is transpiled by Babel standalone in the browser. This means:
 | `renderSchedule()` | 6741 | 일정 관리 | Calendar view, list view, Google Calendar sync |
 | `renderBoard()` | 8330 | 게시판 | 4 categories (공지/자료/보고서/자유), rich text, comments |
 | `renderGallery()` | 8551 | 갤러리 | Categorized images, ZIP download, newsletter integration |
-| `renderBudget()` | 8704 | 예산 관리 | 8 sub-tabs (dashboard, breakdown, register, import, calculator, history, ratio, calendar) — `import` = 일괄등록 (입금확인증 PDF / 은행 엑셀) |
+| `renderBudget()` | 8704 | 예산 관리 | 9 sub-tabs (dashboard, breakdown, register, import, rules, calculator, history, ratio, calendar) — `import` = 일괄등록 (입금확인증 PDF / 은행 엑셀) |
 | `renderGuide()` | 11511 | 회계가이드 | Accounting rules, withholding tax calculator, FAQ |
 | `renderNewsletter()` | 12028 | 뉴스레터 | 3-step wizard (내용선택 → 템플릿 → 배치/편집), 7 templates, AI rewrite (`handleRewriteBoard`만 남고 진입 버튼 없음 — #36 리뉴얼에서 빠짐), iframe preview (desktop/mobile), save/load drafts (`bf.newsletters`), color/font customization, inline editing |
 | `renderSchools()` | 12778 | 학교관리 | NEIS API school search, timetable viewer, textbook management |
-| `renderAdmin()` | 13170 | 관리자 | Users, recipients, org settings, project management (admin-only) |
+| `renderAdmin()` | 13170 | 관리자 | Users, recipients, org settings, project management, activity logs (admin-only) |
 | `renderContent()` | 14019 | — | `currentPage` switch |
 
 Navigation is state-driven via `currentPage` (no URL routing).
@@ -220,7 +220,7 @@ Category (사업비/운영비) → Subcategory → Line Item → Executions
 `getDashboardAlerts()` generates D-day alerts for: upcoming schedules, pending executions, 재단 마감 `CONFIG.DEADLINES` (수행가이드 2026 일정 5건, D-30부터 — 연차가 바뀌면 갱신. 사업변경신청·잔액 환급·결과보고 3건은 `content/kb/facts.yaml` `program.deadlines`와 같은 값으로), and budget burn warnings (85%+, 95%+, 분모는 다른 예산 화면과 같은 `sub.budget`). 남은 날은 `daysUntil(dateStr)`(달력 날짜 — 날짜 문자열을 `new Date()`로 읽으면 UTC 자정이라 KST 오전 9시 전에 하루 어긋남)로 센다. 배너는 5칸이지만 재단 마감(`pinned`)은 칸 수와 상관없이 늘 보이고 나머지가 남은 칸을 채운다.
 
 ### 사용 매뉴얼·도움말 (F-17)
-`docs/manual/관리시스템.md`가 사용 매뉴얼의 단일 원천이다. 헤더 「❓ 도움말」이 같은 파일을 fetch해 우측 드로어에 렌더한다(marked + DOMPurify `HELP_PURIFY` — style·form 태그와 style 속성 금지, 링크는 https·#만. marked는 매뉴얼과 동시에 받고 `HELP_MARKED_TIMEOUT_MS` 안에 못 받으면 원문 표시. 헤딩 id는 `helpSlug` = GitHub slug 규칙에 `help-` 접두사 — 검사기의 Python slug와 맞추려고 헤딩에 단어 안 `_`·HTML 엔티티를 쓸 때는 selftest에 케이스를 더할 것). 현재 화면(`currentPage`·`budgetTab`·`adminTab`)은 `HELP_ANCHORS`로 해당 절에 연결된다. 화면 라벨·탭·흐름을 바꾸면 매뉴얼을 함께 고치고 `python3 scripts/check_manual.py`(라벨·앵커·맥락 21개·개인정보·재단 표기, `--selftest`)를 PASS시킬 것. 매뉴얼은 정적 배포로 공개되므로 계정·연락처·실명을 쓰지 않는다.
+`docs/manual/관리시스템.md`가 사용 매뉴얼의 단일 원천이다. 헤더 「❓ 도움말」이 같은 파일을 fetch해 우측 드로어에 렌더한다(marked + DOMPurify `HELP_PURIFY` — style·form 태그와 style 속성 금지, 링크는 https·#만. `ALLOWED_URI_REGEXP`는 href가 아닌 일반 속성 값에도 적용되므로 매뉴얼에 필요한 속성(`align`·`start`)은 `ADD_URI_SAFE_ATTR`에 둔다. marked는 매뉴얼과 동시에 받고 `HELP_MARKED_TIMEOUT_MS` 안에 못 받으면 원문 표시. 헤딩 id는 `helpSlug` = GitHub slug 규칙에 `help-` 접두사 — 검사기의 Python slug와 맞추려고 헤딩에 단어 안 `_`·HTML 엔티티를 쓸 때는 selftest에 케이스를 더할 것). 현재 화면(`currentPage`·`budgetTab`·`adminTab`)은 `HELP_ANCHORS`로 해당 절에 연결된다. 화면 라벨·탭·흐름을 바꾸면 매뉴얼을 함께 고치고 `python3 scripts/check_manual.py --strict`(라벨·앵커·맥락 21개·개인정보·재단 표기 — WARN도 실패)와 `--selftest`를 PASS시킬 것. 매뉴얼은 정적 배포로 공개되므로 계정·연락처·실명을 쓰지 않는다.
 
 ## Supabase Patterns
 
@@ -255,7 +255,7 @@ bkit PDCA workflow: `01-plan/features/*.plan.md` → `02-design/features/*.desig
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Primary application (~14,600 lines, edit this) |
+| `index.html` | Primary application (~16,000 lines, edit this) |
 | `api/neis.py` | NEIS school/timetable proxy |
 | `api/hwpx.py` | HWPX document generator (from scratch) |
 | `api/hwpx-fill.py` | HWPX 서식 채우기 (F-13) |
